@@ -196,13 +196,15 @@ def convert_three_body(force, dispersion):
     return plugin
 
 
-def convert_system(system):
+def convert_system(system, copy=True):
     """
     Return a copy of an exported InteraxFF System in which the dispersion, exchange repulsion, short-range correction
-    and molecular three-body dispersion use the plugin forces. Forces keep their position, group and name;
-    exchange-type forces whose amplitudes are all zero (the inactive exchange-induction term) are removed.
+    and molecular three-body dispersion use the plugin forces. Forces keep their group and name; exchange-type forces
+    whose amplitudes are all zero (the inactive exchange-induction term) are removed. With copy=False the System is
+    converted in place, which avoids serializing the millions of triples of the exported three-body force.
     """
-    system = openmm.XmlSerializer.deserialize(openmm.XmlSerializer.serialize(system))
+    if copy:
+        system = openmm.XmlSerializer.deserialize(openmm.XmlSerializer.serialize(system))
     forces = [system.getForce(i) for i in range(system.getNumForces())]
     dispersion = next((f for f in forces if isinstance(f, openmm.CustomNonbondedForce) and _classify(f) == "dispersion"), None)
     replacements = {}
@@ -222,7 +224,7 @@ def convert_system(system):
             replacements[index] = convert_three_body(force, dispersion)
     for index in sorted(replacements, reverse=True):
         system.removeForce(index)
-    # Re-insert the converted forces at the end, in their original order (OpenMM has no insertForce).
+    # Add the converted forces at the end, in their original order (OpenMM has no insertForce).
     for index in sorted(replacements):
         if replacements[index] is not None:
             system.addForce(replacements[index])
