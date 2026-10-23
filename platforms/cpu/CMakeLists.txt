@@ -1,1 +1,25 @@
-# CPU platform: added later
+#---------------------------------------------------
+# OpenMM InteraxFF Plugin CPU Platform
+#----------------------------------------------------
+
+SET(INTERAX_CPU_LIBRARY_NAME InteraxPluginCPU)
+SET(SHARED_TARGET ${INTERAX_CPU_LIBRARY_NAME})
+
+FILE(GLOB SOURCE_FILES ${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp)
+FILE(GLOB SOURCE_INCLUDE_FILES ${CMAKE_CURRENT_SOURCE_DIR}/src/*.h ${CMAKE_CURRENT_SOURCE_DIR}/include/*.h)
+INCLUDE_DIRECTORIES(BEFORE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+INCLUDE_DIRECTORIES(BEFORE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+# CpuPlatform.h includes ReferencePlatform.h without its directory.
+INCLUDE_DIRECTORIES(${OPENMM_DIR}/include/openmm/reference)
+
+# The AVX implementation is compiled with AVX enabled and only used when the processor supports it, as in OpenMM.
+SET_SOURCE_FILES_PROPERTIES(${CMAKE_CURRENT_SOURCE_DIR}/src/CpuInteraxPairForceAvx.cpp PROPERTIES COMPILE_FLAGS "-mavx")
+
+ADD_LIBRARY(${SHARED_TARGET} SHARED ${SOURCE_FILES} ${SOURCE_INCLUDE_FILES})
+TARGET_LINK_LIBRARIES(${SHARED_TARGET} OpenMM OpenMMCPU ${SHARED_INTERAX_TARGET})
+# Like OpenMM's CPU platform, this requires SSE 4.1.
+SET_TARGET_PROPERTIES(${SHARED_TARGET} PROPERTIES
+    COMPILE_FLAGS "-DOPENMM_BUILDING_SHARED_LIBRARY -msse4.1 ${EXTRA_COMPILE_FLAGS}"
+    LINK_FLAGS "${EXTRA_COMPILE_FLAGS}")
+
+INSTALL(TARGETS ${SHARED_TARGET} DESTINATION lib/plugins)

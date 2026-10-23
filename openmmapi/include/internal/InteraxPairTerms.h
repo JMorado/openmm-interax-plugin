@@ -69,6 +69,17 @@ inline fvec8 blendIf(fvec8 mask, fvec8 a, fvec8 b) {
 }
 #endif
 
+} // namespace InteraxPlugin
+
+#ifdef __AVX__
+/** OpenMM's AVX vectors have no exponential: evaluate it on each half with the SSE version. */
+static inline fvec8 exp(fvec8 v) {
+    return fvec8(_mm256_insertf128_ps(_mm256_castps128_ps256(exp(v.lowerVec()).val), exp(v.upperVec()).val, 1));
+}
+#endif
+
+namespace InteraxPlugin {
+
 namespace InteraxPairTerms {
 
 /**
@@ -145,9 +156,9 @@ inline void slaterOverlap(T r, T a, T b, T& overlap, T& dOverlapdR) {
     T invL = 1/l;
     T t = (max(a, b)-l)*invL;
     T x = r*invL;
-    T sumValue = 0, sumDeriv = 0;
+    T sumValue = Scalar(0), sumDeriv = Scalar(0);
     for (int n = TAYLOR_ORDER; n >= 0; n--) {
-        T value = 0, deriv = 0;
+        T value = Scalar(0), deriv = Scalar(0);
         for (int k = TAYLOR_TERMS-1; k >= 0; k--) {
             value = value*x + Scalar(OVERLAP_TAYLOR_VALUE[n][k]);
             deriv = deriv*x + Scalar(OVERLAP_TAYLOR_DERIV[n][k]);
@@ -175,8 +186,8 @@ inline void tangToenniesDamping(T x, T damping[3], T dDampingdX[3]) {
     typedef typename ScalarOf<T>::type Scalar;
     const int maxTerm = 40;
     T expX = exp(-x);
-    T term = 1;          // x^k/k!
-    T partialSum = 1;    // sum_{j<=k} x^j/j!
+    T term = Scalar(1);          // x^k/k!
+    T partialSum = Scalar(1);    // sum_{j<=k} x^j/j!
     T terms[11], partialSums[11];
     terms[0] = term;
     partialSums[0] = partialSum;
@@ -186,7 +197,7 @@ inline void tangToenniesDamping(T x, T damping[3], T dDampingdX[3]) {
         terms[k] = term;
         partialSums[k] = partialSum;
     }
-    T tail = 0;          // sum_{10<k<=maxTerm} x^k/k!
+    T tail = Scalar(0);          // sum_{10<k<=maxTerm} x^k/k!
     for (int k = 11; k <= maxTerm; k++) {
         term = term*x*Scalar(1.0/k);
         tail = tail+term;
@@ -228,8 +239,8 @@ inline void dispersionPair(T r, T m1i, T m2i, T m3i, T alphai, T widthi, T m1j, 
     T invR = 1/r;
     T invR2 = invR*invR;
     T invRn = invR2*invR2*invR2;    // r^-6
-    energy = 0;
-    dEdR = 0;
+    energy = Scalar(0);
+    dEdR = Scalar(0);
     for (int i = 0; i < 3; i++) {
         Scalar n = Scalar(6+2*i);
         energy = energy - damping[i]*c[i]*invRn;

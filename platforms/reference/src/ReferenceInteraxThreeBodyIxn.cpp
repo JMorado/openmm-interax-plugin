@@ -29,6 +29,7 @@
 
 #include "ReferenceInteraxThreeBodyIxn.h"
 #include "internal/InteraxThreeBodyForceImpl.h"
+#include "internal/InteraxThreeBodyTerms.h"
 #include <cmath>
 
 using namespace InteraxPlugin;
@@ -93,11 +94,7 @@ double ReferenceInteraxThreeBodyIxn::calculateIxn(const vector<Vec3>& positions,
             isNeighbor[i][j] = isNeighbor[j][i] = (delta.dot(delta) < cutoff2);
         }
 
-    // Loop over triples whose three pairs are all within the cutoff. The energy is written in terms of the minimum
-    // image vectors a = AB, b = AC, c = BC, so that the angle at each vertex is the angle between the nearest images
-    // of its two neighbors (as in CustomCentroidBondForce, also when the three images do not close into a triangle).
-    // With u, v, w their squared lengths, P = uvw, and p = a.b, q = a.c, s = b.c, the product of the three cosines
-    // is -pqs/P, so E = C9 [P^(-3/2) - 3 pqs P^(-5/2)].
+    // Loop over the triples whose three pairs are all within the cutoff.
 
     vector<Vec3> centroidForces(numMolecules);
     double energy = 0;
@@ -108,30 +105,11 @@ double ReferenceInteraxThreeBodyIxn::calculateIxn(const vector<Vec3>& positions,
             for (int k = j+1; k < numMolecules; k++) {
                 if (!isNeighbor[i][k] || !isNeighbor[j][k])
                     continue;
-                Vec3 a = getDelta(centroids[i], centroids[j], boxVectors);
-                Vec3 b = getDelta(centroids[i], centroids[k], boxVectors);
-                Vec3 c = getDelta(centroids[j], centroids[k], boxVectors);
-                double u = a.dot(a), v = b.dot(b), w = c.dot(c);
-                double p = a.dot(b), q = a.dot(c), s = b.dot(c);
-                double invP = 1/(u*v*w);
-                double invP32 = invP*sqrt(invP);
-                double invP52 = invP32*invP;
                 double c9 = scaleFactor*InteraxThreeBodyForceImpl::computeC9(alpha[i], frequency[i], alpha[j], frequency[j], alpha[k], frequency[k]);
                 if (isAlchemical[i] || isAlchemical[j] || isAlchemical[k])
                     c9 *= lambda;
-                double pqs = p*q*s;
-                energy += c9*(invP32 - 3*pqs*invP52);
-
-                // Gradients with respect to a, b and c.
-
-                double radial = c9*(-3*invP32 + 15*pqs*invP52);
-                double cross = -3*c9*invP52;
-                Vec3 dEda = a*(radial/u) + (b*(q*s) + c*(p*s))*cross;
-                Vec3 dEdb = b*(radial/v) + (a*(q*s) + c*(p*q))*cross;
-                Vec3 dEdc = c*(radial/w) + (a*(p*s) + b*(p*q))*cross;
-                centroidForces[i] += dEda + dEdb;
-                centroidForces[j] += dEdc - dEda;
-                centroidForces[k] -= dEdb + dEdc;
+                energy += InteraxThreeBodyTerms::computeTriple(getDelta(centroids[i], centroids[j], boxVectors), getDelta(centroids[i], centroids[k], boxVectors),
+                        getDelta(centroids[j], centroids[k], boxVectors), c9, centroidForces[i], centroidForces[j], centroidForces[k]);
             }
         }
 

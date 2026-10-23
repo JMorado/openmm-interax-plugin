@@ -40,9 +40,11 @@ extern "C" OPENMM_EXPORT void registerPlatforms() {
 }
 
 extern "C" OPENMM_EXPORT void registerKernelFactories() {
+    // Register only with the Reference platform itself: the CPU platform is a subclass of ReferencePlatform, and has
+    // its own implementations of these kernels.
     for (int i = 0; i < Platform::getNumPlatforms(); i++) {
         Platform& platform = Platform::getPlatform(i);
-        if (dynamic_cast<ReferencePlatform*>(&platform) != NULL) {
+        if (platform.getName() == "Reference") {
             ReferenceInteraxKernelFactory* factory = new ReferenceInteraxKernelFactory();
             platform.registerKernelFactory(CalcInteraxDispersionForceKernel::Name(), factory);
             platform.registerKernelFactory(CalcInteraxExchangeForceKernel::Name(), factory);
