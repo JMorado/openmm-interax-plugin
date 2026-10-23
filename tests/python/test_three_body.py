@@ -60,7 +60,10 @@ def tang_toennies_3(x):
 
 
 def numpy_energy(force, positions):
-    """The energy of the force from its definition, by brute force over all triples of sites."""
+    """
+    The energy of the force from its definition, by brute force over all triples of sites, and the sum of the
+    magnitudes of the triple energies (the scale of the rounding errors, as the triples partly cancel).
+    """
     sites, params = [], []
     for i in range(force.getNumSites()):
         particles, alpha, frequency, width, molecule, _ = force.getSiteParameters(i)
@@ -74,7 +77,7 @@ def numpy_energy(force, positions):
         d = sites[j] - sites[i]
         return d - BOX * np.round(d / BOX)
 
-    energy = 0.0
+    energy = magnitude = 0.0
     for i, j, k in itertools.combinations(range(len(sites)), 3):
         if len({params[i][3], params[j][3], params[k][3]}) < 3:
             continue
@@ -89,7 +92,8 @@ def numpy_energy(force, positions):
         if damped:
             e *= tang_toennies_3(2 * beta * ra / (s1 + s2)) * tang_toennies_3(2 * beta * rb / (s1 + s3)) * tang_toennies_3(2 * beta * rc / (s2 + s3))
         energy += e
-    return energy
+        magnitude += abs(e)
+    return energy, magnitude
 
 
 def evaluate(system, positions, platform, precision=None):
@@ -105,7 +109,7 @@ def evaluate(system, positions, platform, precision=None):
 def test_reference_energy_and_forces(atomic):
     system, force, positions = make_system(atomic)
     energy, forces = evaluate(system, positions, "Reference")
-    expected = numpy_energy(force, positions)
+    expected, _ = numpy_energy(force, positions)
     assert expected != 0
     assert abs(energy - expected) <= 1e-10 * abs(expected), (energy, expected)
 
@@ -127,8 +131,9 @@ def test_platform_matches_reference(atomic, platform, precision):
     system, force, positions = make_system(atomic)
     energy, forces = evaluate(system, positions, platform, precision)
     reference_energy, reference_forces = evaluate(system, positions, "Reference")
+    _, magnitude = numpy_energy(force, positions)
     tolerance = 1e-10 if precision == "double" else 2e-5
-    assert abs(energy - reference_energy) <= tolerance * abs(reference_energy), (energy, reference_energy)
+    assert abs(energy - reference_energy) <= tolerance * magnitude, (energy, reference_energy, magnitude)
     rms = np.sqrt((reference_forces ** 2).mean())
     assert np.abs(forces - reference_forces).max() <= 10 * tolerance * rms
 
@@ -156,8 +161,8 @@ def test_neighbor_list_growth():
 
 def test_serialization():
     system, force, positions = make_system(True)
-    copy = openmm.XmlSerializer.deserialize(openmm.XmlSerializer.serialize(force))
-    copy = ip.InteraxThreeBodyForce.cast(copy)
+    deserialized = openmm.XmlSerializer.deserialize(openmm.XmlSerializer.serialize(force))
+    copy = ip.InteraxThreeBodyForce.cast(deserialized)  # deserialized keeps ownership of the force
     assert copy.getNumSites() == force.getNumSites()
     assert copy.getDampingMethod() == force.getDampingMethod() and copy.getDampingScale() == force.getDampingScale()
     for i in range(force.getNumSites()):
