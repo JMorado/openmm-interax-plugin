@@ -11,7 +11,8 @@ Usage: python compare_export.py [--platform Reference] [--precision double] [--o
 
 With --overlap export the plugin uses the InteraxFF Taylor scheme of the export and must reproduce it to rounding;
 with --overlap exact it uses its accurate scheme, which differs from the export by the export's truncation error.
-Run with the interax environment; the plugin is loaded from PLUGIN_PREFIX.
+Run with the interax environment; the plugin is loaded from INTERAX_PLUGIN_PREFIX and the model from INTERAX_MODEL
+(models with lone-pair virtual sites work too).
 """
 import argparse
 import os
@@ -21,7 +22,7 @@ import warnings
 warnings.filterwarnings("ignore")
 PLUGIN_PREFIX = os.environ.get("INTERAX_PLUGIN_PREFIX", "/shared/joaomorado/opt/openmm-interax")
 INTERAX_REPO = "/shared/joaomorado/repos/InteraxFF"
-MODEL = f"{INTERAX_REPO}/examples/models_v3R4bfdE1"
+MODEL = os.environ.get("INTERAX_MODEL", f"{INTERAX_REPO}/examples/models_v3R4bfdE1")
 sys.path.insert(0, f"{PLUGIN_PREFIX}/python")
 sys.path.insert(0, INTERAX_REPO)
 
@@ -39,7 +40,7 @@ from openff.units import unit as off_unit  # noqa: E402
 
 from interax.force_field import ForceField  # noqa: E402
 from interax.models import NAGLModel, PerAtomicNumberModel  # noqa: E402
-from interax.openmm import create_system_from_topology  # noqa: E402
+from interax.openmm import create_system_from_topology, extend_positions_for_sites  # noqa: E402
 
 COMPONENTS = ["E_static", "E_ind", "E_disp", "E_exrep", "E_src", "E_exind", "E_atm"]
 KINDS = {
@@ -111,7 +112,8 @@ def evaluate(system, positions, box, platform, indices, precision="double"):
     context = openmm.Context(system, openmm.VerletIntegrator(0.001), openmm.Platform.getPlatformByName(platform), properties)
     if box is not None:
         context.setPeriodicBoxVectors(*box)
-    context.setPositions(positions)
+    context.setPositions(extend_positions_for_sites(positions, system))
+    context.computeVirtualSites()
     results = {}
     for group, kind in enumerate(indices):
         state = context.getState(getEnergy=True, getForces=True, groups={group})
