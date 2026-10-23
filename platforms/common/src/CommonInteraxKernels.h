@@ -138,13 +138,13 @@ private:
 
 /**
  * This kernel is invoked by InteraxThreeBodyForce to calculate the forces acting on the system and the energy of
- * the system. It computes the sites, a neighbor list of the sites, the triples, and then distributes the site forces
- * to the particles.
+ * the system. It computes the sites, a neighbor list of the sites, the triples (each from its three sites, without
+ * atomic additions per triple), and then distributes the site forces to the particles.
  */
 class CommonCalcInteraxThreeBodyForceKernel : public CalcInteraxThreeBodyForceKernel {
 public:
     CommonCalcInteraxThreeBodyForceKernel(std::string name, const OpenMM::Platform& platform, OpenMM::ComputeContext& cc) :
-            CalcInteraxThreeBodyForceKernel(name, platform), cc(cc), numSites(0), hasComputed(false), lastLambda(-1) {
+            CalcInteraxThreeBodyForceKernel(name, platform), cc(cc), numSites(0), numEvaluations(0), hasComputed(false), lastLambda(-1) {
     }
     void initialize(const OpenMM::System& system, const InteraxThreeBodyForce& force);
     double execute(OpenMM::ContextImpl& context, bool includeForces, bool includeEnergy);
@@ -152,14 +152,18 @@ public:
 private:
     class ForceInfo;
     class NeighborListPostComputation;
+    // The triples kernel runs one block of TripleBlockSize threads per site, over tiles of TileSize neighbors.
+    static const int TripleBlockSize = 128;
+    static const int TileSize = 64;
     void setParameters(const InteraxThreeBodyForce& force);
     void checkNeighborListSize();
     OpenMM::ComputeContext& cc;
-    int numSites, maxNeighbors;
+    int numSites, maxNeighbors, numEvaluations;
     bool periodic, hasAlchemicalSites, hasComputed;
     double scaleFactor, dampingScale, lastLambda;
     std::string alchemicalParameter;
-    OpenMM::ComputeArray siteOffsets, siteParticles, siteMolecules, siteParams, sites, neighbors, numNeighbors, maxNeighborCount, siteForce, globals;
+    OpenMM::ComputeArray siteOffsets, siteParticles, siteMolecules, siteParams, sites, neighbors, neighborDeltas, numNeighbors, maxNeighborCount,
+            siteForce, globals;
     OpenMM::ComputeKernel sitesKernel, neighborsKernel, triplesKernel, applyForcesKernel;
 };
 

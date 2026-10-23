@@ -408,8 +408,10 @@ private:
 };
 
 /**
- * After the forces have been computed, check whether the neighbor lists of the sites overflowed. If they did, they
- * are enlarged and the forces are marked invalid, so that the context computes them again.
+ * After the forces have been computed, check now and then whether the neighbor lists of the sites overflowed, and
+ * enlarge them if they did. The forces are correct either way (the triples of a site whose list overflowed are found
+ * by scanning all the sites, which is slower), so this check only keeps the lists large enough. Reading the count
+ * waits for the GPU, so it is done in the first evaluations and then only every CheckInterval evaluations.
  */
 class CommonCalcInteraxThreeBodyForceKernel::NeighborListPostComputation : public ComputeContext::ForcePostComputation {
 public:
@@ -418,11 +420,14 @@ public:
     double computeForceAndEnergy(bool includeForces, bool includeEnergy, int groups) {
         if (owner.hasComputed) {
             owner.hasComputed = false;
-            owner.checkNeighborListSize();
+            if (owner.numEvaluations < 10 || owner.numEvaluations%CheckInterval == 0)
+                owner.checkNeighborListSize();
+            owner.numEvaluations++;
         }
         return 0.0;
     }
 private:
+    static const int CheckInterval = 100;
     CommonCalcInteraxThreeBodyForceKernel& owner;
 };
 
@@ -460,12 +465,14 @@ void CommonCalcInteraxThreeBodyForceKernel::initialize(const System& system, con
     initializeParameters(cc, globals, 3, 1, "interaxThreeBodyGlobals");
     setParameters(force);
 
-    // The neighbor lists start small and grow when they overflow (checkNeighborListSize()).
+    // The neighbor lists (each site lists all its neighbors) start small and grow when they overflow
+    // (checkNeighborListSize()).
 
     maxNeighbors = min(numSites, 64);
     int elementSize = (cc.getUseDoublePrecision() ? sizeof(mm_double4) : sizeof(mm_float4));
     sites.initialize(cc, numSites, elementSize, "interaxSites");
     neighbors.initialize<int>(cc, numSites*maxNeighbors, "interaxNeighbors");
+    neighborDeltas.initialize(cc, numSites*maxNeighbors, elementSize, "interaxNeighborDeltas");
     numNeighbors.initialize<int>(cc, numSites, "interaxNumNeighbors");
     maxNeighborCount.initialize<int>(cc, 1, "interaxMaxNeighborCount");
     siteForce.initialize<long long>(cc, 3*numSites, "interaxSiteForce");
@@ -480,6 +487,8 @@ void CommonCalcInteraxThreeBodyForceKernel::initialize(const System& system, con
         defines["USE_PERIODIC"] = "1";
     if (force.getDampingMethod() == InteraxThreeBodyForce::TangToennies)
         defines["USE_DAMPING"] = "1";
+    defines["TILE_SIZE"] = cc.intToString(TileSize);
+    defines["TRIPLE_BLOCK_SIZE"] = cc.intToString(TripleBlockSize);
     ComputeProgram program = cc.compileProgram(CommonInteraxKernelSources::interaxThreeBody, defines);
     sitesKernel = program->createKernel("computeSites");
     sitesKernel->addArg(numSites);
@@ -494,6 +503,7 @@ void CommonCalcInteraxThreeBodyForceKernel::initialize(const System& system, con
     neighborsKernel->addArg(sites);
     neighborsKernel->addArg(siteMolecules);
     neighborsKernel->addArg(neighbors);
+    neighborsKernel->addArg(neighborDeltas);
     neighborsKernel->addArg(numNeighbors);
     neighborsKernel->addArg(maxNeighborCount);
     for (int i = 0; i < 5; i++)
@@ -503,7 +513,9 @@ void CommonCalcInteraxThreeBodyForceKernel::initialize(const System& system, con
     triplesKernel->addArg(maxNeighbors);
     triplesKernel->addArg(sites);
     triplesKernel->addArg(siteParams);
+    triplesKernel->addArg(siteMolecules);
     triplesKernel->addArg(neighbors);
+    triplesKernel->addArg(neighborDeltas);
     triplesKernel->addArg(numNeighbors);
     triplesKernel->addArg(siteForce);
     triplesKernel->addArg(cc.getEnergyBuffer());
@@ -529,11 +541,11 @@ double CommonCalcInteraxThreeBodyForceKernel::execute(ContextImpl& context, bool
         globals.upload(values, true);
         lastLambda = lambda;
     }
-    setPeriodicBoxArgs(cc, neighborsKernel, 7);
-    setPeriodicBoxArgs(cc, triplesKernel, 9);
+    setPeriodicBoxArgs(cc, neighborsKernel, 8);
+    setPeriodicBoxArgs(cc, triplesKernel, 11);
     sitesKernel->execute(numSites);
     neighborsKernel->execute(numSites);
-    triplesKernel->execute(numSites*maxNeighbors);
+    triplesKernel->execute(numSites*TripleBlockSize, TripleBlockSize);
     applyForcesKernel->execute(numSites);
     hasComputed = true;
     return 0.0;
@@ -548,11 +560,13 @@ void CommonCalcInteraxThreeBodyForceKernel::checkNeighborListSize() {
         return;
     maxNeighbors = min(numSites, (int) (1.2*count[0])+16);
     neighbors.resize(numSites*maxNeighbors);
+    neighborDeltas.resize(numSites*maxNeighbors);
     neighborsKernel->setArg(1, maxNeighbors);
     neighborsKernel->setArg(4, neighbors);
+    neighborsKernel->setArg(5, neighborDeltas);
     triplesKernel->setArg(1, maxNeighbors);
-    triplesKernel->setArg(4, neighbors);
-    cc.setForcesValid(false);
+    triplesKernel->setArg(5, neighbors);
+    triplesKernel->setArg(6, neighborDeltas);
 }
 
 void CommonCalcInteraxThreeBodyForceKernel::copyParametersToContext(ContextImpl& context, const InteraxThreeBodyForce& force) {

@@ -35,17 +35,21 @@ def count_triples(force, positions, box):
     return int(np.sum((upper @ upper) * upper))
 
 
-def ms_per_step(system, positions, platform, properties, steps=200):
+def ms_per_step(system, positions, platform, properties, steps=500, repeats=3):
+    """The energy of group 0 and the best time of a molecular dynamics step over a few repeats."""
     integrator = openmm.LangevinMiddleIntegrator(298.15, 1.0, 0.001)
     context = openmm.Context(system, integrator, platform, properties)
     context.setPositions(positions)
     energy = context.getState(getEnergy=True, groups={0}).getPotentialEnergy().value_in_unit(unit.kilojoule_per_mole)
-    integrator.step(20)
+    integrator.step(50)
     context.getState(getEnergy=True)
-    start = time.perf_counter()
-    integrator.step(steps)
-    context.getState(getEnergy=True)
-    return energy, 1e3 * (time.perf_counter() - start) / steps
+    best = float("inf")
+    for _ in range(repeats):
+        start = time.perf_counter()
+        integrator.step(steps)
+        context.getState(getEnergy=True)
+        best = min(best, 1e3 * (time.perf_counter() - start) / steps)
+    return energy, best
 
 
 def with_three_body(system, three_body):
@@ -85,8 +89,10 @@ def main():
     for name in args.systems:
         topology, positions = build(name)
         export = create_system_from_topology(topology, ff, nagl, electrostatics="hippo", nonbonded_cutoff=0.9, components=COMPONENTS)
+        # A copy: converting the export in place deletes its dispersion force.
         dispersion = next(f for f in export.getForces()
                           if isinstance(f, openmm.CustomNonbondedForce) and interaxplugin_convert._classify(f) == "dispersion")
+        dispersion = openmm.XmlSerializer.deserialize(openmm.XmlSerializer.serialize(dispersion))
         plugin = interaxplugin_convert.convert_system(export, copy=False, overlap="exact")
         mark_terms(plugin, True)
         box = np.diag(np.array([v.value_in_unit(unit.nanometer) for v in plugin.getDefaultPeriodicBoxVectors()]))
