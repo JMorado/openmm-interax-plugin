@@ -218,6 +218,7 @@ void CommonInteraxPairForceKernel::addInteraction(const System& system, const In
 void CommonInteraxPairForceKernel::updateGlobals(ContextImpl& context, double value) {
     double lambda = (hasAlchemicalParticles ? context.getParameter(alchemicalParameter) : 1.0);
     if (lambda != lastLambda || value != lastValue) {
+        ContextSelector selector(cc);
         vector<double> values = {lambda, value};
         globals.upload(values, true);
         lastLambda = lambda;

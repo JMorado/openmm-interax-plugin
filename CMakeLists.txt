@@ -33,6 +33,10 @@ ENDIF(${CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT})
 
 # Libraries find the core plugin library and OpenMM where they are installed.
 SET(CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/lib;${OPENMM_DIR}/lib")
+# The test executables link OpenMM's platform libraries, whose own dependencies (e.g. nvrtc) are next to OpenMM.
+IF(NOT APPLE)
+    SET(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,-rpath-link,${OPENMM_DIR}/lib -Wl,-rpath,${OPENMM_DIR}/lib")
+ENDIF(NOT APPLE)
 
 # The source is organized into subdirectories, but we handle them all from
 # this CMakeLists file rather than letting CMake visit them as SUBDIRS.
@@ -85,6 +89,9 @@ INSTALL(FILES ${API_ONLY_INCLUDE_FILES_INTERNAL} DESTINATION include/internal)
 
 ENABLE_TESTING()
 ADD_SUBDIRECTORY(serialization/tests)
+# The platform tests share tests/TestInteraxExportValues.h and the export values in tests/data.
+INCLUDE_DIRECTORIES(${CMAKE_CURRENT_SOURCE_DIR}/tests)
+ADD_DEFINITIONS(-DINTERAX_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/data")
 
 # Build the implementations for different platforms
 

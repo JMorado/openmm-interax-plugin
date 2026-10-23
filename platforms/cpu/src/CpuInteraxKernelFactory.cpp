@@ -55,6 +55,12 @@ extern "C" OPENMM_EXPORT void registerKernelFactories() {
 }
 
 extern "C" OPENMM_EXPORT void registerInteraxCpuKernelFactories() {
+    try {
+        Platform::getPlatformByName("CPU");
+    }
+    catch (...) {
+        Platform::registerPlatform(new CpuPlatform());
+    }
     registerKernelFactories();
 }
 

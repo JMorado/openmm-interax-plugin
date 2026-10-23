@@ -1,0 +1,735 @@
+<?xml version="1.0" ?>
+<System openmmVersion="8.1.2" type="System" version="1">
+	<PeriodicBoxVectors>
+		<A x="2" y="0" z="0"/>
+		<B x="0" y="2" z="0"/>
+		<C x="0" y="0" z="2"/>
+	</PeriodicBoxVectors>
+	<Particles>
+		<Particle mass="12.01078"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="12.01078"/>
+		<Particle mass="12.01078"/>
+		<Particle mass="12.01078"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="12.01078"/>
+		<Particle mass="12.01078"/>
+		<Particle mass="12.01078"/>
+		<Particle mass="14.00672"/>
+		<Particle mass="12.01078"/>
+		<Particle mass="12.01078"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="12.01078"/>
+		<Particle mass="32.0655"/>
+		<Particle mass="12.01078"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="35.4532"/>
+		<Particle mass="12.01078"/>
+		<Particle mass="35.4532"/>
+		<Particle mass="35.4532"/>
+		<Particle mass="1.007947"/>
+	</Particles>
+	<Constraints/>
+	<Forces>
+		<Force alchemicalParameter="lambda_sterics" cutoff="1" dampingScale=".7155241370201111" forceGroup="0" method="0" name="CustomNonbondedForce" switchingDistance="-1" type="InteraxDispersionForce" useLongRangeCorrection="0" useSwitchingFunction="0" version="1">
+			<Particles>
+				<Particle alchemical="0" alpha=".0020393931939312773" m1="2.0412491330659432" m2=".07991696226413432" m3=".003917538949072952" width=".026844933830306183"/>
+				<Particle alchemical="0" alpha=".0012613225562556841" m1="2.179116829570064" m2=".05077216863583387" m3=".001421435052885423" width=".021090413137365274"/>
+				<Particle alchemical="0" alpha=".00023498508736915282" m1=".47385034770767653" m2=".0062664158577877644" m3=".00015411387998271836" width=".020351567997950105"/>
+				<Particle alchemical="0" alpha=".00023498508736915282" m1=".47385034770767653" m2=".0062664158577877644" m3=".00015411386834467497" width=".020351567997950105"/>
+				<Particle alchemical="0" alpha=".00023498508736915282" m1=".47385034770767653" m2=".0062664158577877644" m3=".00015411387998271836" width=".020351567997950105"/>
+				<Particle alchemical="0" alpha="8.178573450752414e-05" m1=".23989786379418404" m2=".0026057951305751507" m3="5.2657624926234385e-05" width=".018175206885949872"/>
+				<Particle alchemical="0" alpha=".0014784763511927717" m1="2.6643932150919785" m2=".06580933740500129" m3=".0018898784025986209" width=".021651104453077937"/>
+				<Particle alchemical="0" alpha="7.308859985321104e-05" m1=".23113954793990732" m2=".002472827662873237" m3="4.895122233606004e-05" width=".017966632940037853"/>
+				<Particle alchemical="0" alpha="7.308862193445377e-05" m1=".23113957112962524" m2=".002472827662873237" m3="4.895122233606004e-05" width=".017966632940037853"/>
+				<Particle alchemical="0" alpha=".0027011686742225856" m1="2.3704251382652064" m2=".09688661002356165" m3=".004861166030809139" width=".027734692046318"/>
+				<Particle alchemical="0" alpha=".0011272681442855877" m1="1.2556335276155277" m2=".038204258027229376" m3=".0016073286818959463" width=".02472785166245086"/>
+				<Particle alchemical="0" alpha=".0027011686742225856" m1="2.3704251382652064" m2=".09688661002356165" m3=".004861166030809139" width=".027734692046318"/>
+				<Particle alchemical="0" alpha=".0011957727090636371" m1="2.2055510673052963" m2=".04911714143394205" m3=".001312870542786847" width=".020917755406041853"/>
+				<Particle alchemical="0" alpha=".00018205528866701342" m1=".4057009612334617" m2=".004985517279140908" m3=".00011260420297514026" width=".01980988354173607"/>
+				<Particle alchemical="0" alpha=".00018205528866701342" m1=".4057009612334617" m2=".004985517279140908" m3=".00011260420297514026" width=".01980988354173607"/>
+				<Particle alchemical="0" alpha=".00018205528866701342" m1=".4057009612334617" m2=".004985517279140908" m3=".00011260420297514026" width=".01980988354173607"/>
+				<Particle alchemical="0" alpha=".00018205528866701342" m1=".4057009612334617" m2=".004985517279140908" m3=".00011260420297514026" width=".01980988354173607"/>
+				<Particle alchemical="0" alpha=".00018205528866701342" m1=".4057009612334617" m2=".004985517279140908" m3=".00011260420297514026" width=".01980988354173607"/>
+				<Particle alchemical="0" alpha=".00018205528866701342" m1=".4057009612334617" m2=".004985517279140908" m3=".00011260420297514026" width=".01980988354173607"/>
+				<Particle alchemical="0" alpha=".001886404310642769" m1="1.8286276184235895" m2=".06560349385392827" m3=".0030478430499983927" width=".026469161972817193"/>
+				<Particle alchemical="0" alpha=".0022134184002053393" m1="2.0157695696380995" m2=".0759562495658386" m3=".003687774551727527" width=".027056173026181088"/>
+				<Particle alchemical="0" alpha=".0016624387526311215" m1="1.696242156753834" m2=".058936796053901445" m3=".002675387488974146" width=".026044362132579005"/>
+				<Particle alchemical="0" alpha=".0017673122900604466" m1="2.092637176944305" m2=".060985996886554414" m3=".002225789948775544" width=".02388406821976331"/>
+				<Particle alchemical="0" alpha=".0016624387526311215" m1="1.696242156753834" m2=".058936796053901445" m3=".002675387488974146" width=".026044362132579005"/>
+				<Particle alchemical="0" alpha=".0022134184002053393" m1="2.0157695696380995" m2=".0759562495658386" m3=".003687774551727527" width=".027056173026181088"/>
+				<Particle alchemical="0" alpha=".00019950464625998022" m1=".43751614111517845" m2=".005445368505605723" m3=".00012459690409174142" width=".019916627591285083"/>
+				<Particle alchemical="0" alpha=".00018729052167126313" m1=".42077900858483536" m2=".005182425905132393" m3=".00011736758430336217" width=".019787061747527254"/>
+				<Particle alchemical="0" alpha=".00022196920168972948" m1=".4673351964576559" m2=".006022903693264162" m3=".00014406382434362105" width=".02014894749500252"/>
+				<Particle alchemical="0" alpha=".00022196920168972948" m1=".4673351964576559" m2=".006022903693264162" m3=".00014406382434362105" width=".02014894749500252"/>
+				<Particle alchemical="0" alpha=".00018729052167126313" m1=".42077900858483536" m2=".005182425905132393" m3=".00011736758430336217" width=".019787061747527254"/>
+				<Particle alchemical="0" alpha=".0024496999921571104" m1="2.2159426581824957" m2=".08793836489557026" m3=".004248107795398156" width=".02751316719348574"/>
+				<Particle alchemical="0" alpha=".004221894603968141" m1="3.9405044694974447" m2=".18787610923101286" m3=".010735264902054127" width=".03096091246647922"/>
+				<Particle alchemical="0" alpha=".0024496999921571104" m1="2.2159426581824957" m2=".08793836489557026" m3=".004248107795398156" width=".02751316719348574"/>
+				<Particle alchemical="0" alpha=".00018147236152417042" m1=".4082112945778904" m2=".00491232871496066" m3=".00010861273815035346" width=".019732974521061524"/>
+				<Particle alchemical="0" alpha=".00018147236152417042" m1=".4082112945778904" m2=".00491232871496066" m3=".00010861273815035346" width=".019732974521061524"/>
+				<Particle alchemical="0" alpha=".00018147236152417042" m1=".4082112945778904" m2=".00491232871496066" m3=".00010861273815035346" width=".019732974521061524"/>
+				<Particle alchemical="0" alpha=".00018147236152417042" m1=".4082112945778904" m2=".00491232871496066" m3=".00010861273815035346" width=".019732974521061524"/>
+				<Particle alchemical="0" alpha=".00018147236152417042" m1=".4082112945778904" m2=".00491232871496066" m3=".00010861273815035346" width=".019732974521061524"/>
+				<Particle alchemical="0" alpha=".00018147236152417042" m1=".4082112945778904" m2=".00491232871496066" m3=".00010861273815035346" width=".019732974521061524"/>
+				<Particle alchemical="0" alpha=".0029056942594424557" m1="3.8546598441072457" m2=".14494429865127842" m3=".005962047099565267" width=".02761867008817038"/>
+				<Particle alchemical="0" alpha=".0020676091358301303" m1="1.5920685638362946" m2=".06001512550631329" m3=".0029996049429515774" width=".027381768793244554"/>
+				<Particle alchemical="0" alpha=".0029056942594424557" m1="3.8546598441072457" m2=".14494429865127842" m3=".005962047099565267" width=".02761867008817038"/>
+				<Particle alchemical="0" alpha=".0029056942594424557" m1="3.8546598441072457" m2=".14494429865127842" m3=".005962047099565267" width=".02761867008817038"/>
+				<Particle alchemical="0" alpha=".00013425533361386443" m1=".33774159130789494" m2=".0034625260768033645" m3="6.532409892642554e-05" width=".01880253891316055"/>
+			</Particles>
+			<Exclusions>
+				<Exclusion p1="0" p2="1"/>
+				<Exclusion p1="0" p2="2"/>
+				<Exclusion p1="0" p2="3"/>
+				<Exclusion p1="0" p2="4"/>
+				<Exclusion p1="0" p2="5"/>
+				<Exclusion p1="1" p2="2"/>
+				<Exclusion p1="1" p2="3"/>
+				<Exclusion p1="1" p2="4"/>
+				<Exclusion p1="1" p2="5"/>
+				<Exclusion p1="2" p2="3"/>
+				<Exclusion p1="2" p2="4"/>
+				<Exclusion p1="2" p2="5"/>
+				<Exclusion p1="3" p2="4"/>
+				<Exclusion p1="3" p2="5"/>
+				<Exclusion p1="4" p2="5"/>
+				<Exclusion p1="6" p2="7"/>
+				<Exclusion p1="6" p2="8"/>
+				<Exclusion p1="7" p2="8"/>
+				<Exclusion p1="9" p2="10"/>
+				<Exclusion p1="9" p2="11"/>
+				<Exclusion p1="9" p2="12"/>
+				<Exclusion p1="9" p2="13"/>
+				<Exclusion p1="9" p2="14"/>
+				<Exclusion p1="9" p2="15"/>
+				<Exclusion p1="9" p2="16"/>
+				<Exclusion p1="9" p2="17"/>
+				<Exclusion p1="9" p2="18"/>
+				<Exclusion p1="10" p2="11"/>
+				<Exclusion p1="10" p2="12"/>
+				<Exclusion p1="10" p2="13"/>
+				<Exclusion p1="10" p2="14"/>
+				<Exclusion p1="10" p2="15"/>
+				<Exclusion p1="10" p2="16"/>
+				<Exclusion p1="10" p2="17"/>
+				<Exclusion p1="10" p2="18"/>
+				<Exclusion p1="11" p2="12"/>
+				<Exclusion p1="11" p2="13"/>
+				<Exclusion p1="11" p2="14"/>
+				<Exclusion p1="11" p2="15"/>
+				<Exclusion p1="11" p2="16"/>
+				<Exclusion p1="11" p2="17"/>
+				<Exclusion p1="11" p2="18"/>
+				<Exclusion p1="12" p2="13"/>
+				<Exclusion p1="12" p2="14"/>
+				<Exclusion p1="12" p2="15"/>
+				<Exclusion p1="12" p2="16"/>
+				<Exclusion p1="12" p2="17"/>
+				<Exclusion p1="12" p2="18"/>
+				<Exclusion p1="13" p2="14"/>
+				<Exclusion p1="13" p2="15"/>
+				<Exclusion p1="13" p2="16"/>
+				<Exclusion p1="13" p2="17"/>
+				<Exclusion p1="13" p2="18"/>
+				<Exclusion p1="14" p2="15"/>
+				<Exclusion p1="14" p2="16"/>
+				<Exclusion p1="14" p2="17"/>
+				<Exclusion p1="14" p2="18"/>
+				<Exclusion p1="15" p2="16"/>
+				<Exclusion p1="15" p2="17"/>
+				<Exclusion p1="15" p2="18"/>
+				<Exclusion p1="16" p2="17"/>
+				<Exclusion p1="16" p2="18"/>
+				<Exclusion p1="17" p2="18"/>
+				<Exclusion p1="19" p2="20"/>
+				<Exclusion p1="19" p2="21"/>
+				<Exclusion p1="19" p2="22"/>
+				<Exclusion p1="19" p2="23"/>
+				<Exclusion p1="19" p2="24"/>
+				<Exclusion p1="19" p2="25"/>
+				<Exclusion p1="19" p2="26"/>
+				<Exclusion p1="19" p2="27"/>
+				<Exclusion p1="19" p2="28"/>
+				<Exclusion p1="19" p2="29"/>
+				<Exclusion p1="20" p2="21"/>
+				<Exclusion p1="20" p2="22"/>
+				<Exclusion p1="20" p2="23"/>
+				<Exclusion p1="20" p2="24"/>
+				<Exclusion p1="20" p2="25"/>
+				<Exclusion p1="20" p2="26"/>
+				<Exclusion p1="20" p2="27"/>
+				<Exclusion p1="20" p2="28"/>
+				<Exclusion p1="20" p2="29"/>
+				<Exclusion p1="21" p2="22"/>
+				<Exclusion p1="21" p2="23"/>
+				<Exclusion p1="21" p2="24"/>
+				<Exclusion p1="21" p2="25"/>
+				<Exclusion p1="21" p2="26"/>
+				<Exclusion p1="21" p2="27"/>
+				<Exclusion p1="21" p2="28"/>
+				<Exclusion p1="21" p2="29"/>
+				<Exclusion p1="22" p2="23"/>
+				<Exclusion p1="22" p2="24"/>
+				<Exclusion p1="22" p2="25"/>
+				<Exclusion p1="22" p2="26"/>
+				<Exclusion p1="22" p2="27"/>
+				<Exclusion p1="22" p2="28"/>
+				<Exclusion p1="22" p2="29"/>
+				<Exclusion p1="23" p2="24"/>
+				<Exclusion p1="23" p2="25"/>
+				<Exclusion p1="23" p2="26"/>
+				<Exclusion p1="23" p2="27"/>
+				<Exclusion p1="23" p2="28"/>
+				<Exclusion p1="23" p2="29"/>
+				<Exclusion p1="24" p2="25"/>
+				<Exclusion p1="24" p2="26"/>
+				<Exclusion p1="24" p2="27"/>
+				<Exclusion p1="24" p2="28"/>
+				<Exclusion p1="24" p2="29"/>
+				<Exclusion p1="25" p2="26"/>
+				<Exclusion p1="25" p2="27"/>
+				<Exclusion p1="25" p2="28"/>
+				<Exclusion p1="25" p2="29"/>
+				<Exclusion p1="26" p2="27"/>
+				<Exclusion p1="26" p2="28"/>
+				<Exclusion p1="26" p2="29"/>
+				<Exclusion p1="27" p2="28"/>
+				<Exclusion p1="27" p2="29"/>
+				<Exclusion p1="28" p2="29"/>
+				<Exclusion p1="30" p2="31"/>
+				<Exclusion p1="30" p2="32"/>
+				<Exclusion p1="30" p2="33"/>
+				<Exclusion p1="30" p2="34"/>
+				<Exclusion p1="30" p2="35"/>
+				<Exclusion p1="30" p2="36"/>
+				<Exclusion p1="30" p2="37"/>
+				<Exclusion p1="30" p2="38"/>
+				<Exclusion p1="31" p2="32"/>
+				<Exclusion p1="31" p2="33"/>
+				<Exclusion p1="31" p2="34"/>
+				<Exclusion p1="31" p2="35"/>
+				<Exclusion p1="31" p2="36"/>
+				<Exclusion p1="31" p2="37"/>
+				<Exclusion p1="31" p2="38"/>
+				<Exclusion p1="32" p2="33"/>
+				<Exclusion p1="32" p2="34"/>
+				<Exclusion p1="32" p2="35"/>
+				<Exclusion p1="32" p2="36"/>
+				<Exclusion p1="32" p2="37"/>
+				<Exclusion p1="32" p2="38"/>
+				<Exclusion p1="33" p2="34"/>
+				<Exclusion p1="33" p2="35"/>
+				<Exclusion p1="33" p2="36"/>
+				<Exclusion p1="33" p2="37"/>
+				<Exclusion p1="33" p2="38"/>
+				<Exclusion p1="34" p2="35"/>
+				<Exclusion p1="34" p2="36"/>
+				<Exclusion p1="34" p2="37"/>
+				<Exclusion p1="34" p2="38"/>
+				<Exclusion p1="35" p2="36"/>
+				<Exclusion p1="35" p2="37"/>
+				<Exclusion p1="35" p2="38"/>
+				<Exclusion p1="36" p2="37"/>
+				<Exclusion p1="36" p2="38"/>
+				<Exclusion p1="37" p2="38"/>
+				<Exclusion p1="39" p2="40"/>
+				<Exclusion p1="39" p2="41"/>
+				<Exclusion p1="39" p2="42"/>
+				<Exclusion p1="39" p2="43"/>
+				<Exclusion p1="40" p2="41"/>
+				<Exclusion p1="40" p2="42"/>
+				<Exclusion p1="40" p2="43"/>
+				<Exclusion p1="41" p2="42"/>
+				<Exclusion p1="41" p2="43"/>
+				<Exclusion p1="42" p2="43"/>
+			</Exclusions>
+		</Force>
+		<Force alchemicalParameter="lambda_sterics" cutoff="1" forceGroup="1" method="0" name="CustomNonbondedForce" overlapMethod="2" switchingDistance="-1" type="InteraxExchangeForce" useSwitchingFunction="0" version="1">
+			<Particles>
+				<Particle alchemical="0" amplitude="4.338506393097467" width=".02738393253463454"/>
+				<Particle alchemical="0" amplitude="8.70182875573623" width=".0229607720122067"/>
+				<Particle alchemical="0" amplitude="1.8022694542558446" width=".022386726059401903"/>
+				<Particle alchemical="0" amplitude="1.8022694542558446" width=".022386726059401903"/>
+				<Particle alchemical="0" amplitude="1.8022694542558446" width=".022386726059401903"/>
+				<Particle alchemical="0" amplitude="1.0350485675104781" width=".01999272757454486"/>
+				<Particle alchemical="0" amplitude="8.616574199654249" width=".023571186798972486"/>
+				<Particle alchemical="0" amplitude="1.0254403205662432" width=".019763296864870033"/>
+				<Particle alchemical="0" amplitude="1.025440394922545" width=".019763296864870033"/>
+				<Particle alchemical="0" amplitude="7.483514434592656" width=".028291555810752603"/>
+				<Particle alchemical="0" amplitude="3.004106121526302" width=".02522434199547769"/>
+				<Particle alchemical="0" amplitude="7.483514434592656" width=".028291555810752603"/>
+				<Particle alchemical="0" amplitude="8.562720607188595" width=".022772802498700055"/>
+				<Particle alchemical="0" amplitude="1.6182663091791845" width=".021790872369030972"/>
+				<Particle alchemical="0" amplitude="1.6182663091791845" width=".021790872369030972"/>
+				<Particle alchemical="0" amplitude="1.6182663091791845" width=".021790872369030972"/>
+				<Particle alchemical="0" amplitude="1.6182663091791845" width=".021790872369030972"/>
+				<Particle alchemical="0" amplitude="1.6182663091791845" width=".021790872369030972"/>
+				<Particle alchemical="0" amplitude="1.6182663091791845" width=".021790872369030972"/>
+				<Particle alchemical="0" amplitude="6.637182086339572" width=".02700061596955831"/>
+				<Particle alchemical="0" amplitude="8.382258457909598" width=".027599410897314318"/>
+				<Particle alchemical="0" amplitude="5.3363846171894975" width=".026567284175296923"/>
+				<Particle alchemical="0" amplitude="10.326424719450545" width=".0248302193400194"/>
+				<Particle alchemical="0" amplitude="5.3363846171894975" width=".026567284175296923"/>
+				<Particle alchemical="0" amplitude="8.382258457909598" width=".027599410897314318"/>
+				<Particle alchemical="0" amplitude="1.5744027832667906" width=".021908291612070377"/>
+				<Particle alchemical="0" amplitude="1.4982556844373625" width=".021765768553108373"/>
+				<Particle alchemical="0" amplitude="1.5986881462394391" width=".022163843348452457"/>
+				<Particle alchemical="0" amplitude="1.5986881462394391" width=".022163843348452457"/>
+				<Particle alchemical="0" amplitude="1.4982556844373625" width=".021765768553108373"/>
+				<Particle alchemical="0" amplitude="4.716706039932786" width=".02806558046360362"/>
+				<Particle alchemical="0" amplitude="14.680269330454486" width=".03096091246647922"/>
+				<Particle alchemical="0" amplitude="4.716706039932786" width=".02806558046360362"/>
+				<Particle alchemical="0" amplitude="1.5623921585722147" width=".021706271973167678"/>
+				<Particle alchemical="0" amplitude="1.5623921585722147" width=".021706271973167678"/>
+				<Particle alchemical="0" amplitude="1.5623921585722147" width=".021706271973167678"/>
+				<Particle alchemical="0" amplitude="1.5623921585722147" width=".021706271973167678"/>
+				<Particle alchemical="0" amplitude="1.5623921585722147" width=".021706271973167678"/>
+				<Particle alchemical="0" amplitude="1.5623921585722147" width=".021706271973167678"/>
+				<Particle alchemical="0" amplitude="13.231601566169132" width=".02761867008817038"/>
+				<Particle alchemical="0" amplitude="5.875705149541158" width=".027931545200677265"/>
+				<Particle alchemical="0" amplitude="13.231601566169132" width=".02761867008817038"/>
+				<Particle alchemical="0" amplitude="13.231601566169132" width=".02761867008817038"/>
+				<Particle alchemical="0" amplitude="1.2239094841309037" width=".020682793908426294"/>
+			</Particles>
+			<Exclusions>
+				<Exclusion p1="0" p2="1"/>
+				<Exclusion p1="0" p2="2"/>
+				<Exclusion p1="0" p2="3"/>
+				<Exclusion p1="0" p2="4"/>
+				<Exclusion p1="0" p2="5"/>
+				<Exclusion p1="1" p2="2"/>
+				<Exclusion p1="1" p2="3"/>
+				<Exclusion p1="1" p2="4"/>
+				<Exclusion p1="1" p2="5"/>
+				<Exclusion p1="2" p2="3"/>
+				<Exclusion p1="2" p2="4"/>
+				<Exclusion p1="2" p2="5"/>
+				<Exclusion p1="3" p2="4"/>
+				<Exclusion p1="3" p2="5"/>
+				<Exclusion p1="4" p2="5"/>
+				<Exclusion p1="6" p2="7"/>
+				<Exclusion p1="6" p2="8"/>
+				<Exclusion p1="7" p2="8"/>
+				<Exclusion p1="9" p2="10"/>
+				<Exclusion p1="9" p2="11"/>
+				<Exclusion p1="9" p2="12"/>
+				<Exclusion p1="9" p2="13"/>
+				<Exclusion p1="9" p2="14"/>
+				<Exclusion p1="9" p2="15"/>
+				<Exclusion p1="9" p2="16"/>
+				<Exclusion p1="9" p2="17"/>
+				<Exclusion p1="9" p2="18"/>
+				<Exclusion p1="10" p2="11"/>
+				<Exclusion p1="10" p2="12"/>
+				<Exclusion p1="10" p2="13"/>
+				<Exclusion p1="10" p2="14"/>
+				<Exclusion p1="10" p2="15"/>
+				<Exclusion p1="10" p2="16"/>
+				<Exclusion p1="10" p2="17"/>
+				<Exclusion p1="10" p2="18"/>
+				<Exclusion p1="11" p2="12"/>
+				<Exclusion p1="11" p2="13"/>
+				<Exclusion p1="11" p2="14"/>
+				<Exclusion p1="11" p2="15"/>
+				<Exclusion p1="11" p2="16"/>
+				<Exclusion p1="11" p2="17"/>
+				<Exclusion p1="11" p2="18"/>
+				<Exclusion p1="12" p2="13"/>
+				<Exclusion p1="12" p2="14"/>
+				<Exclusion p1="12" p2="15"/>
+				<Exclusion p1="12" p2="16"/>
+				<Exclusion p1="12" p2="17"/>
+				<Exclusion p1="12" p2="18"/>
+				<Exclusion p1="13" p2="14"/>
+				<Exclusion p1="13" p2="15"/>
+				<Exclusion p1="13" p2="16"/>
+				<Exclusion p1="13" p2="17"/>
+				<Exclusion p1="13" p2="18"/>
+				<Exclusion p1="14" p2="15"/>
+				<Exclusion p1="14" p2="16"/>
+				<Exclusion p1="14" p2="17"/>
+				<Exclusion p1="14" p2="18"/>
+				<Exclusion p1="15" p2="16"/>
+				<Exclusion p1="15" p2="17"/>
+				<Exclusion p1="15" p2="18"/>
+				<Exclusion p1="16" p2="17"/>
+				<Exclusion p1="16" p2="18"/>
+				<Exclusion p1="17" p2="18"/>
+				<Exclusion p1="19" p2="20"/>
+				<Exclusion p1="19" p2="21"/>
+				<Exclusion p1="19" p2="22"/>
+				<Exclusion p1="19" p2="23"/>
+				<Exclusion p1="19" p2="24"/>
+				<Exclusion p1="19" p2="25"/>
+				<Exclusion p1="19" p2="26"/>
+				<Exclusion p1="19" p2="27"/>
+				<Exclusion p1="19" p2="28"/>
+				<Exclusion p1="19" p2="29"/>
+				<Exclusion p1="20" p2="21"/>
+				<Exclusion p1="20" p2="22"/>
+				<Exclusion p1="20" p2="23"/>
+				<Exclusion p1="20" p2="24"/>
+				<Exclusion p1="20" p2="25"/>
+				<Exclusion p1="20" p2="26"/>
+				<Exclusion p1="20" p2="27"/>
+				<Exclusion p1="20" p2="28"/>
+				<Exclusion p1="20" p2="29"/>
+				<Exclusion p1="21" p2="22"/>
+				<Exclusion p1="21" p2="23"/>
+				<Exclusion p1="21" p2="24"/>
+				<Exclusion p1="21" p2="25"/>
+				<Exclusion p1="21" p2="26"/>
+				<Exclusion p1="21" p2="27"/>
+				<Exclusion p1="21" p2="28"/>
+				<Exclusion p1="21" p2="29"/>
+				<Exclusion p1="22" p2="23"/>
+				<Exclusion p1="22" p2="24"/>
+				<Exclusion p1="22" p2="25"/>
+				<Exclusion p1="22" p2="26"/>
+				<Exclusion p1="22" p2="27"/>
+				<Exclusion p1="22" p2="28"/>
+				<Exclusion p1="22" p2="29"/>
+				<Exclusion p1="23" p2="24"/>
+				<Exclusion p1="23" p2="25"/>
+				<Exclusion p1="23" p2="26"/>
+				<Exclusion p1="23" p2="27"/>
+				<Exclusion p1="23" p2="28"/>
+				<Exclusion p1="23" p2="29"/>
+				<Exclusion p1="24" p2="25"/>
+				<Exclusion p1="24" p2="26"/>
+				<Exclusion p1="24" p2="27"/>
+				<Exclusion p1="24" p2="28"/>
+				<Exclusion p1="24" p2="29"/>
+				<Exclusion p1="25" p2="26"/>
+				<Exclusion p1="25" p2="27"/>
+				<Exclusion p1="25" p2="28"/>
+				<Exclusion p1="25" p2="29"/>
+				<Exclusion p1="26" p2="27"/>
+				<Exclusion p1="26" p2="28"/>
+				<Exclusion p1="26" p2="29"/>
+				<Exclusion p1="27" p2="28"/>
+				<Exclusion p1="27" p2="29"/>
+				<Exclusion p1="28" p2="29"/>
+				<Exclusion p1="30" p2="31"/>
+				<Exclusion p1="30" p2="32"/>
+				<Exclusion p1="30" p2="33"/>
+				<Exclusion p1="30" p2="34"/>
+				<Exclusion p1="30" p2="35"/>
+				<Exclusion p1="30" p2="36"/>
+				<Exclusion p1="30" p2="37"/>
+				<Exclusion p1="30" p2="38"/>
+				<Exclusion p1="31" p2="32"/>
+				<Exclusion p1="31" p2="33"/>
+				<Exclusion p1="31" p2="34"/>
+				<Exclusion p1="31" p2="35"/>
+				<Exclusion p1="31" p2="36"/>
+				<Exclusion p1="31" p2="37"/>
+				<Exclusion p1="31" p2="38"/>
+				<Exclusion p1="32" p2="33"/>
+				<Exclusion p1="32" p2="34"/>
+				<Exclusion p1="32" p2="35"/>
+				<Exclusion p1="32" p2="36"/>
+				<Exclusion p1="32" p2="37"/>
+				<Exclusion p1="32" p2="38"/>
+				<Exclusion p1="33" p2="34"/>
+				<Exclusion p1="33" p2="35"/>
+				<Exclusion p1="33" p2="36"/>
+				<Exclusion p1="33" p2="37"/>
+				<Exclusion p1="33" p2="38"/>
+				<Exclusion p1="34" p2="35"/>
+				<Exclusion p1="34" p2="36"/>
+				<Exclusion p1="34" p2="37"/>
+				<Exclusion p1="34" p2="38"/>
+				<Exclusion p1="35" p2="36"/>
+				<Exclusion p1="35" p2="37"/>
+				<Exclusion p1="35" p2="38"/>
+				<Exclusion p1="36" p2="37"/>
+				<Exclusion p1="36" p2="38"/>
+				<Exclusion p1="37" p2="38"/>
+				<Exclusion p1="39" p2="40"/>
+				<Exclusion p1="39" p2="41"/>
+				<Exclusion p1="39" p2="42"/>
+				<Exclusion p1="39" p2="43"/>
+				<Exclusion p1="40" p2="41"/>
+				<Exclusion p1="40" p2="42"/>
+				<Exclusion p1="40" p2="43"/>
+				<Exclusion p1="41" p2="42"/>
+				<Exclusion p1="41" p2="43"/>
+				<Exclusion p1="42" p2="43"/>
+			</Exclusions>
+		</Force>
+		<Force alchemicalParameter="lambda_sterics" cutoff="1" forceGroup="2" method="0" name="CustomNonbondedForce" overlapMethod="2" switchingDistance="-1" type="InteraxShortRangeForce" useSwitchingFunction="0" version="1">
+			<Particles>
+				<Particle alchemical="0" k="1726.692841685559" l="188224.77974552507" width=".026844933830306183"/>
+				<Particle alchemical="0" k="-3045.6001511016634" l="17851.56396330975" width=".021090413137365274"/>
+				<Particle alchemical="0" k="-335.07552738881583" l="-1302.4603159989572" width=".020351567997950105"/>
+				<Particle alchemical="0" k="-335.07552738881583" l="-1302.4603159989572" width=".020351567997950105"/>
+				<Particle alchemical="0" k="-335.07552738881583" l="-1302.460159506984" width=".020351567997950105"/>
+				<Particle alchemical="0" k="-2054.7885923241524" l="19401.372832052384" width=".018175206885949872"/>
+				<Particle alchemical="0" k="1976.065461612792" l="-42768.40500544416" width=".021651104453077937"/>
+				<Particle alchemical="0" k="-1102.281886852146" l="5953.779066676866" width=".017966632940037853"/>
+				<Particle alchemical="0" k="-1102.281886852146" l="5953.779692644759" width=".017966632940037853"/>
+				<Particle alchemical="0" k="833.444638785289" l="160086.95205103923" width=".027734692046318"/>
+				<Particle alchemical="0" k="5519.301011493788" l="93825.0756174" width=".02472785166245086"/>
+				<Particle alchemical="0" k="833.444638785289" l="160086.95205103923" width=".027734692046318"/>
+				<Particle alchemical="0" k="-4128.9571506303355" l="39310.84380323961" width=".020917755406041853"/>
+				<Particle alchemical="0" k="-991.8079431719525" l="-1213.3946307676322" width=".01980988354173607"/>
+				<Particle alchemical="0" k="-991.8079431719525" l="-1213.3946307676322" width=".01980988354173607"/>
+				<Particle alchemical="0" k="-991.8079431719525" l="-1213.3946307676322" width=".01980988354173607"/>
+				<Particle alchemical="0" k="-991.8079431719525" l="-1213.3946307676322" width=".01980988354173607"/>
+				<Particle alchemical="0" k="-991.8079431719525" l="-1213.3947872596057" width=".01980988354173607"/>
+				<Particle alchemical="0" k="-991.8079431719525" l="-1213.3947872596057" width=".01980988354173607"/>
+				<Particle alchemical="0" k="962.007646159192" l="74678.05983111862" width=".026469161972817193"/>
+				<Particle alchemical="0" k="-1579.591012686484" l="70439.46596886561" width=".027056173026181088"/>
+				<Particle alchemical="0" k="1236.5568512540217" l="80470.88690318535" width=".026044362132579005"/>
+				<Particle alchemical="0" k="-7672.345123693393" l="45028.20919381196" width=".02388406821976331"/>
+				<Particle alchemical="0" k="1236.5568512540217" l="80470.88690318535" width=".026044362132579005"/>
+				<Particle alchemical="0" k="-1579.591012686484" l="70439.46596886561" width=".027056173026181088"/>
+				<Particle alchemical="0" k="-1979.714541447813" l="13368.463286057477" width=".019916627591285083"/>
+				<Particle alchemical="0" k="-2144.7162353447943" l="20235.155806484097" width=".019787061747527254"/>
+				<Particle alchemical="0" k="-462.3419987633556" l="7366.964182989327" width=".02014894749500252"/>
+				<Particle alchemical="0" k="-462.3419987633556" l="7366.964182989327" width=".02014894749500252"/>
+				<Particle alchemical="0" k="-2144.716391836768" l="20235.15455454831" width=".019787061747527254"/>
+				<Particle alchemical="0" k="3102.864319964784" l="160703.70569712375" width=".02751316719348574"/>
+				<Particle alchemical="0" k="-7711.862476808562" l="101118.06228877038" width=".03096091246647922"/>
+				<Particle alchemical="0" k="3102.864319964784" l="160703.70569712375" width=".02751316719348574"/>
+				<Particle alchemical="0" k="245.3801184566534" l="-1284.476884387272" width=".019732974521061524"/>
+				<Particle alchemical="0" k="245.3801184566534" l="-1284.476884387272" width=".019732974521061524"/>
+				<Particle alchemical="0" k="245.3801184566534" l="-1284.476884387272" width=".019732974521061524"/>
+				<Particle alchemical="0" k="245.3801184566534" l="-1284.476884387272" width=".019732974521061524"/>
+				<Particle alchemical="0" k="245.3801184566534" l="-1284.476884387272" width=".019732974521061524"/>
+				<Particle alchemical="0" k="245.3801184566534" l="-1284.4767278952986" width=".019732974521061524"/>
+				<Particle alchemical="0" k="-6389.217356608537" l="159980.81794276452" width=".02761867008817038"/>
+				<Particle alchemical="0" k="-422.7134189781144" l="68435.90298962819" width=".027381768793244554"/>
+				<Particle alchemical="0" k="-6389.217356608537" l="159980.81794276452" width=".02761867008817038"/>
+				<Particle alchemical="0" k="-6389.217356608537" l="159980.81794276452" width=".02761867008817038"/>
+				<Particle alchemical="0" k="-1702.373363056105" l="47202.476121472" width=".01880253891316055"/>
+			</Particles>
+			<Exclusions>
+				<Exclusion p1="0" p2="1"/>
+				<Exclusion p1="0" p2="2"/>
+				<Exclusion p1="0" p2="3"/>
+				<Exclusion p1="0" p2="4"/>
+				<Exclusion p1="0" p2="5"/>
+				<Exclusion p1="1" p2="2"/>
+				<Exclusion p1="1" p2="3"/>
+				<Exclusion p1="1" p2="4"/>
+				<Exclusion p1="1" p2="5"/>
+				<Exclusion p1="2" p2="3"/>
+				<Exclusion p1="2" p2="4"/>
+				<Exclusion p1="2" p2="5"/>
+				<Exclusion p1="3" p2="4"/>
+				<Exclusion p1="3" p2="5"/>
+				<Exclusion p1="4" p2="5"/>
+				<Exclusion p1="6" p2="7"/>
+				<Exclusion p1="6" p2="8"/>
+				<Exclusion p1="7" p2="8"/>
+				<Exclusion p1="9" p2="10"/>
+				<Exclusion p1="9" p2="11"/>
+				<Exclusion p1="9" p2="12"/>
+				<Exclusion p1="9" p2="13"/>
+				<Exclusion p1="9" p2="14"/>
+				<Exclusion p1="9" p2="15"/>
+				<Exclusion p1="9" p2="16"/>
+				<Exclusion p1="9" p2="17"/>
+				<Exclusion p1="9" p2="18"/>
+				<Exclusion p1="10" p2="11"/>
+				<Exclusion p1="10" p2="12"/>
+				<Exclusion p1="10" p2="13"/>
+				<Exclusion p1="10" p2="14"/>
+				<Exclusion p1="10" p2="15"/>
+				<Exclusion p1="10" p2="16"/>
+				<Exclusion p1="10" p2="17"/>
+				<Exclusion p1="10" p2="18"/>
+				<Exclusion p1="11" p2="12"/>
+				<Exclusion p1="11" p2="13"/>
+				<Exclusion p1="11" p2="14"/>
+				<Exclusion p1="11" p2="15"/>
+				<Exclusion p1="11" p2="16"/>
+				<Exclusion p1="11" p2="17"/>
+				<Exclusion p1="11" p2="18"/>
+				<Exclusion p1="12" p2="13"/>
+				<Exclusion p1="12" p2="14"/>
+				<Exclusion p1="12" p2="15"/>
+				<Exclusion p1="12" p2="16"/>
+				<Exclusion p1="12" p2="17"/>
+				<Exclusion p1="12" p2="18"/>
+				<Exclusion p1="13" p2="14"/>
+				<Exclusion p1="13" p2="15"/>
+				<Exclusion p1="13" p2="16"/>
+				<Exclusion p1="13" p2="17"/>
+				<Exclusion p1="13" p2="18"/>
+				<Exclusion p1="14" p2="15"/>
+				<Exclusion p1="14" p2="16"/>
+				<Exclusion p1="14" p2="17"/>
+				<Exclusion p1="14" p2="18"/>
+				<Exclusion p1="15" p2="16"/>
+				<Exclusion p1="15" p2="17"/>
+				<Exclusion p1="15" p2="18"/>
+				<Exclusion p1="16" p2="17"/>
+				<Exclusion p1="16" p2="18"/>
+				<Exclusion p1="17" p2="18"/>
+				<Exclusion p1="19" p2="20"/>
+				<Exclusion p1="19" p2="21"/>
+				<Exclusion p1="19" p2="22"/>
+				<Exclusion p1="19" p2="23"/>
+				<Exclusion p1="19" p2="24"/>
+				<Exclusion p1="19" p2="25"/>
+				<Exclusion p1="19" p2="26"/>
+				<Exclusion p1="19" p2="27"/>
+				<Exclusion p1="19" p2="28"/>
+				<Exclusion p1="19" p2="29"/>
+				<Exclusion p1="20" p2="21"/>
+				<Exclusion p1="20" p2="22"/>
+				<Exclusion p1="20" p2="23"/>
+				<Exclusion p1="20" p2="24"/>
+				<Exclusion p1="20" p2="25"/>
+				<Exclusion p1="20" p2="26"/>
+				<Exclusion p1="20" p2="27"/>
+				<Exclusion p1="20" p2="28"/>
+				<Exclusion p1="20" p2="29"/>
+				<Exclusion p1="21" p2="22"/>
+				<Exclusion p1="21" p2="23"/>
+				<Exclusion p1="21" p2="24"/>
+				<Exclusion p1="21" p2="25"/>
+				<Exclusion p1="21" p2="26"/>
+				<Exclusion p1="21" p2="27"/>
+				<Exclusion p1="21" p2="28"/>
+				<Exclusion p1="21" p2="29"/>
+				<Exclusion p1="22" p2="23"/>
+				<Exclusion p1="22" p2="24"/>
+				<Exclusion p1="22" p2="25"/>
+				<Exclusion p1="22" p2="26"/>
+				<Exclusion p1="22" p2="27"/>
+				<Exclusion p1="22" p2="28"/>
+				<Exclusion p1="22" p2="29"/>
+				<Exclusion p1="23" p2="24"/>
+				<Exclusion p1="23" p2="25"/>
+				<Exclusion p1="23" p2="26"/>
+				<Exclusion p1="23" p2="27"/>
+				<Exclusion p1="23" p2="28"/>
+				<Exclusion p1="23" p2="29"/>
+				<Exclusion p1="24" p2="25"/>
+				<Exclusion p1="24" p2="26"/>
+				<Exclusion p1="24" p2="27"/>
+				<Exclusion p1="24" p2="28"/>
+				<Exclusion p1="24" p2="29"/>
+				<Exclusion p1="25" p2="26"/>
+				<Exclusion p1="25" p2="27"/>
+				<Exclusion p1="25" p2="28"/>
+				<Exclusion p1="25" p2="29"/>
+				<Exclusion p1="26" p2="27"/>
+				<Exclusion p1="26" p2="28"/>
+				<Exclusion p1="26" p2="29"/>
+				<Exclusion p1="27" p2="28"/>
+				<Exclusion p1="27" p2="29"/>
+				<Exclusion p1="28" p2="29"/>
+				<Exclusion p1="30" p2="31"/>
+				<Exclusion p1="30" p2="32"/>
+				<Exclusion p1="30" p2="33"/>
+				<Exclusion p1="30" p2="34"/>
+				<Exclusion p1="30" p2="35"/>
+				<Exclusion p1="30" p2="36"/>
+				<Exclusion p1="30" p2="37"/>
+				<Exclusion p1="30" p2="38"/>
+				<Exclusion p1="31" p2="32"/>
+				<Exclusion p1="31" p2="33"/>
+				<Exclusion p1="31" p2="34"/>
+				<Exclusion p1="31" p2="35"/>
+				<Exclusion p1="31" p2="36"/>
+				<Exclusion p1="31" p2="37"/>
+				<Exclusion p1="31" p2="38"/>
+				<Exclusion p1="32" p2="33"/>
+				<Exclusion p1="32" p2="34"/>
+				<Exclusion p1="32" p2="35"/>
+				<Exclusion p1="32" p2="36"/>
+				<Exclusion p1="32" p2="37"/>
+				<Exclusion p1="32" p2="38"/>
+				<Exclusion p1="33" p2="34"/>
+				<Exclusion p1="33" p2="35"/>
+				<Exclusion p1="33" p2="36"/>
+				<Exclusion p1="33" p2="37"/>
+				<Exclusion p1="33" p2="38"/>
+				<Exclusion p1="34" p2="35"/>
+				<Exclusion p1="34" p2="36"/>
+				<Exclusion p1="34" p2="37"/>
+				<Exclusion p1="34" p2="38"/>
+				<Exclusion p1="35" p2="36"/>
+				<Exclusion p1="35" p2="37"/>
+				<Exclusion p1="35" p2="38"/>
+				<Exclusion p1="36" p2="37"/>
+				<Exclusion p1="36" p2="38"/>
+				<Exclusion p1="37" p2="38"/>
+				<Exclusion p1="39" p2="40"/>
+				<Exclusion p1="39" p2="41"/>
+				<Exclusion p1="39" p2="42"/>
+				<Exclusion p1="39" p2="43"/>
+				<Exclusion p1="40" p2="41"/>
+				<Exclusion p1="40" p2="42"/>
+				<Exclusion p1="40" p2="43"/>
+				<Exclusion p1="41" p2="42"/>
+				<Exclusion p1="41" p2="43"/>
+				<Exclusion p1="42" p2="43"/>
+			</Exclusions>
+		</Force>
+		<Force alchemicalParameter="lambda_sterics" cutoff="1.2" forceGroup="3" name="CustomCentroidBondForce" scaleFactor="1.0000000000000009" type="InteraxThreeBodyForce" usesPeriodic="0" version="1">
+			<Molecules>
+				<Molecule alchemical="0" alpha=".004087456746801944" frequency="911.0681141195369">
+					<Particle index="0"/>
+					<Particle index="1"/>
+				</Molecule>
+				<Molecule alchemical="0" alpha=".0016246535729804365" frequency="1262.664320774599">
+					<Particle index="6"/>
+				</Molecule>
+				<Molecule alchemical="0" alpha=".008817709933796472" frequency="747.5256543931184">
+					<Particle index="9"/>
+					<Particle index="10"/>
+					<Particle index="11"/>
+					<Particle index="12"/>
+				</Molecule>
+				<Molecule alchemical="0" alpha=".012423454999358104" frequency="702.9782289776065">
+					<Particle index="19"/>
+					<Particle index="20"/>
+					<Particle index="21"/>
+					<Particle index="22"/>
+					<Particle index="23"/>
+					<Particle index="24"/>
+				</Molecule>
+				<Molecule alchemical="0" alpha=".010210128757427384" frequency="670.9747933235909">
+					<Particle index="30"/>
+					<Particle index="31"/>
+					<Particle index="32"/>
+				</Molecule>
+				<Molecule alchemical="0" alpha=".01091894724777136" frequency="805.1370181246539">
+					<Particle index="39"/>
+					<Particle index="40"/>
+					<Particle index="41"/>
+					<Particle index="42"/>
+				</Molecule>
+			</Molecules>
+		</Force>
+	</Forces>
+</System>
