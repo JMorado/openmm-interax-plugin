@@ -8,11 +8,8 @@ lambda_sterics, so for every term and every lambda
 
 where E_on is the energy with the molecule fully coupled (no alchemical flags) and E_off the energy with the molecule
 removed from the term (zero polarizability or width): every pair and triple involving it vanishes, as at lambda = 0.
-The same holds for the forces. The dispersion long range correction is the one exception, by a constant: it counts
-every pair of particles, those within the alchemical molecule included (as the export's does), and these pairs, with
-two alchemical particles, are not scaled. So in a periodic box E_dispersion(lambda) = (1 - lambda) (E_off + c) +
-lambda E_on, where c, the correction of the pairs within the molecule, is the same at every lambda and cancels in
-free energy differences. The test reports c and checks the linearity in lambda.
+The same holds for the forces and, in the periodic box, for the dispersion long range correction, whose pairs with
+an alchemical particle are all scaled (those within the alchemical molecule included).
 
 Usage: python test_alchemical.py [--platform Reference] [--precision double]
 """
@@ -95,14 +92,9 @@ def check(name, topology, positions, periodic, platform, precision, ff, nagl):
     for kind in systems["on"][1]:
         e_on, f_on = on[kind, 1.0]
         e_off, f_off = off[kind, 1.0]
-        constant = alchemical[kind, 0.0][0] - e_off  # the intramolecular long range correction (zero but in that case)
-        if kind != "dispersion" or not periodic:
-            assert abs(constant) <= 1e-9 * max(abs(e_on), 1.0), (kind, constant)
-        else:
-            print(f"  {kind}: long range correction of the pairs within the alchemical molecule c = {constant:.6e} kJ/mol")
         for lam in LAMBDAS:
             e, f = alchemical[kind, lam]
-            e_expected = (1 - lam) * (e_off + constant) + lam * e_on
+            e_expected = (1 - lam) * e_off + lam * e_on
             f_expected = (1 - lam) * f_off + lam * f_on
             de, df = abs(e - e_expected), np.abs(f - f_expected).max()
             scale = max(abs(e_on - e_off), 1e-12)

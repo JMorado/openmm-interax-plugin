@@ -131,7 +131,9 @@ void InteraxDispersionForceImpl::calcLongRangeCorrection(const InteraxDispersion
             }
             double count1 = classes[i].second, count2 = classes[j].second;
             double count = (i == j ? 0.5*count1*(count1+1) : count1*count2);
-            if (get<5>(class1) != get<5>(class2))
+            // Every pair with an alchemical particle, those within the alchemical molecules included, is scaled:
+            // the correction is then that of the full system at lambda = 1 and that of the rest at lambda = 0.
+            if (get<5>(class1) || get<5>(class2))
                 alchemicalSum += count*integral;
             else
                 sum += count*integral;

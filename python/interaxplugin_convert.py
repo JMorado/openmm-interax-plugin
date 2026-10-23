@@ -57,7 +57,7 @@ def _copy_pair_settings(source, target):
     if source.getNumInteractionGroups() > 0:
         raise ValueError("Interaction groups are not supported: use the alchemical flags of the plugin forces instead.")
     target.setForceGroup(source.getForceGroup())
-    target.setName(source.getName())
+    target.setName(type(target).__name__)
 
 
 def _particle_values(force, index):
@@ -99,7 +99,7 @@ def convert_dispersion(force):
     return plugin
 
 
-def convert_exchange(force, overlap="export"):
+def convert_exchange(force, overlap="exact"):
     globals_ = _global_parameters(force)
     if "p_ex" in globals_ and globals_["p_ex"] != 1.0:
         raise ValueError("Only the exchange repulsion with exponent 1 can be converted.")
@@ -114,7 +114,7 @@ def convert_exchange(force, overlap="export"):
     return plugin
 
 
-def convert_short_range(force, overlap="export"):
+def convert_short_range(force, overlap="exact"):
     for i in range(force.getNumParticles()):
         v = _particle_values(force, i)
         if v.get("M", 0.0) != 0.0:
@@ -243,15 +243,15 @@ def convert_three_body(force, dispersion):
             raise ValueError(f"The stored C9 of triple {tuple(groups)} does not match the molecular parameters.")
     plugin.setScaleFactor(1.0 if scale is None else scale)
     plugin.setForceGroup(force.getForceGroup())
-    plugin.setName(force.getName())
+    plugin.setName(type(plugin).__name__)
     return plugin
 
 
-def convert_system(system, copy=True, overlap="export"):
+def convert_system(system, copy=True, overlap="exact"):
     """
     Return a copy of an exported InteraxFF System in which the dispersion, exchange repulsion, short-range correction
-    and molecular three-body dispersion use the plugin forces. Forces keep their group and name; exchange-type forces
-    whose amplitudes are all zero (the inactive exchange-induction term) are removed. With copy=False the System is
+    and molecular three-body dispersion use the plugin forces, named after their classes. Forces keep their group;
+    exchange-type forces whose amplitudes are all zero (the inactive exchange-induction term) are removed. With copy=False the System is
     converted in place, which avoids serializing the millions of triples of the exported three-body force.
 
     The Slater overlap of the exchange repulsion and the short-range correction uses, with overlap="export", the

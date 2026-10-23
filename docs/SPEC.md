@@ -26,8 +26,9 @@ forces (the reference for every test).
 * **Alchemy (decoupling).** Each particle (each molecule for the three-body force) can be flagged alchemical. A pair
   with exactly one alchemical particle is scaled by the context parameter `lambda_sterics` (name configurable);
   pairs with zero or two alchemical particles are unscaled (two alchemical particles are normally excluded, being in
-  the same solute). The dispersion long range correction counts every pair, as the export's does, so the pairs within
-  the alchemical molecule add a constant, independent of lambda, that cancels in free energy differences. A three-body triple is scaled if it contains at least one alchemical molecule. This reproduces
+  the same solute). The dispersion long range correction is the exception: every pair that involves an alchemical
+  particle enters it scaled by lambda, the pairs within the alchemical molecule included, so that it is that of the
+  whole system at lambda = 1 and that of the rest at lambda = 0. A three-body triple is scaled if it contains at least one alchemical molecule. This reproduces
   the absolv decoupling construction (solute-solvent copies scaled by `lambda_sterics`) in a single force.
 * **Particles without density.** A particle with zero width `s` (e.g. a lone-pair virtual site) does not interact
   through the density-based pair forces. (In the current export such sites need an extra gating parameter, because

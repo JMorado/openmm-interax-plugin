@@ -128,7 +128,9 @@ public:
      * Set whether to add a long range correction under periodic boundary conditions. The correction is
      * E = 2 pi N^2 <I> / V, with <I> the average over all N(N+1)/2 particle pairs (self pairs included) of the
      * integral of r^2 E(r) beyond the cutoff (and of r^2 (1 - S(r)) E(r) over the switching interval), exactly as
-     * for CustomNonbondedForce.
+     * for CustomNonbondedForce. Every pair that involves an alchemical particle, the pairs within the alchemical
+     * molecules included, is scaled by the alchemical parameter, so that the correction is that of the whole System
+     * when it is 1 and that of the rest of the System when it is 0.
      */
     void setUseLongRangeCorrection(bool use);
     /**
