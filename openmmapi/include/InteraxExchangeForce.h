@@ -50,6 +50,29 @@ namespace InteraxPlugin {
 class OPENMM_EXPORT_INTERAX InteraxExchangeForce : public InteraxPairForce {
 public:
     /**
+     * This is an enumeration of the methods for the Slater overlap integral of nearly equal widths, where the
+     * closed form cancels and a Taylor expansion in the width difference is used instead.
+     */
+    enum OverlapMethod {
+        /**
+         * An order 6 expansion with a switch chosen for the precision of the platform: the integral is exact to
+         * ~1e-6 relative in single precision and ~1e-10 in double precision. This is the default.
+         */
+        Exact = 0,
+        /**
+         * The order 2 scheme of InteraxFF (MEDFF), used where the widths differ by less than 0.01 bohr, evaluated
+         * exactly as the InteraxFF export does (about the width of the particle with the lower index). It reproduces
+         * the export, including its truncation errors; in single precision the closed form near the switch has
+         * relative errors up to ~3e-2.
+         */
+        InteraxOrder2 = 2,
+        /**
+         * The order 6 scheme of InteraxFF, used where the widths differ by less than 20%, evaluated exactly as the
+         * InteraxFF export does.
+         */
+        InteraxOrder6 = 6
+    };
+    /**
      * Create an InteraxExchangeForce.
      */
     InteraxExchangeForce();
@@ -94,12 +117,21 @@ public:
      */
     void setParticleParameters(int index, double amplitude, double width, bool isAlchemical);
     /**
+     * Get the method used to evaluate the Slater overlap integral for nearly equal widths, where its closed form loses
+     * precision to cancellation.
+     */
+    OverlapMethod getOverlapMethod() const;
+    /**
+     * Set the method used to evaluate the Slater overlap integral for nearly equal widths.
+     */
+    void setOverlapMethod(OverlapMethod method);
+    /**
      * Update the per-particle parameters in a Context to match those stored in this Force object. This method
      * provides an efficient method to update certain parameters in an existing Context without needing to
      * reinitialize it. Simply call setParticleParameters() to modify this object's parameters, then call
      * updateParametersInContext() to copy them over to the Context.
      *
-     * The alchemical flags, the exclusions and the cutoff cannot be changed by this method.
+     * The alchemical flags, the exclusions, the cutoff and the overlap method cannot be changed by this method.
      */
     void updateParametersInContext(OpenMM::Context& context);
 protected:
@@ -107,6 +139,7 @@ protected:
 private:
     class ParticleInfo;
     std::vector<ParticleInfo> particles;
+    OverlapMethod overlapMethod;
 };
 
 /**

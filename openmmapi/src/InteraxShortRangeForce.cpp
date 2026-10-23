@@ -36,7 +36,17 @@ using namespace InteraxPlugin;
 using namespace OpenMM;
 using namespace std;
 
-InteraxShortRangeForce::InteraxShortRangeForce() {
+InteraxShortRangeForce::InteraxShortRangeForce() : overlapMethod(Exact) {
+}
+
+InteraxShortRangeForce::OverlapMethod InteraxShortRangeForce::getOverlapMethod() const {
+    return overlapMethod;
+}
+
+void InteraxShortRangeForce::setOverlapMethod(OverlapMethod method) {
+    if (method != Exact && method != InteraxOrder2 && method != InteraxOrder6)
+        throw OpenMMException("InteraxShortRangeForce: Illegal value for overlap method");
+    overlapMethod = method;
 }
 
 int InteraxShortRangeForce::addParticle(double k, double l, double width, bool isAlchemical) {

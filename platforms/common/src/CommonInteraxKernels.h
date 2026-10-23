@@ -31,6 +31,7 @@
  * -------------------------------------------------------------------------- */
 
 #include "InteraxKernels.h"
+#include "internal/InteraxPairTerms.h"
 #include "openmm/common/ComputeArray.h"
 #include "openmm/common/ComputeContext.h"
 #include <string>
@@ -60,12 +61,13 @@ protected:
      * @param overlapWidths the placeholder expressions of the two widths of the Slater overlap, or empty if the
      *                      interaction does not use it
      * @param overlapName   the name of the variable that receives the overlap integral
+     * @param taylorScheme  the Taylor scheme of the overlap integral (unused without it)
      * @param params        the per-particle parameters (float4)
      * @param extra         additional per-particle parameters (float2), or an uninitialized array
      */
     void addInteraction(const OpenMM::System& system, const InteraxPairForce& force, const std::string& interaction, const std::string& gate,
             const std::vector<std::string>& isAlchemical, const std::vector<std::string>& overlapWidths, const std::string& overlapName,
-            OpenMM::ComputeArray& params, OpenMM::ComputeArray& extra);
+            const InteraxPairTerms::SlaterTaylorScheme& taylorScheme, OpenMM::ComputeArray& params, OpenMM::ComputeArray& extra);
     /**
      * Upload the global parameters (the alchemical parameter and one force-specific value) if they have changed.
      */
@@ -112,6 +114,7 @@ private:
     class ForceInfo;
     void setParameters(const InteraxExchangeForce& force);
     OpenMM::ComputeArray params, extra;
+    int overlapMethod;
 };
 
 /**
@@ -130,6 +133,7 @@ private:
     class ForceInfo;
     void setParameters(const InteraxShortRangeForce& force);
     OpenMM::ComputeArray params, extra;
+    int overlapMethod;
 };
 
 /**

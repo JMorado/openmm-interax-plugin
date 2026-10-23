@@ -36,7 +36,17 @@ using namespace InteraxPlugin;
 using namespace OpenMM;
 using namespace std;
 
-InteraxExchangeForce::InteraxExchangeForce() {
+InteraxExchangeForce::InteraxExchangeForce() : overlapMethod(Exact) {
+}
+
+InteraxExchangeForce::OverlapMethod InteraxExchangeForce::getOverlapMethod() const {
+    return overlapMethod;
+}
+
+void InteraxExchangeForce::setOverlapMethod(OverlapMethod method) {
+    if (method != Exact && method != InteraxOrder2 && method != InteraxOrder6)
+        throw OpenMMException("InteraxExchangeForce: Illegal value for overlap method");
+    overlapMethod = method;
 }
 
 int InteraxExchangeForce::addParticle(double amplitude, double width, bool isAlchemical) {

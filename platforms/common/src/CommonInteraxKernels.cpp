@@ -30,6 +30,7 @@
 #include "CommonInteraxKernels.h"
 #include "CommonInteraxKernelSources.h"
 #include "internal/InteraxPairForceImpl.h"
+#include "internal/InteraxPairTerms.h"
 #include "openmm/OpenMMException.h"
 #include "openmm/common/ComputeForceInfo.h"
 #include "openmm/common/ContextSelector.h"
@@ -136,7 +137,8 @@ private:
 };
 
 void CommonInteraxPairForceKernel::addInteraction(const System& system, const InteraxPairForce& force, const string& interaction, const string& gate,
-        const vector<string>& isAlchemical, const vector<string>& overlapWidths, const string& overlapName, ComputeArray& params, ComputeArray& extra) {
+        const vector<string>& isAlchemical, const vector<string>& overlapWidths, const string& overlapName,
+        const InteraxPairTerms::SlaterTaylorScheme& taylorScheme, ComputeArray& params, ComputeArray& extra) {
     int forceIndex;
     for (forceIndex = 0; forceIndex < system.getNumForces() && &system.getForce(forceIndex) != &force; ++forceIndex)
         ;
@@ -174,8 +176,12 @@ void CommonInteraxPairForceKernel::addInteraction(const System& system, const In
         overlap["OVERLAP_WIDTH2"] = overlapWidths[1];
         overlap["OVERLAP_DERIV"] = overlapName+"Deriv";
         overlap["OVERLAP"] = overlapName;
-        overlap["TAYLOR_MAX_T"] = (cc.getUseDoublePrecision() ? "0.02" : "0.2f");
-        overlap["TAYLOR_MAX_TX"] = (cc.getUseDoublePrecision() ? "0.3" : "1.6f");
+        overlap["TAYLOR_ORDER"] = cc.intToString(taylorScheme.order);
+        overlap["TAYLOR_ABOUT_SMALLER_WIDTH"] = (taylorScheme.aboutSmallerWidth ? "1" : "0");
+        overlap["TAYLOR_MAX_DELTA"] = cc.doubleToString(taylorScheme.maxDelta);
+        overlap["TAYLOR_MAX_T"] = cc.doubleToString(taylorScheme.maxT);
+        overlap["TAYLOR_MAX_TX"] = cc.doubleToString(min(taylorScheme.maxTX, 1e30)); // No bound for the InteraxFF schemes
+        overlap["ATOM_INDEX"] = prefix+"atomIndex";
         snippets["SLATER_OVERLAP"] = cc.replaceStrings(CommonInteraxKernelSources::interaxSlaterOverlap, overlap);
     }
     string source = CommonInteraxKernelSources::interaxPairBegin+interaction+CommonInteraxKernelSources::interaxPairEnd;
@@ -201,6 +207,10 @@ void CommonInteraxPairForceKernel::addInteraction(const System& system, const In
     nonbonded.addParameter(ComputeParameterInfo(params, prefix+"params", getParameterType(cc), 4));
     if (extra.isInitialized())
         nonbonded.addParameter(ComputeParameterInfo(extra, prefix+"extra", getParameterType(cc), 2));
+    if (!overlapWidths.empty() && !taylorScheme.aboutSmallerWidth) {
+        // The InteraxFF Taylor schemes need the original indices of the atoms, which the context may reorder.
+        nonbonded.addArgument(ComputeParameterInfo(cc.getAtomIndexArray(), prefix+"atomIndex", "int", 1));
+    }
     initializeParameters(cc, globals, 2, 1, "interaxGlobals");
     nonbonded.addArgument(ComputeParameterInfo(globals, prefix+"globals", getParameterType(cc), 1));
 }
@@ -231,7 +241,7 @@ void CommonCalcInteraxDispersionForceKernel::initialize(const System& system, co
     initializeParameters(cc, extra, cc.getPaddedNumAtoms(), 2, "interaxDispersionExtra");
     setParameters(force);
     addInteraction(system, force, CommonInteraxKernelSources::interaxDispersion, "PARAMS1.w*PARAMS2.w != 0", {"EXTRA1.y", "EXTRA2.y"},
-            {}, "", params, extra);
+            {}, "", InteraxPairTerms::SlaterTaylorScheme::accurate(true), params, extra);
     cc.addForce(new ForceInfo(force));
 }
 
@@ -280,10 +290,11 @@ public:
 
 void CommonCalcInteraxExchangeForceKernel::initialize(const System& system, const InteraxExchangeForce& force) {
     ContextSelector selector(cc);
+    overlapMethod = force.getOverlapMethod();
     initializeParameters(cc, params, cc.getPaddedNumAtoms(), 4, "interaxExchangeParams");
     setParameters(force);
     addInteraction(system, force, CommonInteraxKernelSources::interaxExchange, "PARAMS1.y*PARAMS2.y != 0", {"PARAMS1.z", "PARAMS2.z"},
-            {"PARAMS1.y", "PARAMS2.y"}, "exchangeOverlap", params, extra);
+            {"PARAMS1.y", "PARAMS2.y"}, "exchangeOverlap", getSlaterTaylorScheme(force, cc.getUseDoublePrecision()), params, extra);
     cc.addForce(new ForceInfo(force));
 }
 
@@ -296,6 +307,8 @@ void CommonCalcInteraxExchangeForceKernel::copyParametersToContext(ContextImpl& 
     ContextSelector selector(cc);
     if (force.getNumParticles() != cc.getNumAtoms())
         throw OpenMMException("updateParametersInContext: The number of particles has changed");
+    if (force.getOverlapMethod() != overlapMethod)
+        throw OpenMMException("updateParametersInContext: The overlap method has changed");
     setParameters(force);
     cc.invalidateMolecules();
 }
@@ -323,10 +336,11 @@ public:
 
 void CommonCalcInteraxShortRangeForceKernel::initialize(const System& system, const InteraxShortRangeForce& force) {
     ContextSelector selector(cc);
+    overlapMethod = force.getOverlapMethod();
     initializeParameters(cc, params, cc.getPaddedNumAtoms(), 4, "interaxShortRangeParams");
     setParameters(force);
     addInteraction(system, force, CommonInteraxKernelSources::interaxShortRange, "PARAMS1.z*PARAMS2.z != 0", {"PARAMS1.w", "PARAMS2.w"},
-            {"PARAMS1.z", "PARAMS2.z"}, "shortRangeOverlap", params, extra);
+            {"PARAMS1.z", "PARAMS2.z"}, "shortRangeOverlap", getSlaterTaylorScheme(force, cc.getUseDoublePrecision()), params, extra);
     cc.addForce(new ForceInfo(force));
 }
 
@@ -339,6 +353,8 @@ void CommonCalcInteraxShortRangeForceKernel::copyParametersToContext(ContextImpl
     ContextSelector selector(cc);
     if (force.getNumParticles() != cc.getNumAtoms())
         throw OpenMMException("updateParametersInContext: The number of particles has changed");
+    if (force.getOverlapMethod() != overlapMethod)
+        throw OpenMMException("updateParametersInContext: The overlap method has changed");
     setParameters(force);
     cc.invalidateMolecules();
 }

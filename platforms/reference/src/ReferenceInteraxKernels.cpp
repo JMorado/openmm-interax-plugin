@@ -116,6 +116,8 @@ void ReferenceCalcInteraxDispersionForceKernel::setParameters(const InteraxDispe
  * -------------------------------------------------------------------------- */
 
 void ReferenceCalcInteraxExchangeForceKernel::initialize(const System& system, const InteraxExchangeForce& force) {
+    overlapMethod = force.getOverlapMethod();
+    taylorScheme = getSlaterTaylorScheme(force, true);
     ixn.reset(new ReferenceInteraxPairIxn(force));
     alchemicalParameter = force.getAlchemicalParameterName();
     hasAlchemicalParticles = anyParticleIsAlchemical(force);
@@ -127,11 +129,12 @@ double ReferenceCalcInteraxExchangeForceKernel::execute(ContextImpl& context, bo
     double lambda = getAlchemicalParameter(context, hasAlchemicalParticles, alchemicalParameter);
     return ixn->calculateIxn(extractPositions(context), extractBoxVectors(context), lambda, extractForces(context),
             [&] (int i, int j, double r, double& pairEnergy, double& dEdR) {
-        const ParticleParameters& p1 = particles[i];
-        const ParticleParameters& p2 = particles[j];
+        // The InteraxFF Taylor schemes expand about the width of the particle with the lower index.
+        const ParticleParameters& p1 = particles[min(i, j)];
+        const ParticleParameters& p2 = particles[max(i, j)];
         if (p1.width*p2.width == 0)
             return false;
-        InteraxPairTerms::exchangePair(r, p1.amplitude, p1.width, p2.amplitude, p2.width, pairEnergy, dEdR);
+        InteraxPairTerms::exchangePair(r, p1.amplitude, p1.width, p2.amplitude, p2.width, taylorScheme, pairEnergy, dEdR);
         return true;
     });
 }
@@ -139,6 +142,8 @@ double ReferenceCalcInteraxExchangeForceKernel::execute(ContextImpl& context, bo
 void ReferenceCalcInteraxExchangeForceKernel::copyParametersToContext(ContextImpl& context, const InteraxExchangeForce& force) {
     if (force.getNumParticles() != particles.size())
         throw OpenMMException("updateParametersInContext: The number of particles has changed");
+    if (force.getOverlapMethod() != overlapMethod)
+        throw OpenMMException("updateParametersInContext: The overlap method has changed");
     setParameters(force);
 }
 
@@ -154,6 +159,8 @@ void ReferenceCalcInteraxExchangeForceKernel::setParameters(const InteraxExchang
  * -------------------------------------------------------------------------- */
 
 void ReferenceCalcInteraxShortRangeForceKernel::initialize(const System& system, const InteraxShortRangeForce& force) {
+    overlapMethod = force.getOverlapMethod();
+    taylorScheme = getSlaterTaylorScheme(force, true);
     ixn.reset(new ReferenceInteraxPairIxn(force));
     alchemicalParameter = force.getAlchemicalParameterName();
     hasAlchemicalParticles = anyParticleIsAlchemical(force);
@@ -165,11 +172,12 @@ double ReferenceCalcInteraxShortRangeForceKernel::execute(ContextImpl& context, 
     double lambda = getAlchemicalParameter(context, hasAlchemicalParticles, alchemicalParameter);
     return ixn->calculateIxn(extractPositions(context), extractBoxVectors(context), lambda, extractForces(context),
             [&] (int i, int j, double r, double& pairEnergy, double& dEdR) {
-        const ParticleParameters& p1 = particles[i];
-        const ParticleParameters& p2 = particles[j];
+        // The InteraxFF Taylor schemes expand about the width of the particle with the lower index.
+        const ParticleParameters& p1 = particles[min(i, j)];
+        const ParticleParameters& p2 = particles[max(i, j)];
         if (p1.width*p2.width == 0)
             return false;
-        InteraxPairTerms::shortRangePair(r, p1.k, p1.l, p1.width, p2.k, p2.l, p2.width, pairEnergy, dEdR);
+        InteraxPairTerms::shortRangePair(r, p1.k, p1.l, p1.width, p2.k, p2.l, p2.width, taylorScheme, pairEnergy, dEdR);
         return true;
     });
 }
@@ -177,6 +185,8 @@ double ReferenceCalcInteraxShortRangeForceKernel::execute(ContextImpl& context, 
 void ReferenceCalcInteraxShortRangeForceKernel::copyParametersToContext(ContextImpl& context, const InteraxShortRangeForce& force) {
     if (force.getNumParticles() != particles.size())
         throw OpenMMException("updateParametersInContext: The number of particles has changed");
+    if (force.getOverlapMethod() != overlapMethod)
+        throw OpenMMException("updateParametersInContext: The overlap method has changed");
     setParameters(force);
 }
 

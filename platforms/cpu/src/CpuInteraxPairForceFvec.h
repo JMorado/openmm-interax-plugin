@@ -40,18 +40,18 @@
 namespace InteraxPlugin {
 
 template <class FVEC>
-void CpuInteraxDispersionTerm::compute(FVEC r, const FVEC* p1, const FVEC* p2, float dampingScale, FVEC& energy, FVEC& dEdR) {
-    InteraxPairTerms::dispersionPair(r, p1[0], p1[1], p1[2], p1[3], p1[4], p2[0], p2[1], p2[2], p2[3], p2[4], FVEC(dampingScale), energy, dEdR);
+void CpuInteraxDispersionTerm::compute(FVEC r, const FVEC* p1, const FVEC* p2, const CpuInteraxPairGlobals& globals, FVEC& energy, FVEC& dEdR) {
+    InteraxPairTerms::dispersionPair(r, p1[0], p1[1], p1[2], p1[3], p1[4], p2[0], p2[1], p2[2], p2[3], p2[4], FVEC(globals.dampingScale), energy, dEdR);
 }
 
 template <class FVEC>
-void CpuInteraxExchangeTerm::compute(FVEC r, const FVEC* p1, const FVEC* p2, float unused, FVEC& energy, FVEC& dEdR) {
-    InteraxPairTerms::exchangePair(r, p1[0], p1[1], p2[0], p2[1], energy, dEdR);
+void CpuInteraxExchangeTerm::compute(FVEC r, const FVEC* p1, const FVEC* p2, const CpuInteraxPairGlobals& globals, FVEC& energy, FVEC& dEdR) {
+    InteraxPairTerms::exchangePair(r, p1[0], p1[1], p2[0], p2[1], globals.taylorScheme, energy, dEdR);
 }
 
 template <class FVEC>
-void CpuInteraxShortRangeTerm::compute(FVEC r, const FVEC* p1, const FVEC* p2, float unused, FVEC& energy, FVEC& dEdR) {
-    InteraxPairTerms::shortRangePair(r, p1[0], p1[1], p1[2], p2[0], p2[1], p2[2], energy, dEdR);
+void CpuInteraxShortRangeTerm::compute(FVEC r, const FVEC* p1, const FVEC* p2, const CpuInteraxPairGlobals& globals, FVEC& energy, FVEC& dEdR) {
+    InteraxPairTerms::shortRangePair(r, p1[0], p1[1], p1[2], p2[0], p2[1], p2[2], globals.taylorScheme, energy, dEdR);
 }
 
 /**
@@ -64,10 +64,10 @@ class CpuInteraxPairForceFvec : public CpuInteraxPairForce {
 public:
     explicit CpuInteraxPairForceFvec(const InteraxPairForce& force);
     void setParameters(const std::vector<std::vector<double> >& parameters);
-    double calculateIxn(const OpenMM::AlignedArray<float>& posq, const OpenMM::Vec3* boxVectors, double lambda, double globalParameter,
+    double calculateIxn(const OpenMM::AlignedArray<float>& posq, const OpenMM::Vec3* boxVectors, double lambda, const CpuInteraxPairGlobals& globals,
             std::vector<OpenMM::AlignedArray<float> >& threadForce, OpenMM::ThreadPool& threads, bool includeEnergy);
 private:
-    void calculateBlockIxn(int blockIndex, const float* posq, float* forces, double& energy, float lambda, float globalParameter, bool includeEnergy);
+    void calculateBlockIxn(int blockIndex, const float* posq, float* forces, double& energy, float lambda, const CpuInteraxPairGlobals& globals, bool includeEnergy);
     InteraxPairForce::NonbondedMethod nonbondedMethod;
     float cutoff, switchingDistance;
     bool useSwitch, periodic;
@@ -112,7 +112,7 @@ void CpuInteraxPairForceFvec<FVEC, BLOCK_SIZE, Term>::setParameters(const std::v
 
 template <class FVEC, int BLOCK_SIZE, class Term>
 double CpuInteraxPairForceFvec<FVEC, BLOCK_SIZE, Term>::calculateIxn(const OpenMM::AlignedArray<float>& posq, const OpenMM::Vec3* boxVectors,
-        double lambda, double globalParameter, std::vector<OpenMM::AlignedArray<float> >& threadForce, OpenMM::ThreadPool& threads, bool includeEnergy) {
+        double lambda, const CpuInteraxPairGlobals& globals, std::vector<OpenMM::AlignedArray<float> >& threadForce, OpenMM::ThreadPool& threads, bool includeEnergy) {
     if (periodic) {
         if (boxVectors[0][1] != 0 || boxVectors[0][2] != 0 || boxVectors[1][0] != 0 || boxVectors[1][2] != 0 || boxVectors[2][0] != 0 || boxVectors[2][1] != 0)
             throw OpenMM::OpenMMException("The CPU implementation of the InteraxFF pair forces does not support triclinic boxes");
@@ -132,7 +132,7 @@ double CpuInteraxPairForceFvec<FVEC, BLOCK_SIZE, Term>::calculateIxn(const OpenM
             int blockIndex = atomicCounter++;
             if (blockIndex >= neighborList.getNumBlocks())
                 break;
-            calculateBlockIxn(blockIndex, &posq[0], forces, threadEnergy[threadIndex], (float) lambda, (float) globalParameter, includeEnergy);
+            calculateBlockIxn(blockIndex, &posq[0], forces, threadEnergy[threadIndex], (float) lambda, globals, includeEnergy);
         }
     });
     threads.waitForThreads();
@@ -144,7 +144,7 @@ double CpuInteraxPairForceFvec<FVEC, BLOCK_SIZE, Term>::calculateIxn(const OpenM
 
 template <class FVEC, int BLOCK_SIZE, class Term>
 void CpuInteraxPairForceFvec<FVEC, BLOCK_SIZE, Term>::calculateBlockIxn(int blockIndex, const float* posq, float* forces, double& energy,
-        float lambda, float globalParameter, bool includeEnergy) {
+        float lambda, const CpuInteraxPairGlobals& globals, bool includeEnergy) {
     // Load the positions and parameters of the particles in the block, one lane per particle.
 
     const int32_t* blockAtom = &neighborList.getSortedAtoms()[BLOCK_SIZE*blockIndex];
@@ -164,6 +164,10 @@ void CpuInteraxPairForceFvec<FVEC, BLOCK_SIZE, Term>::calculateBlockIxn(int bloc
     for (int i = 0; i < BLOCK_SIZE; i++)
         values[i] = isAlchemical[blockAtom[i]];
     FVEC blockAlchemical(values);
+    for (int i = 0; i < BLOCK_SIZE; i++)
+        values[i] = (float) blockAtom[i];
+    FVEC blockAtomIndex(values);
+    const bool orderByIndex = !globals.taylorScheme.aboutSmallerWidth;
     FVEC blockForceX(0.0f), blockForceY(0.0f), blockForceZ(0.0f);
     FVEC blockEnergy(0.0f);
     const float invSwitchingInterval = 1/(cutoff-switchingDistance);
@@ -204,7 +208,19 @@ void CpuInteraxPairForceFvec<FVEC, BLOCK_SIZE, Term>::calculateBlockIxn(int bloc
         FVEC invR = rsqrt(r2);
         FVEC r = r2*invR;
         FVEC pairEnergy, dEdR;
-        Term::compute(r, blockParameters, atomParameters, globalParameter, pairEnergy, dEdR);
+        if (orderByIndex) {
+            // The InteraxFF Taylor schemes of the Slater overlap expand about the width of the particle with the
+            // lower index, so put that particle first in each lane.
+            FVEC blockFirst = blockAtomIndex < (float) atom;
+            FVEC first[Term::NUM_PARAMETERS], second[Term::NUM_PARAMETERS];
+            for (int k = 0; k < Term::NUM_PARAMETERS; k++) {
+                first[k] = blendIf(blockFirst, blockParameters[k], atomParameters[k]);
+                second[k] = blendIf(blockFirst, atomParameters[k], blockParameters[k]);
+            }
+            Term::compute(r, first, second, globals, pairEnergy, dEdR);
+        }
+        else
+            Term::compute(r, blockParameters, atomParameters, globals, pairEnergy, dEdR);
         if (useSwitch) {
             FVEC t = blendZero((r-switchingDistance)*invSwitchingInterval, r > switchingDistance);
             FVEC switchValue = 1.0f+t*t*t*(-10.0f+t*(15.0f-t*6.0f));

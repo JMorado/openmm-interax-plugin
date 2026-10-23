@@ -31,12 +31,22 @@
  * -------------------------------------------------------------------------- */
 
 #include "InteraxPairForce.h"
+#include "internal/InteraxPairTerms.h"
 #include "openmm/Vec3.h"
 #include "openmm/cpu/AlignedArray.h"
 #include "openmm/internal/ThreadPool.h"
 #include <vector>
 
 namespace InteraxPlugin {
+
+/**
+ * The global parameters of the pair terms: the damping scale of the dispersion, and the Taylor scheme of the Slater
+ * overlap of the exchange repulsion and the short-range correction.
+ */
+struct CpuInteraxPairGlobals {
+    float dampingScale;
+    InteraxPairTerms::SlaterTaylorScheme taylorScheme;
+};
 
 /**
  * This is the interface of the CPU implementation of an InteraxFF pair force. The implementation
@@ -56,13 +66,13 @@ public:
      * @param posq             the single precision positions (x, y, z, charge) of the CPU platform
      * @param boxVectors       the periodic box vectors
      * @param lambda           the value of the alchemical parameter
-     * @param globalParameter  the global parameter of the pair term (the damping scale of the dispersion)
+     * @param globals          the global parameters of the pair term
      * @param threadForce      the per-thread force buffers of the CPU platform; the forces are added to them
      * @param threads          the thread pool to use
      * @param includeEnergy    true if the energy should be calculated
      * @return the energy
      */
-    virtual double calculateIxn(const OpenMM::AlignedArray<float>& posq, const OpenMM::Vec3* boxVectors, double lambda, double globalParameter,
+    virtual double calculateIxn(const OpenMM::AlignedArray<float>& posq, const OpenMM::Vec3* boxVectors, double lambda, const CpuInteraxPairGlobals& globals,
             std::vector<OpenMM::AlignedArray<float> >& threadForce, OpenMM::ThreadPool& threads, bool includeEnergy) = 0;
 };
 
@@ -74,7 +84,7 @@ struct CpuInteraxDispersionTerm {
     static const int NUM_PARAMETERS = 5;  // m1, m2, m3, alpha, width
     static const int GATE_PARAMETER = 3;  // alpha
     template <class FVEC>
-    static void compute(FVEC r, const FVEC* p1, const FVEC* p2, float dampingScale, FVEC& energy, FVEC& dEdR);
+    static void compute(FVEC r, const FVEC* p1, const FVEC* p2, const CpuInteraxPairGlobals& globals, FVEC& energy, FVEC& dEdR);
 };
 
 /**
@@ -84,7 +94,7 @@ struct CpuInteraxExchangeTerm {
     static const int NUM_PARAMETERS = 2;  // amplitude, width
     static const int GATE_PARAMETER = 1;  // width
     template <class FVEC>
-    static void compute(FVEC r, const FVEC* p1, const FVEC* p2, float unused, FVEC& energy, FVEC& dEdR);
+    static void compute(FVEC r, const FVEC* p1, const FVEC* p2, const CpuInteraxPairGlobals& globals, FVEC& energy, FVEC& dEdR);
 };
 
 /**
@@ -94,7 +104,7 @@ struct CpuInteraxShortRangeTerm {
     static const int NUM_PARAMETERS = 3;  // k, l, width
     static const int GATE_PARAMETER = 2;  // width
     template <class FVEC>
-    static void compute(FVEC r, const FVEC* p1, const FVEC* p2, float unused, FVEC& energy, FVEC& dEdR);
+    static void compute(FVEC r, const FVEC* p1, const FVEC* p2, const CpuInteraxPairGlobals& globals, FVEC& energy, FVEC& dEdR);
 };
 
 /**

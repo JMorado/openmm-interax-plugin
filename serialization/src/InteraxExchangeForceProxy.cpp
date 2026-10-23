@@ -47,6 +47,7 @@ void InteraxExchangeForceProxy::serialize(const void* object, SerializationNode&
     node.setStringProperty("name", force.getName());
     node.setIntProperty("method", (int) force.getNonbondedMethod());
     node.setDoubleProperty("cutoff", force.getCutoffDistance());
+    node.setIntProperty("overlapMethod", (int) force.getOverlapMethod());
     node.setBoolProperty("useSwitchingFunction", force.getUseSwitchingFunction());
     node.setDoubleProperty("switchingDistance", force.getSwitchingDistance());
     node.setStringProperty("alchemicalParameter", force.getAlchemicalParameterName());
@@ -74,6 +75,7 @@ void* InteraxExchangeForceProxy::deserialize(const SerializationNode& node) cons
         force->setName(node.getStringProperty("name", force->getName()));
         force->setNonbondedMethod((InteraxPairForce::NonbondedMethod) node.getIntProperty("method"));
         force->setCutoffDistance(node.getDoubleProperty("cutoff"));
+        force->setOverlapMethod((InteraxExchangeForce::OverlapMethod) node.getIntProperty("overlapMethod", 0));
         force->setUseSwitchingFunction(node.getBoolProperty("useSwitchingFunction"));
         force->setSwitchingDistance(node.getDoubleProperty("switchingDistance"));
         force->setAlchemicalParameterName(node.getStringProperty("alchemicalParameter"));

@@ -5,7 +5,7 @@ InteraxDispersionForce, InteraxExchangeForce and InteraxShortRangeForce, and the
 CustomCentroidBondForce becomes InteraxThreeBodyForce. Every other force (valence terms, HIPPO electrostatics and
 polarization, intramolecular nonbonded terms) is kept as it is.
 
-The converted forces reproduce the export to the precision of its Slater integrals (docs/SPEC.md).
+The converted forces reproduce the export to rounding (docs/SPEC.md).
 """
 
 import math
@@ -64,6 +64,19 @@ def _particle_values(force, index):
     return dict(zip(_per_particle_names(force), force.getParticleParameters(index)))
 
 
+def _overlap_method(force, plugin_class):
+    """
+    The plugin overlap method that reproduces an exported force: the InteraxFF Taylor scheme of its switch
+    (interax.openmm._taylor_switch_expression), 'issame = step(0.2*s1 - abs(sdifflin))' for order 6 and an absolute
+    width difference for order 2.
+    """
+    expression = force.getEnergyFunction()
+    if "issame" not in expression:
+        raise ValueError("The force has no Taylor switch of the Slater overlap.")
+    switch = expression.split("issame = step(")[1].split("-")[0]
+    return plugin_class.InteraxOrder6 if "*s1" in switch else plugin_class.InteraxOrder2
+
+
 def _is_active(values):
     """False for a lone-pair site, which the export keeps in the pair forces with lp_on = 0."""
     return values.get("lp_on", 1.0) != 0.0
@@ -86,12 +99,13 @@ def convert_dispersion(force):
     return plugin
 
 
-def convert_exchange(force):
+def convert_exchange(force, overlap="export"):
     globals_ = _global_parameters(force)
     if "p_ex" in globals_ and globals_["p_ex"] != 1.0:
         raise ValueError("Only the exchange repulsion with exponent 1 can be converted.")
     scale = math.sqrt(globals_.get("K_A", K_A))
     plugin = ip.InteraxExchangeForce()
+    plugin.setOverlapMethod(_overlap_method(force, ip.InteraxExchangeForce) if overlap == "export" else ip.InteraxExchangeForce.Exact)
     for i in range(force.getNumParticles()):
         v = _particle_values(force, i)
         width = v["s"] if _is_active(v) else 0.0
@@ -100,7 +114,7 @@ def convert_exchange(force):
     return plugin
 
 
-def convert_short_range(force):
+def convert_short_range(force, overlap="export"):
     for i in range(force.getNumParticles()):
         v = _particle_values(force, i)
         if v.get("M", 0.0) != 0.0:
@@ -110,6 +124,7 @@ def convert_short_range(force):
         if any(value != 0.0 for value in values):
             raise ValueError("Element-pair amplitudes of the short-range correction are not supported.")
     plugin = ip.InteraxShortRangeForce()
+    plugin.setOverlapMethod(_overlap_method(force, ip.InteraxShortRangeForce) if overlap == "export" else ip.InteraxShortRangeForce.Exact)
     for i in range(force.getNumParticles()):
         v = _particle_values(force, i)
         width = v["s"] if _is_active(v) else 0.0
@@ -196,13 +211,20 @@ def convert_three_body(force, dispersion):
     return plugin
 
 
-def convert_system(system, copy=True):
+def convert_system(system, copy=True, overlap="export"):
     """
     Return a copy of an exported InteraxFF System in which the dispersion, exchange repulsion, short-range correction
     and molecular three-body dispersion use the plugin forces. Forces keep their group and name; exchange-type forces
     whose amplitudes are all zero (the inactive exchange-induction term) are removed. With copy=False the System is
     converted in place, which avoids serializing the millions of triples of the exported three-body force.
+
+    The Slater overlap of the exchange repulsion and the short-range correction uses, with overlap="export", the
+    InteraxFF Taylor scheme of the export, evaluated as the export does (the converted forces reproduce it to
+    rounding), and with overlap="exact" the plugin's accurate scheme (the exact integral, which the export
+    approximates to ~1e-6 relative).
     """
+    if overlap not in ("export", "exact"):
+        raise ValueError(f"overlap must be 'export' or 'exact', got {overlap!r}")
     if copy:
         system = openmm.XmlSerializer.deserialize(openmm.XmlSerializer.serialize(system))
     forces = [system.getForce(i) for i in range(system.getNumForces())]
@@ -214,10 +236,10 @@ def convert_system(system, copy=True):
             if kind == "dispersion":
                 replacements[index] = convert_dispersion(force)
             elif kind == "short_range":
-                replacements[index] = convert_short_range(force)
+                replacements[index] = convert_short_range(force, overlap)
             elif kind == "exchange":
                 amplitudes = [_particle_values(force, i)["A"] for i in range(force.getNumParticles())]
-                replacements[index] = convert_exchange(force) if any(a != 0 for a in amplitudes) else None
+                replacements[index] = convert_exchange(force, overlap) if any(a != 0 for a in amplitudes) else None
         elif isinstance(force, openmm.CustomCentroidBondForce) and "C9" in force.getEnergyFunction():
             if dispersion is None:
                 raise ValueError("The three-body force can only be converted together with the dispersion force.")

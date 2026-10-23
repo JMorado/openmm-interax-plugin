@@ -98,23 +98,37 @@ public:
 
 class InteraxExchangeForce : public InteraxPairForce {
 public:
+    enum OverlapMethod {
+        Exact = 0,
+        InteraxOrder2 = 2,
+        InteraxOrder6 = 6
+    };
     InteraxExchangeForce();
     int getNumParticles() const;
     bool getParticleIsAlchemical(int index) const;
     int addParticle(double amplitude, double width, bool isAlchemical=false);
     void getParticleParameters(int index, double& amplitude, double& width, bool& isAlchemical) const;
     void setParticleParameters(int index, double amplitude, double width, bool isAlchemical);
+    OverlapMethod getOverlapMethod() const;
+    void setOverlapMethod(OverlapMethod method);
     void updateParametersInContext(OpenMM::Context& context);
 };
 
 class InteraxShortRangeForce : public InteraxPairForce {
 public:
+    enum OverlapMethod {
+        Exact = 0,
+        InteraxOrder2 = 2,
+        InteraxOrder6 = 6
+    };
     InteraxShortRangeForce();
     int getNumParticles() const;
     bool getParticleIsAlchemical(int index) const;
     int addParticle(double k, double l, double width, bool isAlchemical=false);
     void getParticleParameters(int index, double& k, double& l, double& width, bool& isAlchemical) const;
     void setParticleParameters(int index, double k, double l, double width, bool isAlchemical);
+    OverlapMethod getOverlapMethod() const;
+    void setOverlapMethod(OverlapMethod method);
     void updateParametersInContext(OpenMM::Context& context);
 };
 

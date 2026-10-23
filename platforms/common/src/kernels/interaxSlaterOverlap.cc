@@ -1,15 +1,24 @@
-// Overlap integral S(r; a, b) of two normalized Slater densities exp(-r/s)/(8 pi s^3) of widths a = OVERLAP_WIDTH1
-// and b = OVERLAP_WIDTH2 at distance r, and its derivative with respect to r (docs/SPEC.md). This snippet is
-// inserted into the pair interaction code with the placeholders replaced. Nearly equal widths use the Taylor
-// expansion about the smaller width, where the closed form loses precision to cancellation.
+// Overlap integral S(r; a, b) of two normalized Slater densities exp(-r/s)/(8 pi s^3) of widths OVERLAP_WIDTH1 and
+// OVERLAP_WIDTH2 at distance r, and its derivative with respect to r (docs/SPEC.md). This snippet is inserted into
+// the pair interaction code with the placeholders replaced. Nearly equal widths use the Taylor expansion of order
+// TAYLOR_ORDER (InteraxPairTerms::SlaterTaylorScheme) about the width l, the smaller width or, for the InteraxFF
+// schemes, that of the particle with the lower index: where the widths differ by less than TAYLOR_MAX_DELTA, or
+// where t = (other width - l)/l and x = r/l satisfy |t| < TAYLOR_MAX_T and |t| x < TAYLOR_MAX_TX.
 real OVERLAP, OVERLAP_DERIV;
 {
+#if TAYLOR_ABOUT_SMALLER_WIDTH
     const real overlapA = OVERLAP_WIDTH1, overlapB = OVERLAP_WIDTH2;
     const real overlapL = min(overlapA, overlapB);
+#else
+    const bool overlapFirst = (ATOM_INDEX[atom1] < ATOM_INDEX[atom2]);
+    const real overlapA = (overlapFirst ? OVERLAP_WIDTH1 : OVERLAP_WIDTH2), overlapB = (overlapFirst ? OVERLAP_WIDTH2 : OVERLAP_WIDTH1);
+    const real overlapL = overlapA;
+#endif
     const real overlapInvL = 1/overlapL;
-    const real overlapT = (max(overlapA, overlapB)-overlapL)*overlapInvL;
+    const real overlapDelta = overlapA+overlapB-2*overlapL;
+    const real overlapT = overlapDelta*overlapInvL;
     const real overlapX = r*overlapInvL;
-    if (overlapT < TAYLOR_MAX_T && overlapT*overlapX < TAYLOR_MAX_TX) {
+    if (fabs(overlapDelta) < TAYLOR_MAX_DELTA || (fabs(overlapT) < TAYLOR_MAX_T && fabs(overlapT)*overlapX < TAYLOR_MAX_TX)) {
         // S = exp(-x)/(pi l^3) sum_n t^n sum_k VALUE[n][k] x^k,  dS/dr = exp(-x)/(pi l^4) sum_n t^n sum_k DERIV[n][k] x^k
         const real VALUE[7][9] = {
         {0.015625, 0.015625, 0.005208333333333333, 0, 0, 0, 0, 0, 0},
@@ -31,7 +40,7 @@ real OVERLAP, OVERLAP_DERIV;
         };
         real sumValue = 0, sumDeriv = 0;
         #pragma unroll
-        for (int n = 6; n >= 0; n--) {
+        for (int n = TAYLOR_ORDER; n >= 0; n--) {
             real value = 0, deriv = 0;
             #pragma unroll
             for (int k = 8; k >= 0; k--) {

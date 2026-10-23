@@ -32,6 +32,7 @@
 
 #include "InteraxKernels.h"
 #include "InteraxPairForce.h"
+#include "internal/InteraxPairTerms.h"
 #include "openmm/internal/ContextImpl.h"
 #include "openmm/internal/ForceImpl.h"
 #include "openmm/Kernel.h"
@@ -133,6 +134,19 @@ public:
             InteraxPairForceImpl<InteraxShortRangeForce, CalcInteraxShortRangeForceKernel>(owner, "InteraxShortRangeForce") {
     }
 };
+
+/**
+ * Get the Taylor scheme of the Slater overlap integral used by an InteraxExchangeForce or InteraxShortRangeForce.
+ *
+ * @param force            the force
+ * @param doublePrecision  whether the platform computes the interactions in double precision
+ */
+template <class ForceType>
+InteraxPairTerms::SlaterTaylorScheme getSlaterTaylorScheme(const ForceType& force, bool doublePrecision) {
+    if (force.getOverlapMethod() == ForceType::Exact)
+        return InteraxPairTerms::SlaterTaylorScheme::accurate(doublePrecision);
+    return InteraxPairTerms::SlaterTaylorScheme::interax((int) force.getOverlapMethod());
+}
 
 } // namespace InteraxPlugin
 

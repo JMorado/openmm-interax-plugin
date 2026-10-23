@@ -31,6 +31,7 @@
  * -------------------------------------------------------------------------- */
 
 #include "InteraxKernels.h"
+#include "internal/InteraxPairTerms.h"
 #include "ReferenceInteraxPairIxn.h"
 #include "ReferenceInteraxThreeBodyIxn.h"
 #include "openmm/Platform.h"
@@ -123,6 +124,8 @@ private:
     std::vector<ParticleParameters> particles;
     std::string alchemicalParameter;
     bool hasAlchemicalParticles;
+    int overlapMethod;
+    InteraxPairTerms::SlaterTaylorScheme taylorScheme;
 };
 
 /**
@@ -165,6 +168,8 @@ private:
     std::vector<ParticleParameters> particles;
     std::string alchemicalParameter;
     bool hasAlchemicalParticles;
+    int overlapMethod;
+    InteraxPairTerms::SlaterTaylorScheme taylorScheme;
 };
 
 /**

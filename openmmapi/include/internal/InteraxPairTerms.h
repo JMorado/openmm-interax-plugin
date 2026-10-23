@@ -83,15 +83,15 @@ namespace InteraxPlugin {
 namespace InteraxPairTerms {
 
 /**
- * Coefficients of the Taylor expansion of the Slater overlap integral about the smaller width l, in t = |b - a|/l
- * and x = r/l (interax.geometry.OVERLAP_TAYLOR_COEFFS, divided by their denominators):
+ * Coefficients of the Taylor expansion of the Slater overlap integral about the width l, in t = (b - l)/l (b the
+ * other width) and x = r/l (interax.geometry.OVERLAP_TAYLOR_COEFFS, divided by their denominators):
  *
  *   S     = exp(-x)/(pi l^3) sum_n t^n sum_k VALUE[n][k] x^k
  *   dS/dr = exp(-x)/(pi l^4) sum_n t^n sum_k DERIV[n][k] x^k,   DERIV[n][k] = (k+1) VALUE[n][k+1] - VALUE[n][k]
  */
-static const int TAYLOR_ORDER = 6;
+static const int MAX_TAYLOR_ORDER = 6;
 static const int TAYLOR_TERMS = 9;
-static const double OVERLAP_TAYLOR_VALUE[TAYLOR_ORDER+1][TAYLOR_TERMS] = {
+static const double OVERLAP_TAYLOR_VALUE[MAX_TAYLOR_ORDER+1][TAYLOR_TERMS] = {
     {0.015625, 0.015625, 0.005208333333333333},
     {-0.0234375, -0.0234375, -0.005208333333333333, 0.0026041666666666665},
     {0.0234375, 0.0234375, 0.0013020833333333333, -0.006510416666666667, 0.00078125000000000004},
@@ -100,7 +100,7 @@ static const double OVERLAP_TAYLOR_VALUE[TAYLOR_ORDER+1][TAYLOR_TERMS] = {
     {-0.01025390625, -0.01025390625, 0.0126953125, 0.01611328125, -0.011523437500000001, 0.0023220486111111111, -0.00017981150793650795, 4.6502976190476195e-06},
     {0.0068359375, 0.0068359375, -0.015543619791666666, -0.017822265625, 0.018017578124999999, -0.0050564236111111114, 0.0006029885912698413, -3.1777033730158732e-05, 6.0281635802469135e-07}
 };
-static const double OVERLAP_TAYLOR_DERIV[TAYLOR_ORDER+1][TAYLOR_TERMS] = {
+static const double OVERLAP_TAYLOR_DERIV[MAX_TAYLOR_ORDER+1][TAYLOR_TERMS] = {
     {0, -0.005208333333333333, -0.005208333333333333},
     {0, 0.013020833333333334, 0.013020833333333334, -0.0026041666666666665},
     {0, -0.020833333333333332, -0.020833333333333332, 0.0096354166666666671, -0.00078125000000000004},
@@ -111,26 +111,61 @@ static const double OVERLAP_TAYLOR_DERIV[TAYLOR_ORDER+1][TAYLOR_TERMS] = {
 };
 
 /**
- * Where the Taylor expansion replaces the closed form: t < TaylorMaxT and t*x < TaylorMaxTX. The closed form loses
- * relative precision ~ eps/t^2 to cancellation, and the order-6 expansion degrades as (t*x)^7, so the switch depends
- * on the precision: with these values the integral is accurate to ~1e-6 relative in single precision and ~1e-10 in
- * double precision over the whole range of distances (docs/SPEC.md).
+ * Where and how the Slater overlap integral uses its Taylor expansion instead of the closed form, which loses
+ * precision to cancellation for nearly equal widths. The expansion of the given order is about the width l of
+ * one of the particles, in t = (other width - l)/l and x = r/l, and it is used where
+ *
+ *   |other width - l| < maxDelta   or   (|t| < maxT  and  |t| x < maxTX)
+ *
+ * Two kinds of scheme are provided:
+ *
+ *   accurate(doublePrecision)  order 6 about the smaller width, with a switch chosen for the precision: the
+ *                              integral is exact to ~1e-6 relative in single precision and ~1e-10 in double
+ *                              precision over the whole range of distances
+ *   interax(order)             the schemes of InteraxFF (interax.geometry.SLATER_TAYLOR_SCHEMES), exactly as the
+ *                              InteraxFF export evaluates them: the expansion is about the width of the particle
+ *                              with the lower index (particle 1 of the CustomNonbondedForce on the Reference
+ *                              platform), order 2 below a difference of 0.01 bohr, order 6 below 20% of l. They
+ *                              reproduce the export, including its truncation errors (up to ~1e-6 relative).
  */
-template <class Scalar> struct OverlapSwitch {
-    static Scalar maxT() { return 0.2f; }
-    static Scalar maxTX() { return 1.6f; }
-};
-template <> struct OverlapSwitch<double> {
-    static double maxT() { return 0.02; }
-    static double maxTX() { return 0.3; }
+struct SlaterTaylorScheme {
+    int order;
+    bool aboutSmallerWidth;
+    double maxDelta, maxT, maxTX;
+    /**
+     * The accurate scheme for single or double precision.
+     */
+    static SlaterTaylorScheme accurate(bool doublePrecision) {
+        SlaterTaylorScheme scheme;
+        scheme.order = 6;
+        scheme.aboutSmallerWidth = true;
+        scheme.maxDelta = 0.0;
+        scheme.maxT = (doublePrecision ? 0.02 : 0.2);
+        scheme.maxTX = (doublePrecision ? 0.3 : 1.6);
+        return scheme;
+    }
+    /**
+     * The InteraxFF scheme of a Taylor order (2 or 6).
+     */
+    static SlaterTaylorScheme interax(int order) {
+        SlaterTaylorScheme scheme;
+        scheme.order = order;
+        scheme.aboutSmallerWidth = false;
+        scheme.maxDelta = (order == 2 ? 0.01*0.0529177210903 : 0.0);
+        scheme.maxT = (order == 6 ? 0.2 : 0.0);
+        scheme.maxTX = HUGE_VAL;
+        return scheme;
+    }
 };
 
 /**
  * Compute the overlap integral S(r; a, b) of two normalized Slater densities exp(-r/s)/(8 pi s^3) of widths a and b
- * at distance r, and its derivative with respect to r.
+ * at distance r, and its derivative with respect to r. For the InteraxFF schemes, a must be the width of the particle
+ * with the lower index.
  */
 template <class T>
-inline void slaterOverlap(T r, T a, T b, T& overlap, T& dOverlapdR) {
+inline void slaterOverlap(T r, T a, T b, const SlaterTaylorScheme& scheme, T& overlap, T& dOverlapdR) {
+    using std::abs;
     using std::exp;
     using std::min;
     using std::max;
@@ -150,14 +185,15 @@ inline void slaterOverlap(T r, T a, T b, T& overlap, T& dOverlapdR) {
     T closedOverlap = f*invR/(Scalar(8)*pi);
     T closedDeriv = (r*dfdr-f)*invR*invR/(Scalar(8)*pi);
 
-    // Taylor expansion about the smaller width, for nearly equal widths where the closed form cancels.
+    // Taylor expansion about l, the smaller width or a.
 
-    T l = min(a, b);
+    T l = (scheme.aboutSmallerWidth ? min(a, b) : a);
     T invL = 1/l;
-    T t = (max(a, b)-l)*invL;
+    T delta = a+b-l-l;
+    T t = delta*invL;
     T x = r*invL;
     T sumValue = Scalar(0), sumDeriv = Scalar(0);
-    for (int n = TAYLOR_ORDER; n >= 0; n--) {
+    for (int n = scheme.order; n >= 0; n--) {
         T value = Scalar(0), deriv = Scalar(0);
         for (int k = TAYLOR_TERMS-1; k >= 0; k--) {
             value = value*x + Scalar(OVERLAP_TAYLOR_VALUE[n][k]);
@@ -170,7 +206,10 @@ inline void slaterOverlap(T r, T a, T b, T& overlap, T& dOverlapdR) {
     T taylorOverlap = prefactor*sumValue;
     T taylorDeriv = prefactor*invL*sumDeriv;
 
-    auto useTaylor = (t < OverlapSwitch<Scalar>::maxT()) & (t*x < OverlapSwitch<Scalar>::maxTX());
+    T absT = abs(t);
+    auto nearAbsolute = (abs(delta) < Scalar(scheme.maxDelta));
+    auto nearRelative = (absT < Scalar(scheme.maxT)) & (absT*x < Scalar(scheme.maxTX));
+    auto useTaylor = nearAbsolute | nearRelative;
     overlap = blendIf(useTaylor, taylorOverlap, closedOverlap);
     dOverlapdR = blendIf(useTaylor, taylorDeriv, closedDeriv);
 }
@@ -253,9 +292,9 @@ inline void dispersionPair(T r, T m1i, T m2i, T m3i, T alphai, T widthi, T m1j, 
  * Compute the exchange repulsion energy A_i A_j S(r; s_i, s_j) of a pair and its derivative with respect to r.
  */
 template <class T>
-inline void exchangePair(T r, T amplitudei, T widthi, T amplitudej, T widthj, T& energy, T& dEdR) {
+inline void exchangePair(T r, T amplitudei, T widthi, T amplitudej, T widthj, const SlaterTaylorScheme& scheme, T& energy, T& dEdR) {
     T overlap, dOverlapdR;
-    slaterOverlap(r, widthi, widthj, overlap, dOverlapdR);
+    slaterOverlap(r, widthi, widthj, scheme, overlap, dOverlapdR);
     T amplitude = amplitudei*amplitudej;
     energy = amplitude*overlap;
     dEdR = amplitude*dOverlapdR;
@@ -266,10 +305,10 @@ inline void exchangePair(T r, T amplitudei, T widthi, T amplitudej, T widthj, T&
  * St = 8 pi (s_i + s_j)^3 S(r; s_i, s_j), and its derivative with respect to r.
  */
 template <class T>
-inline void shortRangePair(T r, T ki, T li, T widthi, T kj, T lj, T widthj, T& energy, T& dEdR) {
+inline void shortRangePair(T r, T ki, T li, T widthi, T kj, T lj, T widthj, const SlaterTaylorScheme& scheme, T& energy, T& dEdR) {
     typedef typename ScalarOf<T>::type Scalar;
     T overlap, dOverlapdR;
-    slaterOverlap(r, widthi, widthj, overlap, dOverlapdR);
+    slaterOverlap(r, widthi, widthj, scheme, overlap, dOverlapdR);
     T widthSum = widthi+widthj;
     T normalization = Scalar(8*M_PI)*widthSum*widthSum*widthSum;
     T normalizedOverlap = normalization*overlap;

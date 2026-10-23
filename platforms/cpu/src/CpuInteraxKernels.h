@@ -75,7 +75,8 @@ private:
     OpenMM::CpuPlatform::PlatformData& data;
     void setParameters(const InteraxDispersionForce& force);
     std::unique_ptr<CpuInteraxPairForce> ixn;
-    double dampingScale, longRangeCoefficient, alchemicalLongRangeCoefficient;
+    CpuInteraxPairGlobals globals;
+    double longRangeCoefficient, alchemicalLongRangeCoefficient;
     std::string alchemicalParameter;
     bool hasAlchemicalParticles;
 };
@@ -116,6 +117,8 @@ private:
     OpenMM::CpuPlatform::PlatformData& data;
     void setParameters(const InteraxExchangeForce& force);
     std::unique_ptr<CpuInteraxPairForce> ixn;
+    CpuInteraxPairGlobals globals;
+    int overlapMethod;
     std::string alchemicalParameter;
     bool hasAlchemicalParticles;
 };
@@ -156,6 +159,8 @@ private:
     OpenMM::CpuPlatform::PlatformData& data;
     void setParameters(const InteraxShortRangeForce& force);
     std::unique_ptr<CpuInteraxPairForce> ixn;
+    CpuInteraxPairGlobals globals;
+    int overlapMethod;
     std::string alchemicalParameter;
     bool hasAlchemicalParticles;
 };

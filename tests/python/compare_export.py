@@ -7,7 +7,10 @@ them with interaxplugin_convert.convert_system, and compares the energy and the 
   cluster   a non-periodic cluster of H/C/N/O/S/Cl molecules (no cutoff)
   box       a periodic box of liquid methanol (0.9 nm cutoff, switching from 0.8 nm, dispersion long range correction)
 
-Usage: python compare_export.py [--platform Reference] [--precision double] [--systems cluster box]
+Usage: python compare_export.py [--platform Reference] [--precision double] [--overlap export] [--systems cluster box]
+
+With --overlap export the plugin uses the InteraxFF Taylor scheme of the export and must reproduce it to rounding;
+with --overlap exact it uses its accurate scheme, which differs from the export by the export's truncation error.
 Run with the interax environment; the plugin is loaded from PLUGIN_PREFIX.
 """
 import argparse
@@ -117,15 +120,15 @@ def evaluate(system, positions, box, platform, indices, precision="double"):
     return results
 
 
-def compare(name, topology, positions, periodic, platform, precision, ff, nagl):
+def compare(name, topology, positions, periodic, platform, precision, overlap, ff, nagl):
     system = create_system_from_topology(topology, ff, nagl, electrostatics="hippo", nonbonded_cutoff=0.9, components=COMPONENTS)
     box = system.getDefaultPeriodicBoxVectors() if periodic else None
-    converted = interaxplugin_convert.convert_system(system)
+    converted = interaxplugin_convert.convert_system(system, overlap=overlap)
     export_terms, plugin_terms = terms_by_kind(system, False), terms_by_kind(converted, True)
     assert set(export_terms) == set(plugin_terms), (export_terms, plugin_terms)
     reference = evaluate(system, positions, box, "Reference", export_terms)
     test = evaluate(converted, positions, box, platform, plugin_terms, precision)
-    print(f"\n{name}: {system.getNumParticles()} particles, plugin on {platform} ({precision}) vs export on Reference")
+    print(f"\n{name}: {system.getNumParticles()} particles, plugin on {platform} ({precision}, {overlap} overlap) vs export on Reference")
     print(f"  {'term':<12} {'E export':>14} {'E plugin':>14} {'rel dE':>9} {'max |dF|':>10} {'rms F':>10}")
     worst = 0.0
     for kind in export_terms:
@@ -143,14 +146,15 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--platform", default="Reference")
     parser.add_argument("--precision", default="double", help="CUDA/OpenCL precision")
+    parser.add_argument("--overlap", default="export", choices=["export", "exact"])
     parser.add_argument("--systems", nargs="+", default=["cluster", "box"])
     args = parser.parse_args()
     ff, nagl = load_model()
     worst = 0.0
     if "cluster" in args.systems:
-        worst = max(worst, compare("cluster", *cluster_topology(), False, args.platform, args.precision, ff, nagl))
+        worst = max(worst, compare("cluster", *cluster_topology(), False, args.platform, args.precision, args.overlap, ff, nagl))
     if "box" in args.systems:
-        worst = max(worst, compare("methanol box", *box_topology(), True, args.platform, args.precision, ff, nagl))
+        worst = max(worst, compare("methanol box", *box_topology(), True, args.platform, args.precision, args.overlap, ff, nagl))
     print(f"\nlargest relative difference: {worst:.1e}")
 
 
