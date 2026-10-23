@@ -76,6 +76,8 @@ public:
     void setExclusionParticles(int index, int particle1, int particle2);
     const std::string& getAlchemicalParameterName() const;
     void setAlchemicalParameterName(const std::string& name);
+    double getSoftcoreRadius() const;
+    void setSoftcoreRadius(double radius);
     bool usesPeriodicBoundaryConditions() const;
 private:
     InteraxPairForce();

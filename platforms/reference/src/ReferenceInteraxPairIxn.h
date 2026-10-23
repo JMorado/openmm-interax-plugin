@@ -69,7 +69,7 @@ public:
             std::vector<OpenMM::Vec3>& forces, const PairEnergy& pairEnergy);
 private:
     InteraxPairForce::NonbondedMethod nonbondedMethod;
-    double cutoff, switchingDistance;
+    double cutoff, switchingDistance, softcoreRadius;
     bool useSwitch;
     std::vector<std::set<int> > exclusions;
     std::vector<bool> isAlchemical;
@@ -94,9 +94,18 @@ double ReferenceInteraxPairIxn::calculateIxn(const std::vector<OpenMM::Vec3>& po
         double r = deltaR[OpenMM::ReferenceForce::RIndex];
         if (nonbondedMethod != InteraxPairForce::NoCutoff && r >= cutoff)
             continue;
+        // A pair with exactly one alchemical particle is evaluated at the soft-core distance r_eff, if enabled.
+        bool alchemicalPair = (isAlchemical[i] != isAlchemical[j]);
+        double rEff = r;
+        if (alchemicalPair && softcoreRadius > 0) {
+            double radius3 = softcoreRadius*softcoreRadius*softcoreRadius;
+            rEff = pow(r*r*r*r*r*r + (1-lambda)*radius3*radius3, 1.0/6.0);
+        }
         double energy, dEdR;
-        if (!pairEnergy(i, j, r, energy, dEdR))
+        if (!pairEnergy(i, j, rEff, energy, dEdR))
             continue;
+        if (rEff != r)
+            dEdR *= pow(r/rEff, 5);  // d r_eff / d r
         if (useSwitch && r > switchingDistance) {
             double t = (r-switchingDistance)/(cutoff-switchingDistance);
             double switchValue = 1+t*t*t*(-10+t*(15-t*6));
@@ -104,7 +113,7 @@ double ReferenceInteraxPairIxn::calculateIxn(const std::vector<OpenMM::Vec3>& po
             dEdR = dEdR*switchValue + energy*switchDeriv;
             energy *= switchValue;
         }
-        double scale = (isAlchemical[i] != isAlchemical[j] ? lambda : 1.0);
+        double scale = (alchemicalPair ? lambda : 1.0);
         totalEnergy += scale*energy;
         double forceScale = scale*dEdR/r;
         OpenMM::Vec3 force(deltaR[OpenMM::ReferenceForce::XIndex]*forceScale, deltaR[OpenMM::ReferenceForce::YIndex]*forceScale,

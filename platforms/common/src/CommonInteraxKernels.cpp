@@ -194,6 +194,9 @@ void CommonInteraxPairForceKernel::addInteraction(const System& system, const In
     names["LAMBDA"] = prefix+"globals[0]";
     names["DAMPING_SCALE"] = prefix+"globals[1]";
     names["USE_SWITCH"] = (useSwitch ? "1" : "0");
+    double softcoreRadius = force.getSoftcoreRadius();
+    names["USE_SOFTCORE"] = (softcoreRadius > 0 && hasAlchemicalParticles ? "1" : "0");
+    names["SOFTCORE_RADIUS6"] = cc.doubleToString(pow(softcoreRadius, 6.0));
     if (useSwitch) {
         names["SWITCH_CUTOFF"] = cc.doubleToString(force.getSwitchingDistance());
         names["INV_SWITCH_WIDTH"] = cc.doubleToString(1/(force.getCutoffDistance()-force.getSwitchingDistance()));

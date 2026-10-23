@@ -69,7 +69,7 @@ public:
 private:
     void calculateBlockIxn(int blockIndex, const float* posq, float* forces, double& energy, float lambda, const CpuInteraxPairGlobals& globals, bool includeEnergy);
     InteraxPairForce::NonbondedMethod nonbondedMethod;
-    float cutoff, switchingDistance;
+    float cutoff, switchingDistance, softcoreRadius;
     bool useSwitch, periodic;
     float boxSize[3], invBoxSize[3];
     std::vector<std::set<int> > exclusions;
@@ -86,6 +86,7 @@ CpuInteraxPairForceFvec<FVEC, BLOCK_SIZE, Term>::CpuInteraxPairForceFvec(const I
     periodic = (nonbondedMethod == InteraxPairForce::CutoffPeriodic);
     useSwitch = (nonbondedMethod != InteraxPairForce::NoCutoff && force.getUseSwitchingFunction());
     switchingDistance = force.getSwitchingDistance();
+    softcoreRadius = force.getSoftcoreRadius();
     exclusions.resize(numParticles);
     for (int i = 0; i < force.getNumExclusions(); i++) {
         int particle1, particle2;
@@ -207,6 +208,23 @@ void CpuInteraxPairForceFvec<FVEC, BLOCK_SIZE, Term>::calculateBlockIxn(int bloc
 
         FVEC invR = rsqrt(r2);
         FVEC r = r2*invR;
+
+        // A pair with exactly one alchemical particle is evaluated at the soft-core distance
+        // r_eff = (r^6 + (1 - lambda) R^6)^(1/6), if enabled; dEdR is multiplied by d r_eff / d r = (r / r_eff)^5.
+        auto alchemicalLane = abs(blockAlchemical-isAlchemical[atom]) > 0.5f;
+        FVEC rEff = r, softcoreFactor = 1.0f;
+        if (softcoreRadius > 0 && any(alchemicalLane)) {
+            float rValues[BLOCK_SIZE], alchemicalValues[BLOCK_SIZE], rEffValues[BLOCK_SIZE], factorValues[BLOCK_SIZE];
+            r.store(rValues);
+            blend(FVEC(0.0f), FVEC(1.0f), alchemicalLane).store(alchemicalValues);
+            float shift = (1-lambda)*pow(softcoreRadius, 6.0f);
+            for (int i = 0; i < BLOCK_SIZE; i++) {
+                rEffValues[i] = (alchemicalValues[i] != 0 ? pow(pow(rValues[i], 6.0f)+shift, 1.0f/6.0f) : rValues[i]);
+                factorValues[i] = (alchemicalValues[i] != 0 ? pow(rValues[i]/rEffValues[i], 5.0f) : 1.0f);
+            }
+            rEff = FVEC(rEffValues);
+            softcoreFactor = FVEC(factorValues);
+        }
         FVEC pairEnergy, dEdR;
         if (orderByIndex) {
             // The InteraxFF Taylor schemes of the Slater overlap expand about the width of the particle with the
@@ -217,10 +235,11 @@ void CpuInteraxPairForceFvec<FVEC, BLOCK_SIZE, Term>::calculateBlockIxn(int bloc
                 first[k] = blendIf(blockFirst, blockParameters[k], atomParameters[k]);
                 second[k] = blendIf(blockFirst, atomParameters[k], blockParameters[k]);
             }
-            Term::compute(r, first, second, globals, pairEnergy, dEdR);
+            Term::compute(rEff, first, second, globals, pairEnergy, dEdR);
         }
         else
-            Term::compute(r, blockParameters, atomParameters, globals, pairEnergy, dEdR);
+            Term::compute(rEff, blockParameters, atomParameters, globals, pairEnergy, dEdR);
+        dEdR *= softcoreFactor;
         if (useSwitch) {
             FVEC t = blendZero((r-switchingDistance)*invSwitchingInterval, r > switchingDistance);
             FVEC switchValue = 1.0f+t*t*t*(-10.0f+t*(15.0f-t*6.0f));
@@ -228,7 +247,7 @@ void CpuInteraxPairForceFvec<FVEC, BLOCK_SIZE, Term>::calculateBlockIxn(int bloc
             dEdR = dEdR*switchValue + pairEnergy*switchDeriv;
             pairEnergy *= switchValue;
         }
-        FVEC scale = blend(FVEC(1.0f), FVEC(lambda), abs(blockAlchemical-isAlchemical[atom]) > 0.5f);
+        FVEC scale = blend(FVEC(1.0f), FVEC(lambda), alchemicalLane);
         if (includeEnergy)
             blockEnergy += blendZero(scale*pairEnergy, include);
 

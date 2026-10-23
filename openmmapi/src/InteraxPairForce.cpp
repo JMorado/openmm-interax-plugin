@@ -39,7 +39,7 @@ using namespace OpenMM;
 using namespace std;
 
 InteraxPairForce::InteraxPairForce() : nonbondedMethod(NoCutoff), cutoffDistance(1.0), switchingDistance(-1.0),
-        useSwitchingFunction(false), alchemicalParameterName("lambda_sterics") {
+        softcoreRadius(0.0), useSwitchingFunction(false), alchemicalParameterName("lambda_sterics") {
 }
 
 InteraxPairForce::NonbondedMethod InteraxPairForce::getNonbondedMethod() const {
@@ -98,6 +98,16 @@ const string& InteraxPairForce::getAlchemicalParameterName() const {
 
 void InteraxPairForce::setAlchemicalParameterName(const string& name) {
     alchemicalParameterName = name;
+}
+
+double InteraxPairForce::getSoftcoreRadius() const {
+    return softcoreRadius;
+}
+
+void InteraxPairForce::setSoftcoreRadius(double radius) {
+    if (radius < 0)
+        throw OpenMMException("InteraxPairForce: The soft-core radius cannot be negative");
+    softcoreRadius = radius;
 }
 
 void InteraxPlugin::checkPairForce(const InteraxPairForce& force, const System& system, const string& forceName) {

@@ -51,7 +51,8 @@ namespace InteraxPlugin {
  * A particle may be flagged as alchemical. A pair with exactly one alchemical particle is multiplied by the
  * context parameter named by getAlchemicalParameterName() ("lambda_sterics" by default), so that setting it to 0
  * decouples the alchemical particles from the rest of the System. Pairs with zero or two alchemical particles are
- * not scaled.
+ * not scaled. Optionally, the scaled pairs are evaluated at a soft-core distance (see setSoftcoreRadius()), so that
+ * an alchemical particle cannot sink into its partners while the interaction is partly switched off.
  */
 
 class OPENMM_EXPORT_INTERAX InteraxPairForce : public OpenMM::Force {
@@ -166,6 +167,18 @@ public:
      */
     void setAlchemicalParameterName(const std::string& name);
     /**
+     * Get the soft-core radius R (in nm). A pair with exactly one alchemical particle at distance r is evaluated at
+     * r_eff = (r^6 + (1 - lambda) R^6)^(1/6) and scaled by lambda, so the interaction is exact at lambda = 1 and the
+     * particles cannot come closer than (1 - lambda)^(1/6) R in it. The InteraxFF pair terms are finite at r = 0 but
+     * their sum is not bounded below at deep overlap (the short-range correction can outweigh the exchange there), and
+     * without electrostatics nothing else keeps decoupled particles apart. 0 (the default) disables it.
+     */
+    double getSoftcoreRadius() const;
+    /**
+     * Set the soft-core radius R (in nm); 0 disables it. See getSoftcoreRadius().
+     */
+    void setSoftcoreRadius(double radius);
+    /**
      * Returns whether or not this force makes use of periodic boundary conditions.
      *
      * @returns true if force uses PBC and false otherwise
@@ -177,7 +190,7 @@ protected:
     InteraxPairForce();
 private:
     NonbondedMethod nonbondedMethod;
-    double cutoffDistance, switchingDistance;
+    double cutoffDistance, switchingDistance, softcoreRadius;
     bool useSwitchingFunction;
     std::string alchemicalParameterName;
     std::vector<std::pair<int, int> > exclusions;

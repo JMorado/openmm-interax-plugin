@@ -39,6 +39,7 @@ ReferenceInteraxPairIxn::ReferenceInteraxPairIxn(const InteraxPairForce& force) 
     cutoff = force.getCutoffDistance();
     useSwitch = (nonbondedMethod != InteraxPairForce::NoCutoff && force.getUseSwitchingFunction());
     switchingDistance = force.getSwitchingDistance();
+    softcoreRadius = force.getSoftcoreRadius();
     exclusions.resize(numParticles);
     for (int i = 0; i < force.getNumExclusions(); i++) {
         int particle1, particle2;

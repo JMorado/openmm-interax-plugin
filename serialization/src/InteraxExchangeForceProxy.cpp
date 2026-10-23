@@ -51,6 +51,7 @@ void InteraxExchangeForceProxy::serialize(const void* object, SerializationNode&
     node.setBoolProperty("useSwitchingFunction", force.getUseSwitchingFunction());
     node.setDoubleProperty("switchingDistance", force.getSwitchingDistance());
     node.setStringProperty("alchemicalParameter", force.getAlchemicalParameterName());
+    node.setDoubleProperty("softcoreRadius", force.getSoftcoreRadius());
     SerializationNode& particles = node.createChildNode("Particles");
     for (int i = 0; i < force.getNumParticles(); i++) {
         double amplitude, width;
@@ -79,6 +80,7 @@ void* InteraxExchangeForceProxy::deserialize(const SerializationNode& node) cons
         force->setUseSwitchingFunction(node.getBoolProperty("useSwitchingFunction"));
         force->setSwitchingDistance(node.getDoubleProperty("switchingDistance"));
         force->setAlchemicalParameterName(node.getStringProperty("alchemicalParameter"));
+        force->setSoftcoreRadius(node.getDoubleProperty("softcoreRadius", 0.0));
         const SerializationNode& particles = node.getChildNode("Particles");
         for (auto& particle : particles.getChildren())
             force->addParticle(particle.getDoubleProperty("amplitude"), particle.getDoubleProperty("width"), particle.getBoolProperty("alchemical"));

@@ -1,3 +1,11 @@
+    }
+#if USE_SOFTCORE
+    // d r_eff / d r = (r / r_eff)^5
+    if (softcoreR != r) {
+        const real ratio = r/softcoreR;
+        pairDerivative *= ratio*ratio*ratio*ratio*ratio;
+    }
+#endif
     // End of the code for one InteraxFF pair force: apply the switching function and the alchemical scaling to
     // pairEnergy and pairDerivative (dE/dr), and accumulate them.
 #if USE_SWITCH
