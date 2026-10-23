@@ -181,18 +181,19 @@ void CpuCalcInteraxShortRangeForceKernel::setParameters(const InteraxShortRangeF
 void CpuCalcInteraxThreeBodyForceKernel::initialize(const System& system, const InteraxThreeBodyForce& force) {
     ixn.reset(new CpuInteraxThreeBodyForce(force, data.threads.getNumThreads()));
     alchemicalParameter = force.getAlchemicalParameterName();
-    hasAlchemicalMolecules = false;
-    for (int i = 0; i < force.getNumMolecules(); i++) {
+    hasAlchemicalSites = false;
+    for (int i = 0; i < force.getNumSites(); i++) {
         vector<int> particles;
-        double alpha, frequency;
+        double alpha, frequency, width;
+        int molecule;
         bool isAlchemical;
-        force.getMoleculeParameters(i, particles, alpha, frequency, isAlchemical);
-        hasAlchemicalMolecules |= isAlchemical;
+        force.getSiteParameters(i, particles, alpha, frequency, width, molecule, isAlchemical);
+        hasAlchemicalSites |= isAlchemical;
     }
 }
 
 double CpuCalcInteraxThreeBodyForceKernel::execute(ContextImpl& context, bool includeForces, bool includeEnergy) {
-    double lambda = getAlchemicalParameter(context, hasAlchemicalMolecules, alchemicalParameter);
+    double lambda = getAlchemicalParameter(context, hasAlchemicalSites, alchemicalParameter);
     return ixn->calculateIxn(extractPositions(context), extractBoxVectors(context), lambda, extractForces(context), data.threads);
 }
 

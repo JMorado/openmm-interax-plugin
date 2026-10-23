@@ -38,15 +38,16 @@
 namespace InteraxPlugin {
 
 /**
- * This class evaluates InteraxThreeBodyForce on the CPU platform. Each thread takes molecules A in turn and computes
+ * This class evaluates InteraxThreeBodyForce on the CPU platform. Each thread takes sites A in turn and computes
  * every triple A < B < C within the cutoff: it marks the neighbors of A, then for each neighbor B of A visits the
- * neighbors C of B that are also marked, so the cost is the sum over molecules of the number of neighbor pairs.
+ * neighbors C of B that are also marked, so the cost is the sum over sites of the number of neighbor pairs.
  */
 class CpuInteraxThreeBodyForce {
 public:
     CpuInteraxThreeBodyForce(const InteraxThreeBodyForce& force, int numThreads);
     /**
-     * Copy the molecular polarizabilities and frequencies and the scale factor from a force.
+     * Copy the polarizabilities, frequencies and widths of the sites, the scale factor and the damping scale from a
+     * force.
      */
     void setParameters(const InteraxThreeBodyForce& force);
     /**
@@ -63,14 +64,15 @@ public:
             std::vector<OpenMM::Vec3>& forces, OpenMM::ThreadPool& threads);
 private:
     OpenMM::Vec3 getDelta(const OpenMM::Vec3& from, const OpenMM::Vec3& to, const OpenMM::Vec3* boxVectors) const;
-    std::vector<std::vector<int> > moleculeParticles;
-    std::vector<double> alpha, frequency;
+    std::vector<std::vector<int> > siteParticles;
+    std::vector<int> molecule;
+    std::vector<double> alpha, frequency, width;
     std::vector<bool> isAlchemical;
-    double cutoff, scaleFactor;
-    bool periodic;
-    std::vector<OpenMM::Vec3> centroids;
+    double cutoff, scaleFactor, dampingScale;
+    bool periodic, useDamping;
+    std::vector<OpenMM::Vec3> sites;
     std::vector<std::vector<int> > neighbors;
-    std::vector<std::vector<OpenMM::Vec3> > threadCentroidForces;
+    std::vector<std::vector<OpenMM::Vec3> > threadSiteForces;
     std::vector<std::vector<int> > threadMarks;
 };
 

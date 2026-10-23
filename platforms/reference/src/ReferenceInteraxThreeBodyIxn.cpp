@@ -37,30 +37,37 @@ using namespace OpenMM;
 using namespace std;
 
 ReferenceInteraxThreeBodyIxn::ReferenceInteraxThreeBodyIxn(const InteraxThreeBodyForce& force) {
-    int numMolecules = force.getNumMolecules();
-    moleculeParticles.resize(numMolecules);
-    isAlchemical.resize(numMolecules);
-    for (int i = 0; i < numMolecules; i++) {
-        double a, w;
+    int numSites = force.getNumSites();
+    siteParticles.resize(numSites);
+    molecule.resize(numSites);
+    isAlchemical.resize(numSites);
+    for (int i = 0; i < numSites; i++) {
+        double a, w, s;
         bool alchemical;
-        force.getMoleculeParameters(i, moleculeParticles[i], a, w, alchemical);
+        force.getSiteParameters(i, siteParticles[i], a, w, s, molecule[i], alchemical);
+        if (molecule[i] < 0)
+            molecule[i] = -1-i; // A molecule of its own
         isAlchemical[i] = alchemical;
     }
     cutoff = force.getCutoffDistance();
     periodic = force.usesPeriodicBoundaryConditions();
+    useDamping = (force.getDampingMethod() == InteraxThreeBodyForce::TangToennies);
     setParameters(force);
 }
 
 void ReferenceInteraxThreeBodyIxn::setParameters(const InteraxThreeBodyForce& force) {
-    int numMolecules = force.getNumMolecules();
-    alpha.resize(numMolecules);
-    frequency.resize(numMolecules);
-    for (int i = 0; i < numMolecules; i++) {
+    int numSites = force.getNumSites();
+    alpha.resize(numSites);
+    frequency.resize(numSites);
+    width.resize(numSites);
+    for (int i = 0; i < numSites; i++) {
         vector<int> particles;
+        int m;
         bool alchemical;
-        force.getMoleculeParameters(i, particles, alpha[i], frequency[i], alchemical);
+        force.getSiteParameters(i, particles, alpha[i], frequency[i], width[i], m, alchemical);
     }
     scaleFactor = force.getScaleFactor();
+    dampingScale = force.getDampingScale();
 }
 
 Vec3 ReferenceInteraxThreeBodyIxn::getDelta(const Vec3& from, const Vec3& to, const Vec3* boxVectors) const {
@@ -74,50 +81,51 @@ Vec3 ReferenceInteraxThreeBodyIxn::getDelta(const Vec3& from, const Vec3& to, co
 }
 
 double ReferenceInteraxThreeBodyIxn::calculateIxn(const vector<Vec3>& positions, const Vec3* boxVectors, double lambda, vector<Vec3>& forces) const {
-    // Compute the centroid of each molecule.
+    // Compute the position of each site.
 
-    int numMolecules = moleculeParticles.size();
-    vector<Vec3> centroids(numMolecules);
-    for (int i = 0; i < numMolecules; i++) {
-        for (int particle : moleculeParticles[i])
-            centroids[i] += positions[particle];
-        centroids[i] /= moleculeParticles[i].size();
+    int numSites = siteParticles.size();
+    vector<Vec3> sites(numSites);
+    for (int i = 0; i < numSites; i++) {
+        for (int particle : siteParticles[i])
+            sites[i] += positions[particle];
+        sites[i] /= siteParticles[i].size();
     }
 
-    // Find the pairs of molecules within the cutoff.
+    // Find the pairs of sites of different molecules within the cutoff.
 
     double cutoff2 = cutoff*cutoff;
-    vector<vector<bool> > isNeighbor(numMolecules, vector<bool>(numMolecules, false));
-    for (int i = 0; i < numMolecules; i++)
-        for (int j = i+1; j < numMolecules; j++) {
-            Vec3 delta = getDelta(centroids[i], centroids[j], boxVectors);
-            isNeighbor[i][j] = isNeighbor[j][i] = (delta.dot(delta) < cutoff2);
+    vector<vector<bool> > isNeighbor(numSites, vector<bool>(numSites, false));
+    for (int i = 0; i < numSites; i++)
+        for (int j = i+1; j < numSites; j++) {
+            Vec3 delta = getDelta(sites[i], sites[j], boxVectors);
+            isNeighbor[i][j] = isNeighbor[j][i] = (molecule[i] != molecule[j] && delta.dot(delta) < cutoff2);
         }
 
-    // Loop over the triples whose three pairs are all within the cutoff.
+    // Loop over the triples whose three pairs are all neighbors.
 
-    vector<Vec3> centroidForces(numMolecules);
+    vector<Vec3> siteForces(numSites);
     double energy = 0;
-    for (int i = 0; i < numMolecules; i++)
-        for (int j = i+1; j < numMolecules; j++) {
+    for (int i = 0; i < numSites; i++)
+        for (int j = i+1; j < numSites; j++) {
             if (!isNeighbor[i][j])
                 continue;
-            for (int k = j+1; k < numMolecules; k++) {
+            for (int k = j+1; k < numSites; k++) {
                 if (!isNeighbor[i][k] || !isNeighbor[j][k])
                     continue;
                 double c9 = scaleFactor*InteraxThreeBodyForceImpl::computeC9(alpha[i], frequency[i], alpha[j], frequency[j], alpha[k], frequency[k]);
                 if (isAlchemical[i] || isAlchemical[j] || isAlchemical[k])
                     c9 *= lambda;
-                energy += InteraxThreeBodyTerms::computeTriple(getDelta(centroids[i], centroids[j], boxVectors), getDelta(centroids[i], centroids[k], boxVectors),
-                        getDelta(centroids[j], centroids[k], boxVectors), c9, centroidForces[i], centroidForces[j], centroidForces[k]);
+                double rates[3] = {2*dampingScale/(width[i]+width[j]), 2*dampingScale/(width[i]+width[k]), 2*dampingScale/(width[j]+width[k])};
+                energy += InteraxThreeBodyTerms::computeTriple(getDelta(sites[i], sites[j], boxVectors), getDelta(sites[i], sites[k], boxVectors),
+                        getDelta(sites[j], sites[k], boxVectors), c9, useDamping ? rates : NULL, siteForces[i], siteForces[j], siteForces[k]);
             }
         }
 
-    // Share each centroid force equally among the particles of its molecule.
+    // Share each site force equally among its particles.
 
-    for (int i = 0; i < numMolecules; i++) {
-        Vec3 force = centroidForces[i]/moleculeParticles[i].size();
-        for (int particle : moleculeParticles[i])
+    for (int i = 0; i < numSites; i++) {
+        Vec3 force = siteForces[i]/siteParticles[i].size();
+        for (int particle : siteParticles[i])
             forces[particle] += force;
     }
     return energy;

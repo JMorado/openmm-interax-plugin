@@ -39,70 +39,98 @@
 namespace InteraxPlugin {
 
 /**
- * This class implements the InteraxFF three-body (Axilrod-Teller-Muto) dispersion between molecules. Each molecule
- * is a single site at the centroid of a set of its particles (the heavy atoms, in InteraxFF), with a molecular
- * polarizability alpha and a single-pole frequency w (so that its C6 is 3/4 alpha^2 w). Every triple of molecules
- * whose three distances are all shorter than the cutoff contributes
+ * This class implements the InteraxFF three-body (Axilrod-Teller-Muto) dispersion. The interacting sites are the
+ * unweighted centroids of sets of particles: a whole molecule (its heavy atoms) for the molecular ATM of InteraxFF,
+ * or a single atom for an atomic ATM. Each site has a polarizability alpha and a single-pole frequency w (so that its
+ * C6 is 3/4 alpha^2 w). Every triple of sites whose three distances are all shorter than the cutoff contributes
  *
- *   E = scale * C9 (1 + 3 cos t_A cos t_B cos t_C) / (r_AB r_AC r_BC)^3,
+ *   E = scale * C9 (1 + 3 cos t_A cos t_B cos t_C) / (r_AB r_AC r_BC)^3 * f(r_AB) f(r_AC) f(r_BC),
  *   C9 = 3/2 a_A a_B a_C w_A w_B w_C (w_A + w_B + w_C) / ((w_A + w_B)(w_B + w_C)(w_C + w_A)),
  *
- * where t are the internal angles of the triangle of centroids. The force on a centroid is shared equally among
- * its particles. Triples are found from a neighbor list of the centroids, so the cost grows with the number of
- * triples inside the cutoff rather than with the cube of the number of molecules.
+ * where t are the internal angles of the triangle of sites and f is the damping function: f = 1 without damping, or
+ * the Tang-Toennies function f_3(x) = 1 - exp(-x) sum_{k<=3} x^k/k!, x = beta 2 r_ij / (s_i + s_j), of each of the
+ * three dipole propagators (r^-3) of the triple, with s the site widths and beta the damping scale. Short-range
+ * damping is needed for atomic sites, which come much closer than molecular centroids.
  *
- * A molecule may be flagged as alchemical. A triple that contains at least one alchemical molecule is multiplied by
- * the context parameter named by getAlchemicalParameterName() ("lambda_sterics" by default).
+ * Each site belongs to a molecule: a triple containing two sites of the same molecule does not interact, so that
+ * only intermolecular triples are counted. The force on a site is shared equally among its particles. Triples are
+ * found from a neighbor list of the sites, so the cost grows with the number of triples inside the cutoff rather
+ * than with the cube of the number of sites.
+ *
+ * A site may be flagged as alchemical. A triple that contains at least one alchemical site is multiplied by the
+ * context parameter named by getAlchemicalParameterName() ("lambda_sterics" by default).
  */
 
 class OPENMM_EXPORT_INTERAX InteraxThreeBodyForce : public OpenMM::Force {
 public:
     /**
+     * This is an enumeration of the damping functions of the triples.
+     */
+    enum DampingMethod {
+        /**
+         * No damping, for molecular sites (the InteraxFF molecular ATM).
+         */
+        NoDamping = 0,
+        /**
+         * A Tang-Toennies damping f_3 of each of the three pairs of a triple.
+         */
+        TangToennies = 1
+    };
+    /**
      * Create an InteraxThreeBodyForce.
      */
     InteraxThreeBodyForce();
     /**
-     * Get the number of molecules in the force.
+     * Get the number of sites in the force.
      */
-    int getNumMolecules() const {
-        return molecules.size();
+    int getNumSites() const {
+        return sites.size();
     }
     /**
-     * Add a molecule to the force.
+     * Add a site to the force.
      *
-     * @param particles     the particles whose unweighted centroid is the molecular site
-     * @param alpha         the molecular polarizability, measured in nm^3
+     * @param particles     the particles whose unweighted centroid is the site
+     * @param alpha         the polarizability, measured in nm^3
      * @param frequency     the single-pole frequency w, measured in kJ/mol
-     * @param isAlchemical  whether the molecule is alchemical
-     * @return the index of the molecule that was added
+     * @param width         the width s of the site used by the damping, measured in nm (unused without damping)
+     * @param molecule      the molecule the site belongs to: sites of the same molecule do not form triples. A
+     *                      negative value puts the site in a molecule of its own.
+     * @param isAlchemical  whether the site is alchemical
+     * @return the index of the site that was added
      */
-    int addMolecule(const std::vector<int>& particles, double alpha, double frequency, bool isAlchemical=false);
+    int addSite(const std::vector<int>& particles, double alpha, double frequency, double width=0.0, int molecule=-1, bool isAlchemical=false);
     /**
-     * Get the parameters of a molecule.
+     * Get the parameters of a site.
      *
-     * @param index              the index of the molecule for which to get parameters
-     * @param[out] particles     the particles whose unweighted centroid is the molecular site
-     * @param[out] alpha         the molecular polarizability, measured in nm^3
+     * @param index              the index of the site for which to get parameters
+     * @param[out] particles     the particles whose unweighted centroid is the site
+     * @param[out] alpha         the polarizability, measured in nm^3
      * @param[out] frequency     the single-pole frequency w, measured in kJ/mol
-     * @param[out] isAlchemical  whether the molecule is alchemical
+     * @param[out] width         the width s of the site used by the damping, measured in nm
+     * @param[out] molecule      the molecule the site belongs to, or a negative value for a molecule of its own
+     * @param[out] isAlchemical  whether the site is alchemical
      */
-    void getMoleculeParameters(int index, std::vector<int>& particles, double& alpha, double& frequency, bool& isAlchemical) const;
+    void getSiteParameters(int index, std::vector<int>& particles, double& alpha, double& frequency, double& width, int& molecule,
+            bool& isAlchemical) const;
     /**
-     * Set the parameters of a molecule.
+     * Set the parameters of a site.
      *
-     * @param index         the index of the molecule for which to set parameters
-     * @param particles     the particles whose unweighted centroid is the molecular site
-     * @param alpha         the molecular polarizability, measured in nm^3
+     * @param index         the index of the site for which to set parameters
+     * @param particles     the particles whose unweighted centroid is the site
+     * @param alpha         the polarizability, measured in nm^3
      * @param frequency     the single-pole frequency w, measured in kJ/mol
-     * @param isAlchemical  whether the molecule is alchemical
+     * @param width         the width s of the site used by the damping, measured in nm
+     * @param molecule      the molecule the site belongs to, or a negative value for a molecule of its own
+     * @param isAlchemical  whether the site is alchemical
      */
-    void setMoleculeParameters(int index, const std::vector<int>& particles, double alpha, double frequency, bool isAlchemical);
+    void setSiteParameters(int index, const std::vector<int>& particles, double alpha, double frequency, double width, int molecule,
+            bool isAlchemical);
     /**
-     * Get the cutoff distance (in nm): a triple interacts only if all three of its centroid distances are shorter.
+     * Get the cutoff distance (in nm): a triple interacts only if all three of its site distances are shorter.
      */
     double getCutoffDistance() const;
     /**
-     * Set the cutoff distance (in nm): a triple interacts only if all three of its centroid distances are shorter.
+     * Set the cutoff distance (in nm): a triple interacts only if all three of its site distances are shorter.
      */
     void setCutoffDistance(double distance);
     /**
@@ -114,27 +142,44 @@ public:
      */
     void setScaleFactor(double scale);
     /**
-     * Set whether to use periodic boundary conditions. Each centroid distance is that of the nearest periodic image,
+     * Get the damping function of the triples.
+     */
+    DampingMethod getDampingMethod() const;
+    /**
+     * Set the damping function of the triples.
+     */
+    void setDampingMethod(DampingMethod method);
+    /**
+     * Get the scale beta of the Tang-Toennies damping argument x = beta 2 r / (s_i + s_j).
+     */
+    double getDampingScale() const;
+    /**
+     * Set the scale beta of the Tang-Toennies damping argument x = beta 2 r / (s_i + s_j).
+     */
+    void setDampingScale(double scale);
+    /**
+     * Set whether to use periodic boundary conditions. Each site distance is that of the nearest periodic image,
      * as in CustomCentroidBondForce; the cutoff may exceed half the box size, in which case a triple still
      * interacts only through the nearest image of each of its pairs.
      */
     void setUsesPeriodicBoundaryConditions(bool periodic);
     /**
-     * Get the name of the context parameter that scales the triples containing an alchemical molecule.
+     * Get the name of the context parameter that scales the triples containing an alchemical site.
      */
     const std::string& getAlchemicalParameterName() const;
     /**
-     * Set the name of the context parameter that scales the triples containing an alchemical molecule. Its default
+     * Set the name of the context parameter that scales the triples containing an alchemical site. Its default
      * value is 1.
      */
     void setAlchemicalParameterName(const std::string& name);
     /**
-     * Update the molecular polarizabilities and frequencies and the scale factor in a Context to match those stored
-     * in this Force object. This method provides an efficient method to update certain parameters in an existing
-     * Context without needing to reinitialize it. Simply call setMoleculeParameters() to modify this object's
-     * parameters, then call updateParametersInContext() to copy them over to the Context.
+     * Update the polarizabilities, frequencies and widths of the sites, the scale factor and the damping scale in a
+     * Context to match those stored in this Force object. This method provides an efficient method to update certain
+     * parameters in an existing Context without needing to reinitialize it. Simply call setSiteParameters() to modify
+     * this object's parameters, then call updateParametersInContext() to copy them over to the Context.
      *
-     * The particles of each molecule, the alchemical flags and the cutoff cannot be changed by this method.
+     * The particles and molecules of the sites, the alchemical flags, the damping method and the cutoff cannot be
+     * changed by this method.
      */
     void updateParametersInContext(OpenMM::Context& context);
     /**
@@ -148,26 +193,28 @@ public:
 protected:
     OpenMM::ForceImpl* createImpl() const;
 private:
-    class MoleculeInfo;
-    double cutoffDistance, scaleFactor;
+    class SiteInfo;
+    double cutoffDistance, scaleFactor, dampingScale;
+    DampingMethod dampingMethod;
     bool usePeriodic;
     std::string alchemicalParameterName;
-    std::vector<MoleculeInfo> molecules;
+    std::vector<SiteInfo> sites;
 };
 
 /**
- * This is an internal class used to record information about a molecule.
+ * This is an internal class used to record information about a site.
  * @private
  */
-class InteraxThreeBodyForce::MoleculeInfo {
+class InteraxThreeBodyForce::SiteInfo {
 public:
     std::vector<int> particles;
-    double alpha, frequency;
+    double alpha, frequency, width;
+    int molecule;
     bool isAlchemical;
-    MoleculeInfo() : alpha(0.0), frequency(0.0), isAlchemical(false) {
+    SiteInfo() : alpha(0.0), frequency(0.0), width(0.0), molecule(-1), isAlchemical(false) {
     }
-    MoleculeInfo(const std::vector<int>& particles, double alpha, double frequency, bool isAlchemical) :
-        particles(particles), alpha(alpha), frequency(frequency), isAlchemical(isAlchemical) {
+    SiteInfo(const std::vector<int>& particles, double alpha, double frequency, double width, int molecule, bool isAlchemical) :
+        particles(particles), alpha(alpha), frequency(frequency), width(width), molecule(molecule), isAlchemical(isAlchemical) {
     }
 };
 

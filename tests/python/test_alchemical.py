@@ -36,10 +36,10 @@ def modify(force, solute, mode):
     alchemical = mode == "alchemical"
     if interaxplugin.InteraxThreeBodyForce.isinstance(force):
         force = interaxplugin.InteraxThreeBodyForce.cast(force)
-        for m in range(force.getNumMolecules()):
-            particles, alpha, frequency, _ = force.getMoleculeParameters(m)
+        for m in range(force.getNumSites()):
+            particles, alpha, frequency, width, molecule, _ = force.getSiteParameters(m)
             if set(particles) <= set(solute):
-                force.setMoleculeParameters(m, particles, 0.0 if mode == "off" else alpha, frequency, alchemical)
+                force.setSiteParameters(m, particles, 0.0 if mode == "off" else alpha, frequency, width, molecule, alchemical)
         return
     for cls, gate in ((interaxplugin.InteraxDispersionForce, 3), (interaxplugin.InteraxExchangeForce, 1),
                       (interaxplugin.InteraxShortRangeForce, 2)):

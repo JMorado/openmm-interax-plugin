@@ -39,8 +39,8 @@ import openmm.unit as unit
  */
 %apply double& OUTPUT {double& m1, double& m2, double& m3, double& alpha, double& width, double& amplitude, double& k, double& l, double& frequency};
 %apply bool& OUTPUT {bool& isAlchemical};
-%apply int& OUTPUT {int& particle1, int& particle2};
-/* getMoleculeParameters returns the particles of the molecule as a tuple. */
+%apply int& OUTPUT {int& particle1, int& particle2, int& molecule};
+/* getSiteParameters returns the particles of the site as a tuple. */
 %typemap(in, numinputs=0) std::vector<int>& particles (std::vector<int> temp) {
     $1 = &temp;
 }
@@ -134,20 +134,28 @@ public:
 
 class InteraxThreeBodyForce : public OpenMM::Force {
 public:
+    enum DampingMethod {
+        NoDamping = 0,
+        TangToennies = 1
+    };
     InteraxThreeBodyForce();
-    int getNumMolecules() const;
-    int addMolecule(const std::vector<int>& particles, double alpha, double frequency, bool isAlchemical=false);
-    void getMoleculeParameters(int index, std::vector<int>& particles, double& alpha, double& frequency, bool& isAlchemical) const;
-    void setMoleculeParameters(int index, const std::vector<int>& particles, double alpha, double frequency, bool isAlchemical);
+    int getNumSites() const;
+    int addSite(const std::vector<int>& particles, double alpha, double frequency, double width=0.0, int molecule=-1, bool isAlchemical=false);
+    void getSiteParameters(int index, std::vector<int>& particles, double& alpha, double& frequency, double& width, int& molecule, bool& isAlchemical) const;
+    void setSiteParameters(int index, const std::vector<int>& particles, double alpha, double frequency, double width, int molecule, bool isAlchemical);
     double getCutoffDistance() const;
     void setCutoffDistance(double distance);
     double getScaleFactor() const;
     void setScaleFactor(double scale);
+    DampingMethod getDampingMethod() const;
+    void setDampingMethod(DampingMethod method);
+    double getDampingScale() const;
+    void setDampingScale(double scale);
     void setUsesPeriodicBoundaryConditions(bool periodic);
+    bool usesPeriodicBoundaryConditions() const;
     const std::string& getAlchemicalParameterName() const;
     void setAlchemicalParameterName(const std::string& name);
     void updateParametersInContext(OpenMM::Context& context);
-    bool usesPeriodicBoundaryConditions() const;
 };
 
 }

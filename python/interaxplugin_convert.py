@@ -152,6 +152,49 @@ def _molecules_from_exclusions(force, num_particles):
     return sorted(molecules.values())
 
 
+def _atomic_oscillators(dispersion):
+    """
+    The atomic single-pole oscillators of an exported dispersion force: alpha_disp and w = 4 C6 / (3 alpha^2), with
+    the homoatomic XDM C6 = alpha m1 / 2. Particles without polarizability (lone-pair sites) have alpha = w = 0.
+    """
+    num_particles = dispersion.getNumParticles()
+    alpha, frequency = [0.0] * num_particles, [0.0] * num_particles
+    for i in range(num_particles):
+        v = _particle_values(dispersion, i)
+        if _is_active(v) and v["alpha"] > 0:
+            c6 = 0.5 * v["alpha"] * v["m1"]
+            alpha[i] = v["alpha"]
+            frequency[i] = 4 * c6 / (3 * v["alpha"] ** 2)
+    return alpha, frequency
+
+
+def atomic_three_body(dispersion, cutoff=0.8, damping_scale=1.0, scale=1.0, periodic=None):
+    """
+    Create an atomic Axilrod-Teller-Muto force (InteraxThreeBodyForce with one site per atom and Tang-Toennies damping)
+    from the dispersion CustomNonbondedForce of an exported InteraxFF System. Each atom with a dispersion polarizability is a site with the atomic alpha and
+    frequency of the molecular ATM's oscillators and the dispersion Slater width; triples within one molecule (a
+    connected component of the exclusions) are excluded.
+
+    This is not a term of the trained InteraxFF models: it is provided to evaluate the cost and the effect of an
+    atomic ATM, whose scale and damping would have to be fitted.
+    """
+    alpha, frequency = _atomic_oscillators(dispersion)
+    molecules = _molecules_from_exclusions(dispersion, dispersion.getNumParticles())
+    plugin = ip.InteraxThreeBodyForce()
+    plugin.setCutoffDistance(cutoff)
+    plugin.setScaleFactor(scale)
+    plugin.setDampingMethod(ip.InteraxThreeBodyForce.TangToennies)
+    plugin.setDampingScale(damping_scale)
+    if periodic is None:
+        periodic = dispersion.getNonbondedMethod() == openmm.CustomNonbondedForce.CutoffPeriodic
+    plugin.setUsesPeriodicBoundaryConditions(periodic)
+    for m, atoms in enumerate(molecules):
+        for i in atoms:
+            if alpha[i] > 0:
+                plugin.addSite([i], alpha[i], frequency[i], _particle_values(dispersion, i)["s"], m)
+    return plugin
+
+
 def convert_three_body(force, dispersion):
     """
     Convert the molecular ATM CustomCentroidBondForce. The export stores only the C9 of every triple, so the
@@ -163,15 +206,8 @@ def convert_three_body(force, dispersion):
         raise ValueError("Not a molecular three-body dispersion force.")
     cutoff = float(expression.split("step(")[1].split("-")[0])
 
-    # Atomic single-pole oscillators: alpha_disp and w = 4 C6 / (3 alpha^2), C6 = alpha m1 / 2 (homoatomic XDM).
     num_particles = dispersion.getNumParticles()
-    alpha, frequency = [0.0] * num_particles, [0.0] * num_particles
-    for i in range(num_particles):
-        v = _particle_values(dispersion, i)
-        if _is_active(v) and v["alpha"] > 0:
-            c6 = 0.5 * v["alpha"] * v["m1"]
-            alpha[i] = v["alpha"]
-            frequency[i] = 4 * c6 / (3 * v["alpha"] ** 2)
+    alpha, frequency = _atomic_oscillators(dispersion)
 
     # Molecular oscillators (London combination of the atomic C6).
     molecules = _molecules_from_exclusions(dispersion, num_particles)
@@ -189,7 +225,7 @@ def convert_three_body(force, dispersion):
     plugin.setUsesPeriodicBoundaryConditions(force.usesPeriodicBoundaryConditions())
     for g in range(force.getNumGroups()):
         particles, weights = force.getGroupParameters(g)
-        plugin.addMolecule(list(particles), *molecular[g])
+        plugin.addSite(list(particles), *molecular[g])
 
     # The scale factor is the ratio of a stored C9 to the recomputed one; every triple must agree with it.
     scale = None

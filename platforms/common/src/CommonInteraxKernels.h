@@ -138,27 +138,29 @@ private:
 
 /**
  * This kernel is invoked by InteraxThreeBodyForce to calculate the forces acting on the system and the energy of
- * the system. It computes the centroids, a neighbor list of the centroids, the triples, and then distributes the
- * centroid forces to the particles.
+ * the system. It computes the sites, a neighbor list of the sites, the triples, and then distributes the site forces
+ * to the particles.
  */
 class CommonCalcInteraxThreeBodyForceKernel : public CalcInteraxThreeBodyForceKernel {
 public:
     CommonCalcInteraxThreeBodyForceKernel(std::string name, const OpenMM::Platform& platform, OpenMM::ComputeContext& cc) :
-            CalcInteraxThreeBodyForceKernel(name, platform), cc(cc), numMolecules(0), lastLambda(-1) {
+            CalcInteraxThreeBodyForceKernel(name, platform), cc(cc), numSites(0), hasComputed(false), lastLambda(-1) {
     }
     void initialize(const OpenMM::System& system, const InteraxThreeBodyForce& force);
     double execute(OpenMM::ContextImpl& context, bool includeForces, bool includeEnergy);
     void copyParametersToContext(OpenMM::ContextImpl& context, const InteraxThreeBodyForce& force);
 private:
     class ForceInfo;
+    class NeighborListPostComputation;
     void setParameters(const InteraxThreeBodyForce& force);
+    void checkNeighborListSize();
     OpenMM::ComputeContext& cc;
-    int numMolecules, maxNeighbors;
-    bool periodic, hasAlchemicalMolecules;
-    double scaleFactor, lastLambda;
+    int numSites, maxNeighbors;
+    bool periodic, hasAlchemicalSites, hasComputed;
+    double scaleFactor, dampingScale, lastLambda;
     std::string alchemicalParameter;
-    OpenMM::ComputeArray moleculeOffsets, moleculeParticles, moleculeParams, centroids, neighbors, numNeighbors, neighborMask, centroidForce, globals;
-    OpenMM::ComputeKernel centroidsKernel, neighborsKernel, triplesKernel, applyForcesKernel;
+    OpenMM::ComputeArray siteOffsets, siteParticles, siteMolecules, siteParams, sites, neighbors, numNeighbors, maxNeighborCount, siteForce, globals;
+    OpenMM::ComputeKernel sitesKernel, neighborsKernel, triplesKernel, applyForcesKernel;
 };
 
 } // namespace InteraxPlugin

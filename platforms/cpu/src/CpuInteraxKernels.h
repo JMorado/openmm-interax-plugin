@@ -201,7 +201,7 @@ private:
     OpenMM::CpuPlatform::PlatformData& data;
     std::unique_ptr<CpuInteraxThreeBodyForce> ixn;
     std::string alchemicalParameter;
-    bool hasAlchemicalMolecules;
+    bool hasAlchemicalSites;
 };
 
 } // namespace InteraxPlugin

@@ -206,7 +206,7 @@ public:
 private:
     std::unique_ptr<ReferenceInteraxThreeBodyIxn> ixn;
     std::string alchemicalParameter;
-    bool hasAlchemicalMolecules;
+    bool hasAlchemicalSites;
 };
 
 } // namespace InteraxPlugin

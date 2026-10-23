@@ -59,7 +59,7 @@ public:
     std::vector<std::string> getKernelNames();
     void updateParametersInContext(OpenMM::ContextImpl& context);
     /**
-     * Compute the C9 coefficient of a triple of molecules from their polarizabilities and frequencies.
+     * Compute the C9 coefficient of a triple of sites from their polarizabilities and frequencies.
      */
     static double computeC9(double alpha1, double frequency1, double alpha2, double frequency2, double alpha3, double frequency3) {
         return 1.5*alpha1*alpha2*alpha3*frequency1*frequency2*frequency3*(frequency1+frequency2+frequency3)/

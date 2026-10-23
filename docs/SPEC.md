@@ -26,7 +26,8 @@ forces (the reference for every test).
 * **Alchemy (decoupling).** Each particle (each molecule for the three-body force) can be flagged alchemical. A pair
   with exactly one alchemical particle is scaled by the context parameter `lambda_sterics` (name configurable);
   pairs with zero or two alchemical particles are unscaled (two alchemical particles are normally excluded, being in
-  the same solute). A three-body triple is scaled if it contains at least one alchemical molecule. This reproduces
+  the same solute). The dispersion long range correction counts every pair, as the export's does, so the pairs within
+  the alchemical molecule add a constant, independent of lambda, that cancels in free energy differences. A three-body triple is scaled if it contains at least one alchemical molecule. This reproduces
   the absolv decoupling construction (solute-solvent copies scaled by `lambda_sterics`) in a single force.
 * **Particles without density.** A particle with zero width `s` (e.g. a lone-pair virtual site) does not interact
   through the density-based pair forces. (In the current export such sites need an extra gating parameter, because
@@ -43,16 +44,26 @@ distance r (MEDFF SI Eq. 32):
     dS/dr = (r F' - F) / (8 pi r^2)
 
 The two terms of F cancel to relative order (b - a)^2, so for nearly equal widths the integral is evaluated from its
-Taylor expansion about the smaller width l = min(a, b), with d = |b - a| and x = r / l
+Taylor expansion about a width l, with t = (b - l)/l (b the other width) and x = r / l
 (`interax.geometry.OVERLAP_TAYLOR_COEFFS`):
 
-    S = exp(-x) * sum_{n=0}^{6} d^n P_n(x) / (D_n pi l^(3+n))
-    dS/dr = exp(-x) / l * sum_{n=0}^{6} d^n (P_n'(x) - P_n(x)) / (D_n pi l^(3+n))
+    S = exp(-x) / (pi l^3) * sum_{n=0}^{N} t^n P_n(x) / D_n
+    dS/dr = exp(-x) / (pi l^4) * sum_{n=0}^{N} t^n (P_n'(x) - P_n(x)) / D_n
 
-used when `d < 0.2 l` (the order-6 scheme of `interax.geometry.SLATER_TAYLOR_SCHEMES`). The export uses the order-2
-scheme below 0.01 bohr; both evaluate the same exact integral, and the order-6 window also removes the single-
-precision cancellation of the closed form close to the switch. Expanding about the smaller width makes the result
-independent of the order of the two particles.
+`InteraxExchangeForce` and `InteraxShortRangeForce` select the scheme with `setOverlapMethod()`:
+
+| Method | Order N | l | Taylor where | Use |
+|---|---|---|---|---|
+| `Exact` (default) | 6 | the smaller width | t < 0.2 and t x < 1.6 (single precision), t < 0.02 and t x < 0.3 (double) | the exact integral: ~1e-6 relative in single, ~1e-10 in double precision |
+| `InteraxOrder2` | 2 | width of the particle with the lower index | \|b - a\| < 0.01 bohr | the InteraxFF default (MEDFF); reproduces the export |
+| `InteraxOrder6` | 6 | width of the particle with the lower index | \|t\| < 0.2 | the InteraxFF order-6 scheme; reproduces the export |
+
+The InteraxFF schemes (`interax.geometry.SLATER_TAYLOR_SCHEMES`) are evaluated exactly as the export evaluates them on
+the Reference platform, where particle 1 of each pair is the one with the lower index, with the signed width
+difference. They carry the export's truncation errors: up to ~1e-6 relative to the exact integral (order 6 degrades as
+(t x)^7 at large distances), and in single precision the closed form close to the order-2 switch has relative errors
+up to ~3e-2. `convert_system(overlap="export")` (the default) picks the scheme of the export, `overlap="exact"` the
+`Exact` method. The CUDA kernels compare the original particle indices, which the context may reorder.
 
 The normalized overlap is `St(r) = 8 pi (a + b)^3 S(r; a, b)`, with `St(0) = 1`.
 
@@ -101,27 +112,53 @@ supported.
 
 ## InteraxThreeBodyForce
 
-Per molecule: the particles whose unweighted centroid is the site (heavy atoms in InteraxFF), the molecular
-polarizability `alpha` (nm^3) and the single-pole frequency `w` (kJ/mol, `C6_AA = 3/4 alpha^2 w`),
-and the alchemical flag. Global: cutoff `r_c` (every pair of a triple), a scale factor.
+Per site: the particles whose unweighted centroid is the site, the polarizability `alpha` (nm^3), the single-pole
+frequency `w` (kJ/mol, `C6_AA = 3/4 alpha^2 w`), a width `s` (nm, for the damping), the molecule the site belongs to,
+and the alchemical flag. Global: cutoff `r_c` (every pair of a triple), a scale factor, the damping method and scale.
 
-    E = scale * sum_{A < B < C, all three pairs < r_c} C9_ABC (1 + 3 cos t_A cos t_B cos t_C) / (r_AB r_AC r_BC)^3
+    E = scale * sum_{A < B < C, all three pairs < r_c} C9_ABC (1 + 3 cos t_A cos t_B cos t_C) / (r_AB r_AC r_BC)^3 * f_AB f_AC f_BC
     C9_ABC = 3/2 a_A a_B a_C w_A w_B w_C (w_A + w_B + w_C) / ((w_A + w_B)(w_B + w_C)(w_C + w_A))
+
+Two forms are supported:
+
+* **Molecular** (InteraxFF, the converted export): one site per molecule, the centroid of its heavy atoms, with the
+  molecular polarizability and frequency (London combination of the atomic oscillators); no damping (f = 1).
+* **Atomic** (`interaxplugin_convert.atomic_three_body`): one site per atom with its atomic oscillator, and the
+  Tang-Toennies damping of each of the three dipole propagators (~ r^-3) of a triple, `f_ij = f_3(x)`,
+  `x = beta 2 r_ij / (s_i + s_j)` (as in the dispersion), with the dispersion widths. Triples with two sites of the same
+  molecule are excluded. This is not a term of the trained models: its scale and damping would have to be fitted.
 
 The angle at each vertex is the angle between the minimum-image vectors to its two neighbors, exactly as in the
 export (`theta = angle(g1, g2, g3)` of `CustomCentroidBondForce`). With `a = x_B - x_A`, `b = x_C - x_A`,
 `c = x_C - x_B` (each the minimum image under periodic boundary conditions), `u, v, w` their squared lengths,
-`P = u v w` and `p = a.b, q = a.c, s = b.c`, the product of the three cosines is `-pqs/P` and
+`P = u v w` and `p = a.b, q = a.c, s = b.c`, the product of the three cosines is `-pqs/P` and, undamped,
 
-    E = C9 [ P^(-3/2) - 3 pqs P^(-5/2) ]
-    dE/da = a (R/u) - 3 C9 P^(-5/2) (qs b + ps c),    R = C9 (-3 P^(-3/2) + 15 pqs P^(-5/2))
-    dE/db = b (R/v) - 3 C9 P^(-5/2) (qs a + pq c)
-    dE/dc = c (R/w) - 3 C9 P^(-5/2) (ps a + pq b)
+    E0 = C9 [ P^(-3/2) - 3 pqs P^(-5/2) ]
+    dE0/da = a (R/u) - 3 C9 P^(-5/2) (qs b + ps c),    R = C9 (-3 P^(-3/2) + 15 pqs P^(-5/2))
+    dE0/db = b (R/v) - 3 C9 P^(-5/2) (qs a + pq c)
+    dE0/dc = c (R/w) - 3 C9 P^(-5/2) (ps a + pq b)
     F_A = dE/da + dE/db,   F_B = dE/dc - dE/da,   F_C = -(dE/db + dE/dc)
 
-each centroid force shared equally among its particles. When the three minimum images close into a triangle
-(always when the box is larger than three cutoffs) this is the familiar
-`C9 (1 + 3 cos t_A cos t_B cos t_C) / (r_AB r_AC r_BC)^3`; in smaller boxes (the InteraxFF liquid and HFE boxes:
-cutoff 1.2 nm, box 2-3.4 nm) the images need not close, and this convention reproduces the export there too.
-Centroids come from the raw particle positions, as `CustomCentroidBondForce` does. Triples are found from a centroid neighbour list instead
-of being stored explicitly (the export stores all N^3/6 triples: 20.8 million for a 500-water box).
+With damping, `E = E0 f_a f_b f_c` and `dE/da = f_a f_b f_c dE0/da + E0 f_b f_c f_a'(|a|) a/|a|` (and similarly for b,
+c). Each site force is shared equally among its particles. When the three minimum images close into a triangle (always
+when the box is larger than three cutoffs) this is the familiar `C9 (1 + 3 cos t_A cos t_B cos t_C) / (r_AB r_AC
+r_BC)^3`; in smaller boxes (the InteraxFF liquid and HFE boxes: cutoff 1.2 nm, box 2-3.4 nm) the images need not close,
+and this convention reproduces the export there too. Sites come from the raw particle positions, as
+`CustomCentroidBondForce` does.
+
+Triples are found from a neighbor list of the sites instead of being stored explicitly (the export stores all N^3/6
+triples: 20.8 million for a 500-water box). On the GPU each thread takes a pair A < B of neighbors and merges the
+sorted neighbor lists of A and B to find the common neighbors C > B; the lists grow when they overflow (the forces are
+then recomputed, as OpenMM does for its own neighbor lists). The number of triples is about
+`N n^2 p / 6` with `n = rho (4/3) pi r_c^3` neighbors per site and `p ~ 0.47`, so at a given cutoff an atomic ATM costs
+(sites per molecule)^3 times the molecular one: 27x for water, 216x for methanol at 1.2 nm, and `r_c^6` less at a
+shorter cutoff.
+
+## Tests
+
+`tests/data` holds the energies and forces of each term computed by the InteraxFF export for two systems (written
+by `tests/python/generate_export_values.py`). `tests/TestInteraxExportValues.h` checks every platform against them
+(ctest: Reference, CPU, CUDA single/mixed/double), and `tests/python/test_export_values.py` does the same through the
+Python API: in double precision the plugin reproduces the export to rounding with its overlap scheme, and the `Exact`
+method agrees to ~1e-6. `tests/python/test_alchemical.py` checks the lambda scaling against decoupled systems, and
+`tests/python/compare_export.py` compares freshly built systems with the export.

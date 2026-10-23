@@ -41,16 +41,19 @@ InteraxThreeBodyForceImpl::InteraxThreeBodyForceImpl(const InteraxThreeBodyForce
 
 void InteraxThreeBodyForceImpl::initialize(ContextImpl& context) {
     const System& system = context.getSystem();
-    for (int i = 0; i < owner.getNumMolecules(); i++) {
+    for (int i = 0; i < owner.getNumSites(); i++) {
         vector<int> particles;
-        double alpha, frequency;
+        double alpha, frequency, width;
+        int molecule;
         bool isAlchemical;
-        owner.getMoleculeParameters(i, particles, alpha, frequency, isAlchemical);
+        owner.getSiteParameters(i, particles, alpha, frequency, width, molecule, isAlchemical);
         if (particles.empty())
-            throw OpenMMException("InteraxThreeBodyForce: A molecule must contain at least one particle");
+            throw OpenMMException("InteraxThreeBodyForce: A site must contain at least one particle");
         for (int particle : particles)
             if (particle < 0 || particle >= system.getNumParticles())
-                throw OpenMMException("InteraxThreeBodyForce: Illegal particle index for a molecule");
+                throw OpenMMException("InteraxThreeBodyForce: Illegal particle index for a site");
+        if (owner.getDampingMethod() == InteraxThreeBodyForce::TangToennies && width <= 0)
+            throw OpenMMException("InteraxThreeBodyForce: The Tang-Toennies damping requires a positive width for every site");
     }
     if (owner.getCutoffDistance() <= 0)
         throw OpenMMException("InteraxThreeBodyForce: The cutoff distance must be positive");
@@ -66,11 +69,12 @@ double InteraxThreeBodyForceImpl::calcForcesAndEnergy(ContextImpl& context, bool
 
 map<string, double> InteraxThreeBodyForceImpl::getDefaultParameters() {
     map<string, double> parameters;
-    for (int i = 0; i < owner.getNumMolecules(); i++) {
+    for (int i = 0; i < owner.getNumSites(); i++) {
         vector<int> particles;
-        double alpha, frequency;
+        double alpha, frequency, width;
+        int molecule;
         bool isAlchemical;
-        owner.getMoleculeParameters(i, particles, alpha, frequency, isAlchemical);
+        owner.getSiteParameters(i, particles, alpha, frequency, width, molecule, isAlchemical);
         if (isAlchemical) {
             parameters[owner.getAlchemicalParameterName()] = 1.0;
             break;

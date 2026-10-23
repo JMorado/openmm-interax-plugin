@@ -42,11 +42,12 @@ namespace InteraxPlugin {
 class ReferenceInteraxThreeBodyIxn {
 public:
     /**
-     * Create a ReferenceInteraxThreeBodyIxn for the molecules, cutoff and periodicity of a force.
+     * Create a ReferenceInteraxThreeBodyIxn for the sites, cutoff, damping and periodicity of a force.
      */
     explicit ReferenceInteraxThreeBodyIxn(const InteraxThreeBodyForce& force);
     /**
-     * Copy the molecular polarizabilities and frequencies and the scale factor from a force.
+     * Copy the polarizabilities, frequencies and widths of the sites, the scale factor and the damping scale from a
+     * force.
      */
     void setParameters(const InteraxThreeBodyForce& force);
     /**
@@ -61,11 +62,12 @@ public:
     double calculateIxn(const std::vector<OpenMM::Vec3>& positions, const OpenMM::Vec3* boxVectors, double lambda, std::vector<OpenMM::Vec3>& forces) const;
 private:
     OpenMM::Vec3 getDelta(const OpenMM::Vec3& from, const OpenMM::Vec3& to, const OpenMM::Vec3* boxVectors) const;
-    std::vector<std::vector<int> > moleculeParticles;
-    std::vector<double> alpha, frequency;
+    std::vector<std::vector<int> > siteParticles;
+    std::vector<int> molecule;
+    std::vector<double> alpha, frequency, width;
     std::vector<bool> isAlchemical;
-    double cutoff, scaleFactor;
-    bool periodic;
+    double cutoff, scaleFactor, dampingScale;
+    bool periodic, useDamping;
 };
 
 } // namespace InteraxPlugin

@@ -36,29 +36,35 @@ using namespace InteraxPlugin;
 using namespace OpenMM;
 using namespace std;
 
-InteraxThreeBodyForce::InteraxThreeBodyForce() : cutoffDistance(1.2), scaleFactor(1.0), usePeriodic(false),
-        alchemicalParameterName("lambda_sterics") {
+InteraxThreeBodyForce::InteraxThreeBodyForce() : cutoffDistance(1.2), scaleFactor(1.0), dampingScale(1.0), dampingMethod(NoDamping),
+        usePeriodic(false), alchemicalParameterName("lambda_sterics") {
 }
 
-int InteraxThreeBodyForce::addMolecule(const vector<int>& particles, double alpha, double frequency, bool isAlchemical) {
-    molecules.push_back(MoleculeInfo(particles, alpha, frequency, isAlchemical));
-    return molecules.size()-1;
+int InteraxThreeBodyForce::addSite(const vector<int>& particles, double alpha, double frequency, double width, int molecule, bool isAlchemical) {
+    sites.push_back(SiteInfo(particles, alpha, frequency, width, molecule, isAlchemical));
+    return sites.size()-1;
 }
 
-void InteraxThreeBodyForce::getMoleculeParameters(int index, vector<int>& particles, double& alpha, double& frequency, bool& isAlchemical) const {
-    ASSERT_VALID_INDEX(index, molecules);
-    particles = molecules[index].particles;
-    alpha = molecules[index].alpha;
-    frequency = molecules[index].frequency;
-    isAlchemical = molecules[index].isAlchemical;
+void InteraxThreeBodyForce::getSiteParameters(int index, vector<int>& particles, double& alpha, double& frequency, double& width, int& molecule,
+        bool& isAlchemical) const {
+    ASSERT_VALID_INDEX(index, sites);
+    particles = sites[index].particles;
+    alpha = sites[index].alpha;
+    frequency = sites[index].frequency;
+    width = sites[index].width;
+    molecule = sites[index].molecule;
+    isAlchemical = sites[index].isAlchemical;
 }
 
-void InteraxThreeBodyForce::setMoleculeParameters(int index, const vector<int>& particles, double alpha, double frequency, bool isAlchemical) {
-    ASSERT_VALID_INDEX(index, molecules);
-    molecules[index].particles = particles;
-    molecules[index].alpha = alpha;
-    molecules[index].frequency = frequency;
-    molecules[index].isAlchemical = isAlchemical;
+void InteraxThreeBodyForce::setSiteParameters(int index, const vector<int>& particles, double alpha, double frequency, double width, int molecule,
+        bool isAlchemical) {
+    ASSERT_VALID_INDEX(index, sites);
+    sites[index].particles = particles;
+    sites[index].alpha = alpha;
+    sites[index].frequency = frequency;
+    sites[index].width = width;
+    sites[index].molecule = molecule;
+    sites[index].isAlchemical = isAlchemical;
 }
 
 double InteraxThreeBodyForce::getCutoffDistance() const {
@@ -75,6 +81,24 @@ double InteraxThreeBodyForce::getScaleFactor() const {
 
 void InteraxThreeBodyForce::setScaleFactor(double scale) {
     scaleFactor = scale;
+}
+
+InteraxThreeBodyForce::DampingMethod InteraxThreeBodyForce::getDampingMethod() const {
+    return dampingMethod;
+}
+
+void InteraxThreeBodyForce::setDampingMethod(DampingMethod method) {
+    if (method != NoDamping && method != TangToennies)
+        throw OpenMMException("InteraxThreeBodyForce: Illegal value for damping method");
+    dampingMethod = method;
+}
+
+double InteraxThreeBodyForce::getDampingScale() const {
+    return dampingScale;
+}
+
+void InteraxThreeBodyForce::setDampingScale(double scale) {
+    dampingScale = scale;
 }
 
 void InteraxThreeBodyForce::setUsesPeriodicBoundaryConditions(bool periodic) {

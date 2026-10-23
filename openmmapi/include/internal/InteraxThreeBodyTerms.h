@@ -45,14 +45,36 @@ namespace InteraxPlugin {
 namespace InteraxThreeBodyTerms {
 
 /**
+ * Compute the Tang-Toennies damping function f_3(x) = 1 - exp(-x) sum_{k<=3} x^k/k! of a dipole propagator and its
+ * derivative f_3'(x) = exp(-x) x^3/3!. For x < 2 the closed form cancels, and f_3 = exp(-x) sum_{k>3} x^k/k! instead.
+ */
+inline void tangToenniesDamping3(double x, double& damping, double& dDampingdX) {
+    double expX = std::exp(-x);
+    double term3 = x*x*x/6;
+    dDampingdX = expX*term3;
+    if (x < 2) {
+        double term = term3, tail = 0;
+        for (int k = 4; k <= 30; k++) {
+            term *= x/k;
+            tail += term;
+        }
+        damping = expX*tail;
+    }
+    else
+        damping = 1-expX*(1+x+x*x/2+term3);
+}
+
+/**
  * Compute the energy of a triple of sites A, B, C from the minimum image vectors a = AB, b = AC and c = BC, and add
  * the forces on the three sites. The angle at each vertex is the angle between the vectors to its two neighbors,
  * so with u, v, w the squared lengths, P = uvw and p = a.b, q = a.c, s = b.c, the product of the three cosines is
- * -pqs/P and E = C9 [P^(-3/2) - 3 pqs P^(-5/2)].
+ * -pqs/P and the undamped energy is E0 = C9 [P^(-3/2) - 3 pqs P^(-5/2)]. With damping, E = E0 f(|a|) f(|b|) f(|c|)
+ * with the Tang-Toennies f_3 of argument x = rate*r for each pair.
  *
+ * @param dampingRates  the rates (dx/dr) of the pairs AB, AC and BC, or NULL for no damping
  * @return the energy of the triple
  */
-inline double computeTriple(const OpenMM::Vec3& a, const OpenMM::Vec3& b, const OpenMM::Vec3& c, double c9,
+inline double computeTriple(const OpenMM::Vec3& a, const OpenMM::Vec3& b, const OpenMM::Vec3& c, double c9, const double* dampingRates,
         OpenMM::Vec3& forceA, OpenMM::Vec3& forceB, OpenMM::Vec3& forceC) {
     double u = a.dot(a), v = b.dot(b), w = c.dot(c);
     double p = a.dot(b), q = a.dot(c), s = b.dot(c);
@@ -60,6 +82,7 @@ inline double computeTriple(const OpenMM::Vec3& a, const OpenMM::Vec3& b, const 
     double invP32 = invP*std::sqrt(invP);
     double invP52 = invP32*invP;
     double pqs = p*q*s;
+    double energy = c9*(invP32 - 3*pqs*invP52);
 
     // Gradients with respect to a, b and c.
 
@@ -68,10 +91,25 @@ inline double computeTriple(const OpenMM::Vec3& a, const OpenMM::Vec3& b, const 
     OpenMM::Vec3 dEda = a*(radial/u) + (b*(q*s) + c*(p*s))*cross;
     OpenMM::Vec3 dEdb = b*(radial/v) + (a*(q*s) + c*(p*q))*cross;
     OpenMM::Vec3 dEdc = c*(radial/w) + (a*(p*s) + b*(p*q))*cross;
+    if (dampingRates != NULL) {
+        // E = E0 fa fb fc, so dE/da = fa fb fc dE0/da + E0 fb fc dfa/da, and similarly for b and c.
+
+        double lengths[3] = {std::sqrt(u), std::sqrt(v), std::sqrt(w)};
+        double f[3], dfdr[3];
+        for (int i = 0; i < 3; i++) {
+            tangToenniesDamping3(dampingRates[i]*lengths[i], f[i], dfdr[i]);
+            dfdr[i] *= dampingRates[i];
+        }
+        double damping = f[0]*f[1]*f[2];
+        dEda = dEda*damping + a*(energy*dfdr[0]*f[1]*f[2]/lengths[0]);
+        dEdb = dEdb*damping + b*(energy*f[0]*dfdr[1]*f[2]/lengths[1]);
+        dEdc = dEdc*damping + c*(energy*f[0]*f[1]*dfdr[2]/lengths[2]);
+        energy *= damping;
+    }
     forceA += dEda + dEdb;
     forceB += dEdc - dEda;
     forceC -= dEdb + dEdc;
-    return c9*(invP32 - 3*pqs*invP52);
+    return energy;
 }
 
 } // namespace InteraxThreeBodyTerms

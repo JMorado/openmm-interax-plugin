@@ -41,7 +41,7 @@ InteraxThreeBodyForceProxy::InteraxThreeBodyForceProxy() : SerializationProxy("I
 }
 
 void InteraxThreeBodyForceProxy::serialize(const void* object, SerializationNode& node) const {
-    node.setIntProperty("version", 1);
+    node.setIntProperty("version", 2);
     const InteraxThreeBodyForce& force = *reinterpret_cast<const InteraxThreeBodyForce*>(object);
     node.setIntProperty("forceGroup", force.getForceGroup());
     node.setStringProperty("name", force.getName());
@@ -49,21 +49,26 @@ void InteraxThreeBodyForceProxy::serialize(const void* object, SerializationNode
     node.setDoubleProperty("scaleFactor", force.getScaleFactor());
     node.setBoolProperty("usesPeriodic", force.usesPeriodicBoundaryConditions());
     node.setStringProperty("alchemicalParameter", force.getAlchemicalParameterName());
-    SerializationNode& molecules = node.createChildNode("Molecules");
-    for (int i = 0; i < force.getNumMolecules(); i++) {
+    node.setIntProperty("dampingMethod", (int) force.getDampingMethod());
+    node.setDoubleProperty("dampingScale", force.getDampingScale());
+    SerializationNode& sites = node.createChildNode("Sites");
+    for (int i = 0; i < force.getNumSites(); i++) {
         vector<int> particles;
-        double alpha, frequency;
+        double alpha, frequency, width;
+        int molecule;
         bool isAlchemical;
-        force.getMoleculeParameters(i, particles, alpha, frequency, isAlchemical);
-        SerializationNode& molecule = molecules.createChildNode("Molecule");
-        molecule.setDoubleProperty("alpha", alpha).setDoubleProperty("frequency", frequency).setBoolProperty("alchemical", isAlchemical);
+        force.getSiteParameters(i, particles, alpha, frequency, width, molecule, isAlchemical);
+        SerializationNode& site = sites.createChildNode("Site");
+        site.setDoubleProperty("alpha", alpha).setDoubleProperty("frequency", frequency).setDoubleProperty("width", width);
+        site.setIntProperty("molecule", molecule).setBoolProperty("alchemical", isAlchemical);
         for (int particle : particles)
-            molecule.createChildNode("Particle").setIntProperty("index", particle);
+            site.createChildNode("Particle").setIntProperty("index", particle);
     }
 }
 
 void* InteraxThreeBodyForceProxy::deserialize(const SerializationNode& node) const {
-    if (node.getIntProperty("version") != 1)
+    int version = node.getIntProperty("version");
+    if (version < 1 || version > 2)
         throw OpenMMException("Unsupported version number");
     InteraxThreeBodyForce* force = new InteraxThreeBodyForce();
     try {
@@ -73,12 +78,26 @@ void* InteraxThreeBodyForceProxy::deserialize(const SerializationNode& node) con
         force->setScaleFactor(node.getDoubleProperty("scaleFactor"));
         force->setUsesPeriodicBoundaryConditions(node.getBoolProperty("usesPeriodic"));
         force->setAlchemicalParameterName(node.getStringProperty("alchemicalParameter"));
-        const SerializationNode& molecules = node.getChildNode("Molecules");
-        for (auto& molecule : molecules.getChildren()) {
+        if (version == 1) {
+            // Version 1 had one site per molecule, without damping.
+            for (auto& molecule : node.getChildNode("Molecules").getChildren()) {
+                vector<int> particles;
+                for (auto& particle : molecule.getChildren())
+                    particles.push_back(particle.getIntProperty("index"));
+                force->addSite(particles, molecule.getDoubleProperty("alpha"), molecule.getDoubleProperty("frequency"), 0.0, -1,
+                        molecule.getBoolProperty("alchemical"));
+            }
+            return force;
+        }
+        force->setDampingMethod((InteraxThreeBodyForce::DampingMethod) node.getIntProperty("dampingMethod"));
+        force->setDampingScale(node.getDoubleProperty("dampingScale"));
+        const SerializationNode& sites = node.getChildNode("Sites");
+        for (auto& site : sites.getChildren()) {
             vector<int> particles;
-            for (auto& particle : molecule.getChildren())
+            for (auto& particle : site.getChildren())
                 particles.push_back(particle.getIntProperty("index"));
-            force->addMolecule(particles, molecule.getDoubleProperty("alpha"), molecule.getDoubleProperty("frequency"), molecule.getBoolProperty("alchemical"));
+            force->addSite(particles, site.getDoubleProperty("alpha"), site.getDoubleProperty("frequency"), site.getDoubleProperty("width"),
+                    site.getIntProperty("molecule"), site.getBoolProperty("alchemical"));
         }
     }
     catch (...) {

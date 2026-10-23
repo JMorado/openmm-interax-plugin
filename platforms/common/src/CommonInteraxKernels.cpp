@@ -376,157 +376,206 @@ void CommonCalcInteraxShortRangeForceKernel::setParameters(const InteraxShortRan
  * -------------------------------------------------------------------------- */
 
 /**
- * The molecules are the groups: two molecules are interchangeable if they have the same number of particles, the
- * same polarizability and frequency, and the same alchemical flag.
+ * The sites are the groups: two sites are interchangeable if they have the same number of particles and the same
+ * parameters. (Their molecules need not be compared: the context only swaps whole identical molecules, which keeps
+ * every pair of sites in the same molecule.)
  */
 class CommonCalcInteraxThreeBodyForceKernel::ForceInfo : public ComputeForceInfo {
 public:
     ForceInfo(const InteraxThreeBodyForce& force) : force(force) {
     }
     int getNumParticleGroups() {
-        return force.getNumMolecules();
+        return force.getNumSites();
     }
     void getParticlesInGroup(int index, vector<int>& particles) {
-        double alpha, frequency;
+        double alpha, frequency, width;
+        int molecule;
         bool isAlchemical;
-        force.getMoleculeParameters(index, particles, alpha, frequency, isAlchemical);
+        force.getSiteParameters(index, particles, alpha, frequency, width, molecule, isAlchemical);
     }
     bool areGroupsIdentical(int group1, int group2) {
         vector<int> particles1, particles2;
-        double alpha1, alpha2, frequency1, frequency2;
+        double alpha1, alpha2, frequency1, frequency2, width1, width2;
+        int molecule1, molecule2;
         bool isAlchemical1, isAlchemical2;
-        force.getMoleculeParameters(group1, particles1, alpha1, frequency1, isAlchemical1);
-        force.getMoleculeParameters(group2, particles2, alpha2, frequency2, isAlchemical2);
-        return (particles1.size() == particles2.size() && alpha1 == alpha2 && frequency1 == frequency2 && isAlchemical1 == isAlchemical2);
+        force.getSiteParameters(group1, particles1, alpha1, frequency1, width1, molecule1, isAlchemical1);
+        force.getSiteParameters(group2, particles2, alpha2, frequency2, width2, molecule2, isAlchemical2);
+        return (particles1.size() == particles2.size() && alpha1 == alpha2 && frequency1 == frequency2 && width1 == width2 &&
+                isAlchemical1 == isAlchemical2);
     }
 private:
     const InteraxThreeBodyForce& force;
 };
 
+/**
+ * After the forces have been computed, check whether the neighbor lists of the sites overflowed. If they did, they
+ * are enlarged and the forces are marked invalid, so that the context computes them again.
+ */
+class CommonCalcInteraxThreeBodyForceKernel::NeighborListPostComputation : public ComputeContext::ForcePostComputation {
+public:
+    NeighborListPostComputation(CommonCalcInteraxThreeBodyForceKernel& owner) : owner(owner) {
+    }
+    double computeForceAndEnergy(bool includeForces, bool includeEnergy, int groups) {
+        if (owner.hasComputed) {
+            owner.hasComputed = false;
+            owner.checkNeighborListSize();
+        }
+        return 0.0;
+    }
+private:
+    CommonCalcInteraxThreeBodyForceKernel& owner;
+};
+
 void CommonCalcInteraxThreeBodyForceKernel::initialize(const System& system, const InteraxThreeBodyForce& force) {
     ContextSelector selector(cc);
-    numMolecules = force.getNumMolecules();
+    numSites = force.getNumSites();
     alchemicalParameter = force.getAlchemicalParameterName();
     periodic = force.usesPeriodicBoundaryConditions();
     cc.addForce(new ForceInfo(force));
-    if (numMolecules == 0)
+    if (numSites == 0)
         return;
 
-    // Record which particles make up each molecule.
+    // Record the particles and the molecule of each site.
 
-    vector<int> offsetVector(numMolecules+1, 0), particleVector;
-    hasAlchemicalMolecules = false;
-    for (int i = 0; i < numMolecules; i++) {
+    vector<int> offsetVector(numSites+1, 0), particleVector, moleculeVector(numSites);
+    hasAlchemicalSites = false;
+    for (int i = 0; i < numSites; i++) {
         vector<int> particles;
-        double alpha, frequency;
+        double alpha, frequency, width;
+        int molecule;
         bool isAlchemical;
-        force.getMoleculeParameters(i, particles, alpha, frequency, isAlchemical);
+        force.getSiteParameters(i, particles, alpha, frequency, width, molecule, isAlchemical);
         particleVector.insert(particleVector.end(), particles.begin(), particles.end());
         offsetVector[i+1] = particleVector.size();
-        hasAlchemicalMolecules |= isAlchemical;
+        moleculeVector[i] = (molecule < 0 ? -1-i : molecule); // A negative molecule is a molecule of its own
+        hasAlchemicalSites |= isAlchemical;
     }
-    moleculeOffsets.initialize<int>(cc, numMolecules+1, "interaxMoleculeOffsets");
-    moleculeParticles.initialize<int>(cc, particleVector.size(), "interaxMoleculeParticles");
-    moleculeOffsets.upload(offsetVector);
-    moleculeParticles.upload(particleVector);
-    initializeParameters(cc, moleculeParams, numMolecules, 4, "interaxMoleculeParams");
-    initializeParameters(cc, globals, 2, 1, "interaxThreeBodyGlobals");
+    siteOffsets.initialize<int>(cc, numSites+1, "interaxSiteOffsets");
+    siteParticles.initialize<int>(cc, particleVector.size(), "interaxSiteParticles");
+    siteMolecules.initialize<int>(cc, numSites, "interaxSiteMolecules");
+    siteOffsets.upload(offsetVector);
+    siteParticles.upload(particleVector);
+    siteMolecules.upload(moleculeVector);
+    initializeParameters(cc, siteParams, numSites, 4, "interaxSiteParams");
+    initializeParameters(cc, globals, 3, 1, "interaxThreeBodyGlobals");
     setParameters(force);
 
-    // Each molecule can have every other one as a neighbor; the bit mask records the neighbors of each molecule.
+    // The neighbor lists start small and grow when they overflow (checkNeighborListSize()).
 
-    maxNeighbors = max(numMolecules-1, 1);
-    int maskWords = (numMolecules+31)/32;
+    maxNeighbors = min(numSites, 64);
     int elementSize = (cc.getUseDoublePrecision() ? sizeof(mm_double4) : sizeof(mm_float4));
-    centroids.initialize(cc, numMolecules, elementSize, "interaxCentroids");
-    neighbors.initialize<int>(cc, numMolecules*maxNeighbors, "interaxNeighbors");
-    numNeighbors.initialize<int>(cc, numMolecules, "interaxNumNeighbors");
-    neighborMask.initialize<unsigned int>(cc, numMolecules*maskWords, "interaxNeighborMask");
-    centroidForce.initialize<long long>(cc, 3*numMolecules, "interaxCentroidForce");
-    centroidForce.upload(vector<long long>(3*numMolecules, 0));
+    sites.initialize(cc, numSites, elementSize, "interaxSites");
+    neighbors.initialize<int>(cc, numSites*maxNeighbors, "interaxNeighbors");
+    numNeighbors.initialize<int>(cc, numSites, "interaxNumNeighbors");
+    maxNeighborCount.initialize<int>(cc, 1, "interaxMaxNeighborCount");
+    siteForce.initialize<long long>(cc, 3*numSites, "interaxSiteForce");
+    siteForce.upload(vector<long long>(3*numSites, 0));
 
     // Create the kernels.
 
     map<string, string> defines;
-    defines["MAX_NEIGHBORS"] = cc.intToString(maxNeighbors);
-    defines["MASK_WORDS"] = cc.intToString(maskWords);
     defines["CUTOFF_SQUARED"] = cc.doubleToString(force.getCutoffDistance()*force.getCutoffDistance());
     defines["PADDED_NUM_ATOMS"] = cc.intToString(cc.getPaddedNumAtoms());
     if (periodic)
         defines["USE_PERIODIC"] = "1";
+    if (force.getDampingMethod() == InteraxThreeBodyForce::TangToennies)
+        defines["USE_DAMPING"] = "1";
     ComputeProgram program = cc.compileProgram(CommonInteraxKernelSources::interaxThreeBody, defines);
-    centroidsKernel = program->createKernel("computeCentroids");
-    centroidsKernel->addArg(numMolecules);
-    centroidsKernel->addArg(cc.getPosq());
-    centroidsKernel->addArg(moleculeOffsets);
-    centroidsKernel->addArg(moleculeParticles);
-    centroidsKernel->addArg(centroids);
+    sitesKernel = program->createKernel("computeSites");
+    sitesKernel->addArg(numSites);
+    sitesKernel->addArg(cc.getPosq());
+    sitesKernel->addArg(siteOffsets);
+    sitesKernel->addArg(siteParticles);
+    sitesKernel->addArg(sites);
+    sitesKernel->addArg(maxNeighborCount);
     neighborsKernel = program->createKernel("findNeighbors");
-    neighborsKernel->addArg(numMolecules);
-    neighborsKernel->addArg(centroids);
+    neighborsKernel->addArg(numSites);
+    neighborsKernel->addArg(maxNeighbors);
+    neighborsKernel->addArg(sites);
+    neighborsKernel->addArg(siteMolecules);
     neighborsKernel->addArg(neighbors);
     neighborsKernel->addArg(numNeighbors);
-    neighborsKernel->addArg(neighborMask);
+    neighborsKernel->addArg(maxNeighborCount);
     for (int i = 0; i < 5; i++)
         neighborsKernel->addArg(); // Periodic box size arguments are set when the kernel is executed.
     triplesKernel = program->createKernel("computeTriples");
-    triplesKernel->addArg(numMolecules);
-    triplesKernel->addArg(centroids);
-    triplesKernel->addArg(moleculeParams);
+    triplesKernel->addArg(numSites);
+    triplesKernel->addArg(maxNeighbors);
+    triplesKernel->addArg(sites);
+    triplesKernel->addArg(siteParams);
     triplesKernel->addArg(neighbors);
     triplesKernel->addArg(numNeighbors);
-    triplesKernel->addArg(neighborMask);
-    triplesKernel->addArg(centroidForce);
+    triplesKernel->addArg(siteForce);
     triplesKernel->addArg(cc.getEnergyBuffer());
     triplesKernel->addArg(globals);
     for (int i = 0; i < 5; i++)
         triplesKernel->addArg(); // Periodic box size arguments are set when the kernel is executed.
-    applyForcesKernel = program->createKernel("applyCentroidForces");
-    applyForcesKernel->addArg(numMolecules);
-    applyForcesKernel->addArg(centroidForce);
+    applyForcesKernel = program->createKernel("applySiteForces");
+    applyForcesKernel->addArg(numSites);
+    applyForcesKernel->addArg(siteForce);
     applyForcesKernel->addArg(cc.getLongForceBuffer());
-    applyForcesKernel->addArg(moleculeOffsets);
-    applyForcesKernel->addArg(moleculeParticles);
+    applyForcesKernel->addArg(siteOffsets);
+    applyForcesKernel->addArg(siteParticles);
+    cc.addPostComputation(new NeighborListPostComputation(*this));
 }
 
 double CommonCalcInteraxThreeBodyForceKernel::execute(ContextImpl& context, bool includeForces, bool includeEnergy) {
-    if (numMolecules == 0 || cc.getContextIndex() != 0)
+    if (numSites == 0 || cc.getContextIndex() != 0)
         return 0.0;
     ContextSelector selector(cc);
-    double lambda = (hasAlchemicalMolecules ? context.getParameter(alchemicalParameter) : 1.0);
+    double lambda = (hasAlchemicalSites ? context.getParameter(alchemicalParameter) : 1.0);
     if (lambda != lastLambda) {
-        vector<double> values = {lambda, scaleFactor};
+        vector<double> values = {lambda, scaleFactor, dampingScale};
         globals.upload(values, true);
         lastLambda = lambda;
     }
-    setPeriodicBoxArgs(cc, neighborsKernel, 5);
+    setPeriodicBoxArgs(cc, neighborsKernel, 7);
     setPeriodicBoxArgs(cc, triplesKernel, 9);
-    centroidsKernel->execute(numMolecules);
-    neighborsKernel->execute(numMolecules);
-    triplesKernel->execute(numMolecules*maxNeighbors);
-    applyForcesKernel->execute(numMolecules);
+    sitesKernel->execute(numSites);
+    neighborsKernel->execute(numSites);
+    triplesKernel->execute(numSites*maxNeighbors);
+    applyForcesKernel->execute(numSites);
+    hasComputed = true;
     return 0.0;
+}
+
+void CommonCalcInteraxThreeBodyForceKernel::checkNeighborListSize() {
+    // This waits for the kernels to finish, at the end of the force computation.
+
+    vector<int> count;
+    maxNeighborCount.download(count);
+    if (count[0] <= maxNeighbors)
+        return;
+    maxNeighbors = min(numSites, (int) (1.2*count[0])+16);
+    neighbors.resize(numSites*maxNeighbors);
+    neighborsKernel->setArg(1, maxNeighbors);
+    neighborsKernel->setArg(4, neighbors);
+    triplesKernel->setArg(1, maxNeighbors);
+    triplesKernel->setArg(4, neighbors);
+    cc.setForcesValid(false);
 }
 
 void CommonCalcInteraxThreeBodyForceKernel::copyParametersToContext(ContextImpl& context, const InteraxThreeBodyForce& force) {
     ContextSelector selector(cc);
-    if (force.getNumMolecules() != numMolecules)
-        throw OpenMMException("updateParametersInContext: The number of molecules has changed");
-    if (numMolecules > 0)
+    if (force.getNumSites() != numSites)
+        throw OpenMMException("updateParametersInContext: The number of sites has changed");
+    if (numSites > 0)
         setParameters(force);
     cc.invalidateMolecules();
 }
 
 void CommonCalcInteraxThreeBodyForceKernel::setParameters(const InteraxThreeBodyForce& force) {
-    vector<mm_double4> paramVector(numMolecules);
-    for (int i = 0; i < numMolecules; i++) {
+    vector<mm_double4> paramVector(numSites);
+    for (int i = 0; i < numSites; i++) {
         vector<int> particles;
-        double alpha, frequency;
+        double alpha, frequency, width;
+        int molecule;
         bool isAlchemical;
-        force.getMoleculeParameters(i, particles, alpha, frequency, isAlchemical);
-        paramVector[i] = mm_double4(alpha, frequency, isAlchemical ? 1.0 : 0.0, 0.0);
+        force.getSiteParameters(i, particles, alpha, frequency, width, molecule, isAlchemical);
+        paramVector[i] = mm_double4(alpha, frequency, width, isAlchemical ? 1.0 : 0.0);
     }
-    moleculeParams.upload(paramVector, true);
+    siteParams.upload(paramVector, true);
     scaleFactor = force.getScaleFactor();
-    lastLambda = -1; // Force the global parameters to be uploaded with the new scale factor.
+    dampingScale = force.getDampingScale();
+    lastLambda = -1; // Force the global parameters to be uploaded with the new values.
 }
