@@ -1,168 +1,107 @@
-OpenMM Example Plugin
-=====================
+OpenMM InteraxFF Plugin
+=======================
 
-This project is an example of how to write a plugin for [OpenMM](https://openmm.org).
-It includes nearly everything you would want in a real plugin, including implementations for the
-Reference, OpenCL, and CUDA platforms, serialization support, test cases, and a Python API.  It
-is useful as a starting point for anyone who wants to write a plugin.
+This plugin implements the intermolecular terms of the InteraxFF force field, other than electrostatics and
+polarization, as four [OpenMM](https://openmm.org) forces with Reference, CPU and CUDA implementations, serialization
+support, test cases and a Python API. It started from the
+[OpenMM example plugin](https://github.com/openmm/openmmexampleplugin).
 
-This plugin defines a single Force subclass called ExampleForce, which implements an anharmonic
-bond force of the form E(r)=k*r<sup>4</sup>.  Of course, you don't actually need a plugin to
-implement a force of that form: you could do it trivially with CustomBondForce.  But since it is
-so simple, it makes a very good example.
+| Force | Energy |
+|---|---|
+| `InteraxDispersionForce` | Tang-Toennies damped C6/C8/C10 dispersion (XDM moments), with an optional long range correction |
+| `InteraxExchangeForce` | exchange repulsion, proportional to the overlap of the Slater valence densities |
+| `InteraxShortRangeForce` | short-range correction, linear and quadratic in the normalized overlap |
+| `InteraxThreeBodyForce` | Axilrod-Teller-Muto dispersion between molecular (or atomic) sites |
 
-I assume you are already familiar with the OpenMM API, and that you have already read the OpenMM
-Developer Guide.  If not, go read it now.  I will not repeat anything that is covered there, and
-only focus on what is unique to this plugin.
+Electrostatics and polarization stay in OpenMM's `HippoNonbondedForce`, as in the InteraxFF export
+(`interax.openmm.create_system_from_topology`). Every force can decouple alchemical particles through a context
+parameter (`lambda_sterics` by default). The formulas, conventions and accuracy of every term are in
+[docs/SPEC.md](docs/SPEC.md).
 
 
 Building The Plugin
 ===================
 
-This project uses [CMake](http://www.cmake.org) for its build system.  To build it, follow these
-steps:
+The plugin is built with [CMake](http://www.cmake.org) against an installed OpenMM (8.1 or later):
 
-1. Create a directory in which to build the plugin.
+1. Create a build directory and run `ccmake` or `cmake` in it, pointing at the source directory.
+2. Set `OPENMM_DIR` to where OpenMM is installed (for a conda environment, the environment's root), and
+   `CMAKE_INSTALL_PREFIX` to where the plugin should be installed. If it is not set, the plugin is installed next to
+   OpenMM.
+3. The CUDA platform is built when CMake finds the CUDA toolkit (`INTERAX_BUILD_CUDA_LIB`; set `CUDAToolkit_ROOT` if
+   needed). The Python wrapper is built when it finds Python and SWIG (`PYTHON_EXECUTABLE`, `SWIG_EXECUTABLE`). Use the
+   SWIG major version that OpenMM itself was built with.
+4. Build with `make install`, then `make PythonInstall` for the Python wrapper.
 
-2. Run the CMake GUI or ccmake, specifying your new directory as the build directory and the top
-level directory of this project as the source directory.
+For example, against the `interax` conda environment:
 
-3. Press "Configure".
+    cmake .. -DOPENMM_DIR=$CONDA_PREFIX -DCMAKE_INSTALL_PREFIX=/path/to/openmm-interax \
+             -DSWIG_EXECUTABLE=/path/to/swig -DPYTHON_EXECUTABLE=$CONDA_PREFIX/bin/python
+    make -j16 install
+    make PythonInstall
 
-4. Set OPENMM_DIR to point to the directory where OpenMM is installed.  This is needed to locate
-the OpenMM header files and libraries.
+When the plugin is installed in its own prefix, load it at runtime and make its Python modules importable:
 
-5. Set CMAKE_INSTALL_PREFIX to the directory where the plugin should be installed.  Usually,
-this will be the same as OPENMM_DIR, so the plugin will be added to your OpenMM installation.
+```python
+import sys
+import openmm
 
-6. If you plan to build the OpenCL platform, make sure that OPENCL_INCLUDE_DIR and
-OPENCL_LIBRARY are set correctly, and that EXAMPLE_BUILD_OPENCL_LIB is selected.
+sys.path.insert(0, "/path/to/openmm-interax/python")
+openmm.Platform.loadPluginsFromDirectory("/path/to/openmm-interax/lib/plugins")
 
-7. If you plan to build the CUDA platform, make sure that CUDA_TOOLKIT_ROOT_DIR is set correctly
-and that EXAMPLE_BUILD_CUDA_LIB is selected.
+import interaxplugin
+import interaxplugin_convert
+```
 
-8. Press "Configure" again if necessary, then press "Generate".
+OpenMM compiles its CUDA kernels at runtime with NVRTC. If the driver is older than the NVRTC of the environment (the
+error is `CUDA_ERROR_UNSUPPORTED_PTX_VERSION`), preload an NVRTC that matches the driver, e.g. the
+`nvidia-cuda-nvrtc-cu12==12.2.140` wheel for a 535 driver: `LD_PRELOAD=.../libnvrtc.so.12`.
 
-9. Use the build system you selected to build and install the plugin.  For example, if you
-selected Unix Makefiles, type `make install`.
+
+Using The Plugin
+================
+
+`interaxplugin_convert.convert_system(system)` takes a System built by the InteraxFF export and replaces its
+dispersion, exchange repulsion, short-range correction and three-body forces by the plugin forces, keeping every other
+force. With `overlap="exact"` (the default) the Slater overlaps are evaluated exactly; with `overlap="export"` they use
+the export's Taylor scheme and the converted forces reproduce the export to rounding. With `copy=False` the System is
+converted in place, which avoids copying the millions of triples of the exported three-body force.
+
+`interaxplugin_convert.atomic_three_body(dispersion)` builds an atomic Axilrod-Teller-Muto force (one site per atom,
+Tang-Toennies damping) from the exported dispersion. It is not a term of the trained InteraxFF models.
+
+For alchemical decoupling, flag the solute's particles (and its three-body sites) as alchemical: the plugin forces then
+scale their interactions with the rest of the System by the alchemical parameter. absolv's InteraxFF support
+(`absolv.interax.apply_fep_interax`) does this for converted systems.
 
 
 Test Cases
 ==========
 
-To run all the test cases build the "test" target, for example by typing `make test`.
+Build the `test` target (`make test`, or `ctest` in the build directory) to run the C++ tests: every platform is
+checked against energies and forces of the InteraxFF export stored in `tests/data`, the CUDA tests in single, mixed and
+double precision. The Python tests in `tests/python` need the plugin to be installed:
 
-This project contains several different directories for test cases: one for each platform, and
-another for serialization related code.  Each of these directories contains a CMakeLists.txt file
-that automatically creates a test from every file whose name starts with "Test" and ends with
-".cpp".  To create new tests, just add a new file to any of these directories.  The file should
-contain a `main()` function that executes any tests in the file and returns 0 if all tests were
-successful or 1 if any of them failed.
+| Test | What it checks |
+|---|---|
+| `test_export_values.py` | the stored export values, through the Python API (`pytest`) |
+| `test_three_body.py` | the three-body force against an independent evaluation and finite differences (`pytest`) |
+| `test_alchemical.py` | the alchemical scaling against decoupled systems |
+| `compare_export.py` | freshly built InteraxFF systems against the export (needs InteraxFF and a model) |
 
-Usually plugins are loaded dynamically at runtime, but that doesn't work well for test cases:
-you want to be able to run the tests before the plugin has yet been installed into the plugins
-directory.  Instead, the test cases directly link against the relevant plugin libraries.  But
-that creates another problem: when a plugin is dynamically loaded at runtime, its platforms and
-kernels are registered automatically, but that doesn't happen for code that statically links
-against it.  Therefore, the very first line of each `main()` function typically invokes a method
-to do the registration that _would_ have been done if the plugin were loaded automatically:
-
-    registerExampleOpenCLKernelFactories();
-
-The OpenCL and CUDA test directories create three tests from each source file: the program is
-invoked three times while passing the strings "single", "mixed", and "double" as a command line
-argument.  The `main()` function should take this value and set it as the default precision for
-the platform:
-
-    if (argc > 1)
-        Platform::getPlatformByName("OpenCL").setPropertyDefaultValue("OpenCLPrecision", string(argv[1]));
-
-This causes the plugin to be tested in all three of the supported precision modes every time you
-run the test suite.
+`generate_export_values.py` regenerates `tests/data` from the export, and `benchmark.py` and `benchmark_three_body.py`
+compare the speed of the plugin with that of the export.
 
 
-OpenCL and CUDA Kernels
-=======================
+Implementation
+==============
 
-The OpenCL and CUDA versions of the force are implemented with the common compute framework.
-This allows us to write a single class (`CommonCalcExampleForceKernel`) that provides an
-implementation for both platforms at the same time.  Device code is written in a subset of
-the OpenCL and CUDA languages, with a few macro and function definitions to make them
-identical.
+Each force has a Reference, a CPU and a common compute (CUDA) implementation:
 
-The OpenCL and CUDA platforms compile all of their kernels from source at runtime.  This
-requires you to store all your kernel source in a way that makes it accessible at runtime.  That
-turns out to be harder than you might think: simply storing source files on disk is brittle,
-since it requires some way of locating the files, and ordinary library files cannot contain
-arbitrary data along with the compiled code.  Another option is to store the kernel source as
-strings in the code, but that is very inconvenient to edit and maintain, especially since C++
-doesn't have a clean syntax for multi-line strings.
+* The pair forces share their math (`openmmapi/include/internal/InteraxPairTerms.h`) between the Reference and the CPU
+  platforms, which vectorizes it with SSE or AVX. On the GPU they add their interactions to OpenMM's nonbonded kernel
+  (`platforms/common/src/kernels/interax*.cc`), so they share its neighbor list.
+* The three-body force finds its triples from a neighbor list of the sites. On the GPU each thread block takes a site
+  and loops over the pairs of its neighbors, loaded in tiles into local memory.
 
-This project (like OpenMM itself) uses a hybrid mechanism that provides the best of both
-approaches.  The source code for the kernels is found in the `platforms/common/src/kernels`
-directory.  At build time, a CMake script loads every .cc file contained in the directory
-and generates a class with all the file contents as strings.  For the example plugin, the
-directory contains a single file called exampleForce.cc.  You can
-put anything you want into this file, and then C++ code can access the content of that file
-as `CommonExampleKernelSources::exampleForce`.  If you add more .cc files to this directory,
-correspondingly named variables will automatically be added to `CommonExampleKernelSources`.
-
-
-Python API
-==========
-
-OpenMM uses [SWIG](http://www.swig.org) to generate its Python API.  SWIG takes an "interface
-file", which is essentially a C++ header file with some extra annotations added, as its input.
-It then generates a Python extension module exposing the C++ API in Python.
-
-When building OpenMM's Python API, the interface file is generated automatically from the C++
-API.  That guarantees the C++ and Python APIs are always synchronized with each other and avoids
-the potential bugs that would come from having duplicate definitions.  It takes a lot of complex
-processing to do that, though, and for a single plugin it's far simpler to just write the
-interface file by hand.  You will find it in the "python" directory.
-
-To build and install the Python API, build the "PythonInstall" target, for example by typing
-"make PythonInstall".  (If you are installing into the system Python, you may need to use sudo.)
-This runs SWIG to generate the C++ and Python files for the extension module
-(ExamplePluginWrapper.cpp and exampleplugin.py), then runs a setup.py script to build and
-install the module.  Once you do that, you can use the plugin from your Python scripts:
-
-    from simtk.openmm import System
-    from exampleplugin import ExampleForce
-    system = System()
-    force = ExampleForce()
-    system.addForce(force)
-
-
-License
-=======
-
-This is part of the OpenMM molecular simulation toolkit originating from
-Simbios, the NIH National Center for Physics-Based Simulation of
-Biological Structures at Stanford, funded under the NIH Roadmap for
-Medical Research, grant U54 GM072970. See https://simtk.org.
-
-Portions copyright (c) 2014-2021 Stanford University and the Authors.
-
-Authors: Peter Eastman
-
-Contributors:
-
-Permission is hereby granted, free of charge, to any person obtaining a
-copy of this software and associated documentation files (the "Software"),
-to deal in the Software without restriction, including without limitation
-the rights to use, copy, modify, merge, publish, distribute, sublicense,
-and/or sell copies of the Software, and to permit persons to whom the
-Software is furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in
-all copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
-THE AUTHORS, CONTRIBUTORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
-DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
-OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
-USE OR OTHER DEALINGS IN THE SOFTWARE.
-
+The common kernels are encoded into the class `CommonInteraxKernelSources` at build time, as in the example plugin.
