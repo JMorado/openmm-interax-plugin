@@ -34,6 +34,7 @@
 #include "internal/InteraxPairTerms.h"
 #include "ReferenceInteraxPairIxn.h"
 #include "ReferenceInteraxThreeBodyIxn.h"
+#include "ReferenceInteraxMultipole.h"
 #include "openmm/Platform.h"
 #include <memory>
 #include <string>
@@ -207,6 +208,27 @@ private:
     std::unique_ptr<ReferenceInteraxThreeBodyIxn> ixn;
     std::string alchemicalParameter;
     bool hasAlchemicalSites;
+};
+
+/**
+ * This kernel is invoked by InteraxMultipoleForce to calculate the forces acting on the system and the energy of the system.
+ */
+class ReferenceCalcInteraxMultipoleForceKernel : public CalcInteraxMultipoleForceKernel {
+public:
+    ReferenceCalcInteraxMultipoleForceKernel(std::string name, const OpenMM::Platform& platform) : CalcInteraxMultipoleForceKernel(name, platform) {
+    }
+    void initialize(const OpenMM::System& system, const InteraxMultipoleForce& force);
+    double execute(OpenMM::ContextImpl& context, bool includeForces, bool includeEnergy);
+    void getLabFramePermanentDipoles(OpenMM::ContextImpl& context, std::vector<OpenMM::Vec3>& dipoles);
+    void getInducedDipoles(OpenMM::ContextImpl& context, std::vector<OpenMM::Vec3>& dipoles);
+    void copyParametersToContext(OpenMM::ContextImpl& context, const InteraxMultipoleForce& force);
+    void getPMEParameters(double& alpha, int& nx, int& ny, int& nz) const;
+private:
+    void setup(OpenMM::ContextImpl& context);
+    std::unique_ptr<OpenMM::ReferenceInteraxMultipole> ixn;
+    int numParticles;
+    std::string alchemicalParameter;
+    bool hasAlchemicalParticles;
 };
 
 } // namespace InteraxPlugin

@@ -1,10 +1,9 @@
 OpenMM InteraxFF Plugin
 =======================
 
-This plugin implements the intermolecular terms of the InteraxFF force field, other than electrostatics and
-polarization, as four [OpenMM](https://openmm.org) forces with Reference, CPU and CUDA implementations, serialization
-support, test cases and a Python API. It started from the
-[OpenMM example plugin](https://github.com/openmm/openmmexampleplugin).
+This plugin implements the intermolecular terms of the InteraxFF force field as five [OpenMM](https://openmm.org)
+forces with Reference, CPU and CUDA implementations, serialization support, test cases and a Python API. It started
+from the [OpenMM example plugin](https://github.com/openmm/openmmexampleplugin).
 
 | Force | Energy |
 |---|---|
@@ -12,11 +11,30 @@ support, test cases and a Python API. It started from the
 | `InteraxExchangeForce` | exchange repulsion, proportional to the overlap of the Slater valence densities |
 | `InteraxShortRangeForce` | short-range correction, linear and quadratic in the normalized overlap |
 | `InteraxThreeBodyForce` | Axilrod-Teller-Muto dispersion between molecular (or atomic) sites |
+| `InteraxMultipoleForce` | electrostatics (core + Slater valence charges, dipoles, quadrupoles) and polarization |
 
-Electrostatics and polarization stay in OpenMM's `HippoNonbondedForce`, as in the InteraxFF export
-(`interax.openmm.create_system_from_topology`). Every force can decouple alchemical particles through a context
-parameter (`lambda_sterics` by default). The formulas, conventions and accuracy of every term are in
-[docs/SPEC.md](docs/SPEC.md).
+`InteraxMultipoleForce` is derived from OpenMM's `HippoNonbondedForce` (Reference and common kernels), without the
+repulsion, dispersion and charge transfer of HIPPO, and adds:
+
+* core damping: the permanent field that polarizes an atom is damped by the atom's own Slater density, so the
+  polarization energy stays finite when atoms overlap (with HIPPO's bare core fields it diverges as
+  -alpha q_core^2 / (2 r^4), which crashed liquid alcohols at full polarization strength);
+* a damping scale kappa of the induced-dipole couplings;
+* alchemical particles, whose multipoles and polarizabilities are scaled by `lambda_electrostatics`, in one force
+  (HIPPO needs two copies mixed linearly);
+* exact exponents: nearly equal exponents use a series instead of HIPPO's closed form, which cancels catastrophically,
+  so the export no longer has to merge them (the merging caused a -0.17 kJ/mol difference from the PyTorch model for
+  propanol);
+* zero polarizabilities, and fixes of two HIPPO bugs (docs/upstream): undefined forces on ZOnly particles in the
+  reference code, and the x B-spline moduli used for z in the GPU PME.
+
+With HIPPO's options it reproduces HIPPO (tests/python/compare_multipole.py). Like HIPPO it replaces OpenMM's nonbonded
+kernel on the GPU, so the export wraps it in a `CustomCVForce` (`electrostatics="interax"`).
+
+Electrostatics and polarization can also stay in OpenMM's `HippoNonbondedForce` (`electrostatics="hippo"` in
+`interax.openmm.create_system_from_topology`). Every force can decouple alchemical particles through a context
+parameter (`lambda_sterics` by default, `lambda_electrostatics` for `InteraxMultipoleForce`). The formulas,
+conventions and accuracy of the pair and three-body terms are in [docs/SPEC.md](docs/SPEC.md).
 
 
 Building The Plugin
@@ -88,9 +106,13 @@ double precision. The Python tests in `tests/python` need the plugin to be insta
 | `test_three_body.py` | the three-body force against an independent evaluation and finite differences (`pytest`) |
 | `test_alchemical.py` | the alchemical scaling against decoupled systems |
 | `compare_export.py` | freshly built InteraxFF systems against the export (needs InteraxFF and a model) |
+| `compare_multipole.py` | `InteraxMultipoleForce` against HIPPO (or its Reference platform with core damping and kappa), and against finite differences |
+| `compare_multipole_torch.py` | `InteraxMultipoleForce` against the PyTorch model (direct, mutual, core damping, kappa) |
+| `check_multipole_lambda.py` | the end states of `lambda_electrostatics`, also through a `CustomCVForce` |
 
 `generate_export_values.py` regenerates `tests/data` from the export, and `benchmark.py` and `benchmark_three_body.py`
-compare the speed of the plugin with that of the export.
+compare the speed of the plugin with that of the export; `benchmark_multipole.py` compares `InteraxMultipoleForce`
+with HIPPO (speed, mixed-precision accuracy, molecular dynamics and the alchemical HFE setup).
 
 
 Implementation
@@ -104,4 +126,12 @@ Each force has a Reference, a CPU and a common compute (CUDA) implementation:
 * The three-body force finds its triples from a neighbor list of the sites. On the GPU each thread block takes a site
   and loops over the pairs of its neighbors, loaded in tiles into local memory.
 
+* `InteraxMultipoleForce` keeps HIPPO's structure: the Reference platform (also used by the CPU platform) is HIPPO's
+  reference code, the GPU kernels are HIPPO's common kernels (`platforms/common/src/kernels/interaxMultipole*.cc`) with
+  cuFFT for PME. Core damping adds (f - 1) times the full pair field to the field that polarizes each atom and the
+  corresponding forces and torques; the series of the pair damping factors to t^6 is used where its error is below
+  the cancellation error of the closed form (thresholds per precision in `CommonInteraxMultipoleKernel.cpp`).
+
 The common kernels are encoded into the class `CommonInteraxKernelSources` at build time, as in the example plugin.
+`third_party/pocketfft` is the header-only FFT (BSD licence) that OpenMM's own reference PME uses; it is only compiled
+into the Reference platform.

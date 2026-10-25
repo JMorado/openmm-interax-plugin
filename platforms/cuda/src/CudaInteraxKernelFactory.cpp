@@ -29,6 +29,7 @@
 
 #include "CudaInteraxKernelFactory.h"
 #include "CommonInteraxKernels.h"
+#include "CudaInteraxMultipoleKernel.h"
 #include "openmm/cuda/CudaContext.h"
 #include "openmm/cuda/CudaPlatform.h"
 #include "openmm/internal/ContextImpl.h"
@@ -49,6 +50,7 @@ extern "C" OPENMM_EXPORT void registerKernelFactories() {
         platform.registerKernelFactory(CalcInteraxExchangeForceKernel::Name(), factory);
         platform.registerKernelFactory(CalcInteraxShortRangeForceKernel::Name(), factory);
         platform.registerKernelFactory(CalcInteraxThreeBodyForceKernel::Name(), factory);
+        platform.registerKernelFactory(CalcInteraxMultipoleForceKernel::Name(), factory);
     }
     catch (std::exception& ex) {
         // The CUDA platform is not available.
@@ -75,5 +77,7 @@ KernelImpl* CudaInteraxKernelFactory::createKernelImpl(std::string name, const P
         return new CommonCalcInteraxShortRangeForceKernel(name, platform, cu);
     if (name == CalcInteraxThreeBodyForceKernel::Name())
         return new CommonCalcInteraxThreeBodyForceKernel(name, platform, cu);
+    if (name == CalcInteraxMultipoleForceKernel::Name())
+        return new CudaCalcInteraxMultipoleForceKernel(name, platform, cu, context.getSystem());
     throw OpenMMException((std::string("Tried to create kernel with illegal kernel name '")+name+"'").c_str());
 }

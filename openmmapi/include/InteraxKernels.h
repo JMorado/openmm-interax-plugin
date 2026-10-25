@@ -32,6 +32,7 @@
 
 #include "InteraxDispersionForce.h"
 #include "InteraxExchangeForce.h"
+#include "InteraxMultipoleForce.h"
 #include "InteraxShortRangeForce.h"
 #include "InteraxThreeBodyForce.h"
 #include "openmm/KernelImpl.h"
@@ -183,6 +184,21 @@ public:
      * @param force      the InteraxThreeBodyForce to copy the parameters from
      */
     virtual void copyParametersToContext(OpenMM::ContextImpl& context, const InteraxThreeBodyForce& force) = 0;
+};
+
+class CalcInteraxMultipoleForceKernel : public OpenMM::KernelImpl {
+public:
+    static std::string Name() {
+        return "CalcInteraxMultipoleForce";
+    }
+    CalcInteraxMultipoleForceKernel(std::string name, const OpenMM::Platform& platform) : OpenMM::KernelImpl(name, platform) {
+    }
+    virtual void initialize(const OpenMM::System& system, const InteraxMultipoleForce& force) = 0;
+    virtual double execute(OpenMM::ContextImpl& context, bool includeForces, bool includeEnergy) = 0;
+    virtual void getLabFramePermanentDipoles(OpenMM::ContextImpl& context, std::vector<OpenMM::Vec3>& dipoles) = 0;
+    virtual void getInducedDipoles(OpenMM::ContextImpl& context, std::vector<OpenMM::Vec3>& dipoles) = 0;
+    virtual void copyParametersToContext(OpenMM::ContextImpl& context, const InteraxMultipoleForce& force) = 0;
+    virtual void getPMEParameters(double& alpha, int& nx, int& ny, int& nz) const = 0;
 };
 
 } // namespace InteraxPlugin

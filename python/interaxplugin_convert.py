@@ -247,6 +247,58 @@ def convert_three_body(force, dispersion):
     return plugin
 
 
+def wrapped_hippo(force):
+    """The HippoNonbondedForce of the export (wrapped in a CustomCVForce "E_hippo"), or None."""
+    if isinstance(force, openmm.HippoNonbondedForce):
+        return force
+    if isinstance(force, openmm.CustomCVForce):
+        for k in range(force.getNumCollectiveVariables()):
+            cv = force.getCollectiveVariable(k)
+            if isinstance(cv, openmm.HippoNonbondedForce):
+                return cv
+    return None
+
+
+def convert_multipoles(hippo, core_damping=False, mutual_damping_scale=1.0, alchemical_particles=(), alchemical_parameter="lambda_electrostatics",
+                       core_damping_scale=1.0):
+    """
+    An InteraxMultipoleForce with the electrostatics and polarization of an exported HippoNonbondedForce (its
+    repulsion, dispersion and charge transfer must be off, as in the export): same particles, frames, exceptions,
+    extrapolation coefficients and PME settings. core_damping (with its range core_damping_scale) and mutual_damping_scale select the InteraxFF options
+    that HIPPO lacks; the multipoles and polarizabilities of alchemical_particles are scaled by alchemical_parameter.
+    The polarizabilities of 1e-14 nm^3 or less that the export gives to non-polarizable atoms (HIPPO needs them
+    positive) become zero.
+    """
+    plugin = ip.InteraxMultipoleForce()
+    method = hippo.getNonbondedMethod()
+    plugin.setNonbondedMethod(ip.InteraxMultipoleForce.PME if method == openmm.HippoNonbondedForce.PME else ip.InteraxMultipoleForce.NoCutoff)
+    plugin.setCutoffDistance(hippo.getCutoffDistance())
+    plugin.setEwaldErrorTolerance(hippo.getEwaldErrorTolerance())
+    alpha, nx, ny, nz = hippo.getPMEParameters()
+    plugin.setPMEParameters(alpha.value_in_unit(alpha.unit) if hasattr(alpha, "unit") else alpha, nx, ny, nz)
+    plugin.setExtrapolationCoefficients(list(hippo.getExtrapolationCoefficients()))
+    plugin.setCoreDamping(core_damping)
+    plugin.setCoreDampingScale(core_damping_scale)
+    plugin.setMutualDampingScale(mutual_damping_scale)
+    plugin.setAlchemicalParameterName(alchemical_parameter)
+    alchemical = set(alchemical_particles)
+    strip = lambda v: v.value_in_unit(v.unit) if hasattr(v, "unit") else v  # noqa: E731
+    for i in range(hippo.getNumParticles()):
+        (charge, dipole, quadrupole, core, exponent, epsilon, _damping, c6, pauli_k, _pauli_q, _pauli_alpha, polarizability,
+         axis, z, x, y) = hippo.getParticleParameters(i)
+        if strip(epsilon) != 0 or strip(c6) != 0 or strip(pauli_k) != 0:
+            raise ValueError(f"HIPPO particle {i} has charge transfer, dispersion or repulsion, which InteraxMultipoleForce does not have.")
+        polarizability = strip(polarizability)
+        plugin.addParticle(strip(charge), [float(v) for v in strip(dipole)], [float(v) for v in strip(quadrupole)], strip(core),
+                           strip(exponent), 0.0 if polarizability <= 1e-14 else polarizability, axis, z, x, y, i in alchemical)
+    for k in range(hippo.getNumExceptions()):
+        i, j, mm, dm, dd, _disp, _rep, _ct = hippo.getExceptionParameters(k)
+        plugin.addException(i, j, mm, dm, dd)
+    plugin.setForceGroup(hippo.getForceGroup())
+    plugin.setName(type(plugin).__name__)
+    return plugin
+
+
 def convert_system(system, copy=True, overlap="exact"):
     """
     Return a copy of an exported InteraxFF System in which the dispersion, exchange repulsion, short-range correction

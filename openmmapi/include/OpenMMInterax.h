@@ -32,6 +32,7 @@
 
 #include "InteraxDispersionForce.h"
 #include "InteraxExchangeForce.h"
+#include "InteraxMultipoleForce.h"
 #include "InteraxPairForce.h"
 #include "InteraxShortRangeForce.h"
 #include "InteraxThreeBodyForce.h"

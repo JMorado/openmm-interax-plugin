@@ -41,6 +41,7 @@
 #include "InteraxExchangeForceProxy.h"
 #include "InteraxShortRangeForceProxy.h"
 #include "InteraxThreeBodyForceProxy.h"
+#include "InteraxMultipoleForceProxy.h"
 #include "openmm/serialization/SerializationProxy.h"
 
 #if defined(WIN32)
@@ -63,4 +64,5 @@ extern "C" OPENMM_EXPORT_INTERAX void registerInteraxSerializationProxies() {
     SerializationProxy::registerProxy(typeid(InteraxExchangeForce), new InteraxExchangeForceProxy());
     SerializationProxy::registerProxy(typeid(InteraxShortRangeForce), new InteraxShortRangeForceProxy());
     SerializationProxy::registerProxy(typeid(InteraxThreeBodyForce), new InteraxThreeBodyForceProxy());
+    SerializationProxy::registerProxy(typeid(InteraxMultipoleForce), new InteraxMultipoleForceProxy());
 }

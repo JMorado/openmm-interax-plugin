@@ -17,6 +17,37 @@ namespace std {
 #include "openmm/RPMDMonteCarloBarostat.h"
 %}
 
+/* std::vector<double> arguments from any Python sequence (OpenMM's own typemaps need its numpy helpers). */
+%typemap(in) const std::vector<double>& (std::vector<double> temp) {
+    if (!PySequence_Check($input)) {
+        PyErr_SetString(PyExc_TypeError, "expected a sequence of numbers");
+        SWIG_fail;
+    }
+    Py_ssize_t n = PySequence_Size($input);
+    for (Py_ssize_t i = 0; i < n; i++) {
+        PyObject* item = PySequence_GetItem($input, i);
+        temp.push_back(PyFloat_AsDouble(item));
+        Py_DECREF(item);
+    }
+    if (PyErr_Occurred())
+        SWIG_fail;
+    $1 = &temp;
+}
+%typemap(typecheck, precedence=SWIG_TYPECHECK_DOUBLE_ARRAY) const std::vector<double>& {
+    $1 = PySequence_Check($input) ? 1 : 0;
+}
+%typemap(out) std::vector<double> {
+    const std::vector<double>& values = $1;
+    $result = PyList_New(values.size());
+    for (size_t i = 0; i < values.size(); i++)
+        PyList_SET_ITEM($result, i, PyFloat_FromDouble(values[i]));
+}
+%typemap(out) const std::vector<double>& {
+    $result = PyList_New($1->size());
+    for (size_t i = 0; i < $1->size(); i++)
+        PyList_SET_ITEM($result, i, PyFloat_FromDouble((*$1)[i]));
+}
+
 %pythoncode %{
 import openmm as mm
 import openmm.unit as unit
@@ -160,6 +191,91 @@ public:
     void updateParametersInContext(OpenMM::Context& context);
 };
 
+class InteraxMultipoleForce : public OpenMM::Force {
+public:
+    enum NonbondedMethod {
+        NoCutoff = 0,
+        PME = 1
+    };
+    enum ParticleAxisTypes { ZThenX = 0, Bisector = 1, ZBisect = 2, ThreeFold = 3, ZOnly = 4, NoAxisType = 5 };
+    InteraxMultipoleForce();
+    int getNumParticles() const;
+    int getNumExceptions() const;
+    NonbondedMethod getNonbondedMethod() const;
+    void setNonbondedMethod(NonbondedMethod method);
+    double getCutoffDistance() const;
+    void setCutoffDistance(double distance);
+    const std::vector<double>& getExtrapolationCoefficients() const;
+    void setExtrapolationCoefficients(const std::vector<double>& coefficients);
+    void setPMEParameters(double alpha, int nx, int ny, int nz);
+    int addParticle(double charge, const std::vector<double>& dipole, const std::vector<double>& quadrupole, double coreCharge,
+                    double alpha, double polarizability, int axisType, int multipoleAtomZ, int multipoleAtomX, int multipoleAtomY,
+                    bool isAlchemical=false);
+    void setParticleParameters(int index, double charge, const std::vector<double>& dipole, const std::vector<double>& quadrupole, double coreCharge,
+                               double alpha, double polarizability, int axisType, int multipoleAtomZ, int multipoleAtomX, int multipoleAtomY,
+                               bool isAlchemical=false);
+    int addException(int particle1, int particle2, double multipoleMultipoleScale, double dipoleMultipoleScale, double dipoleDipoleScale,
+                     bool replace=false);
+    double getEwaldErrorTolerance() const;
+    void setEwaldErrorTolerance(double tol);
+    bool getCoreDamping() const;
+    void setCoreDamping(bool enabled);
+    double getCoreDampingScale() const;
+    void setCoreDampingScale(double eta);
+    double getMutualDampingScale() const;
+    void setMutualDampingScale(double kappa);
+    const std::string& getAlchemicalParameterName() const;
+    void setAlchemicalParameterName(const std::string& name);
+    void updateParametersInContext(OpenMM::Context& context);
+    bool usesPeriodicBoundaryConditions() const;
+};
+
+/* Particle parameters as a list [charge, dipole (3), quadrupole (9), coreCharge, alpha, polarizability, axisType, z, x, y,
+ * isAlchemical], dipoles as flat lists [x0, y0, z0, x1, ...] (e nm), PME parameters as [alpha, nx, ny, nz]. */
+%extend InteraxMultipoleForce {
+    std::vector<double> getParticleParametersList(int index) const {
+        double charge, coreCharge, alpha, polarizability;
+        int axisType, z, x, y;
+        bool isAlchemical;
+        std::vector<double> dipole, quadrupole;
+        self->getParticleParameters(index, charge, dipole, quadrupole, coreCharge, alpha, polarizability, axisType, z, x, y, isAlchemical);
+        std::vector<double> out = {charge};
+        out.insert(out.end(), dipole.begin(), dipole.end());
+        out.insert(out.end(), quadrupole.begin(), quadrupole.end());
+        std::vector<double> rest = {coreCharge, alpha, polarizability, (double) axisType, (double) z, (double) x, (double) y, (double) isAlchemical};
+        out.insert(out.end(), rest.begin(), rest.end());
+        return out;
+    }
+    std::vector<double> getInducedDipolesList(OpenMM::Context& context) {
+        std::vector<OpenMM::Vec3> d;
+        self->getInducedDipoles(context, d);
+        std::vector<double> out;
+        for (auto& v : d) {
+            out.push_back(v[0]);
+            out.push_back(v[1]);
+            out.push_back(v[2]);
+        }
+        return out;
+    }
+    std::vector<double> getLabFramePermanentDipolesList(OpenMM::Context& context) {
+        std::vector<OpenMM::Vec3> d;
+        self->getLabFramePermanentDipoles(context, d);
+        std::vector<double> out;
+        for (auto& v : d) {
+            out.push_back(v[0]);
+            out.push_back(v[1]);
+            out.push_back(v[2]);
+        }
+        return out;
+    }
+    std::vector<double> getPMEParametersInContextList(const OpenMM::Context& context) const {
+        double alpha;
+        int nx, ny, nz;
+        self->getPMEParametersInContext(context, alpha, nx, ny, nz);
+        return {alpha, (double) nx, (double) ny, (double) nz};
+    }
+}
+
 }
 
 /*
@@ -179,3 +295,4 @@ CAST_HELPERS(InteraxDispersionForce)
 CAST_HELPERS(InteraxExchangeForce)
 CAST_HELPERS(InteraxShortRangeForce)
 CAST_HELPERS(InteraxThreeBodyForce)
+CAST_HELPERS(InteraxMultipoleForce)
