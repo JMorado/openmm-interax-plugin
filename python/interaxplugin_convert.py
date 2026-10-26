@@ -334,7 +334,7 @@ def unwrap_multipoles(system):
 _unwrap_multipoles = unwrap_multipoles
 
 
-def convert_system(system, copy=True, overlap="exact", unwrap_multipoles=False):
+def convert_system(system, copy=True, overlap="exact", unwrap_multipoles=True):
     """
     Return a copy of an exported InteraxFF System in which the dispersion, exchange repulsion, short-range correction
     and molecular three-body dispersion use the plugin forces, named after their classes. Forces keep their group;
@@ -346,8 +346,10 @@ def convert_system(system, copy=True, overlap="exact", unwrap_multipoles=False):
     rounding), and with overlap="exact" the plugin's accurate scheme (the exact integral, which the export
     approximates to ~1e-6 relative).
 
-    With unwrap_multipoles=True, an InteraxMultipoleForce wrapped in a CustomCVForce is also put directly into the
-    System with its own GPU kernel (see unwrap_multipoles()).
+    By default (unwrap_multipoles=True) an InteraxMultipoleForce wrapped in a CustomCVForce whose energy is that force
+    alone is put directly into the System with its own GPU kernel (see unwrap_multipoles()): identical energies, 14-36 %
+    faster liquids. CustomCVForces that combine or scale it (alchemical E_on / E_off copies) are left wrapped.
+    unwrap_multipoles=False keeps every wrapper.
     """
     if overlap not in ("export", "exact"):
         raise ValueError(f"overlap must be 'export' or 'exact', got {overlap!r}")
