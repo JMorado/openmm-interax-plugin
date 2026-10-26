@@ -860,6 +860,7 @@ double CommonCalcInteraxMultipoleForceKernel::execute(ContextImpl& context, bool
 
     // Compute the field from fixed multipoles.
 
+    updateFieldKernelMaxTiles();
     if (nb.getUseCutoff())
         setMultipoleBoxArgs(cc, fixedFieldKernel, 6);
     fixedFieldKernel->execute(nb.getNumForceThreadBlocks()*fieldThreadBlockSize, fieldThreadBlockSize);
@@ -902,9 +903,26 @@ double CommonCalcInteraxMultipoleForceKernel::execute(ContextImpl& context, bool
     return 0.0;
 }
 
+void CommonCalcInteraxMultipoleForceKernel::updateFieldKernelMaxTiles() {
+    // The neighbor list grows (and its arrays are reallocated) whenever the number of interacting tiles exceeds its
+    // capacity. The field kernels skip every tile without exclusions when the tile count exceeds maxTiles, so maxTiles
+    // must follow the current capacity, as in OpenMM's AMOEBA kernels. Argument 11 is maxTiles (see createFieldKernel).
+
+    NonbondedUtilities& nb = cc.getNonbondedUtilities();
+    if (!nb.getUseCutoff())
+        return;
+    int size = nb.getInteractingTiles().getSize();
+    if (size != maxTiles) {
+        maxTiles = size;
+        fixedFieldKernel->setArg(11, (unsigned int) maxTiles);
+        mutualFieldKernel->setArg(11, (unsigned int) maxTiles);
+    }
+}
+
 void CommonCalcInteraxMultipoleForceKernel::computeInducedField(int optOrder) {
     NonbondedUtilities& nb = cc.getNonbondedUtilities();
     cc.clearBuffer(inducedField);
+    updateFieldKernelMaxTiles();
     if (nb.getUseCutoff())
         setMultipoleBoxArgs(cc, mutualFieldKernel, 6);
     mutualFieldKernel->execute(nb.getNumForceThreadBlocks()*fieldThreadBlockSize, fieldThreadBlockSize);

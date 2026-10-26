@@ -66,6 +66,7 @@ protected:
     class TorquePostComputation;
     void setParticleParameters(const InteraxMultipoleForce& force);
     void computeInducedField(int optOrder);
+    void updateFieldKernelMaxTiles();
     void computeExtrapolatedDipoles();
     void ensureMultipolesValid(OpenMM::ContextImpl& context);
     void addTorquesToForces();
