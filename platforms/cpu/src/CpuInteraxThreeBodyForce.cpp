@@ -73,6 +73,7 @@ void CpuInteraxThreeBodyForce::setParameters(const InteraxThreeBodyForce& force)
     }
     scaleFactor = force.getScaleFactor();
     dampingScale = force.getDampingScale();
+    dampingRadius = force.getCentroidDampingRadius();
 }
 
 Vec3 CpuInteraxThreeBodyForce::getDelta(const Vec3& from, const Vec3& to, const Vec3* boxVectors) const {
@@ -143,7 +144,7 @@ double CpuInteraxThreeBodyForce::calculateIxn(const vector<Vec3>& positions, con
                         c9 *= lambda;
                     double rates[3] = {2*dampingScale/(width[a]+width[b]), 2*dampingScale/(width[a]+width[c]), 2*dampingScale/(width[b]+width[c])};
                     energy += InteraxThreeBodyTerms::computeTriple(getDelta(sites[a], sites[b], boxVectors), getDelta(sites[a], sites[c], boxVectors),
-                            getDelta(sites[b], sites[c], boxVectors), c9, useDamping ? rates : NULL, siteForces[a], siteForces[b], siteForces[c]);
+                            getDelta(sites[b], sites[c], boxVectors), c9, useDamping ? rates : NULL, siteForces[a], siteForces[b], siteForces[c], dampingRadius);
                 }
         }
         threadEnergy[threadIndex] = energy;

@@ -65,17 +65,32 @@ inline void tangToenniesDamping3(double x, double& damping, double& dDampingdX) 
 }
 
 /**
+ * Compute the centroid damping function g(r) = 1 - exp(-(r/R0)^6) of a pair of sites and its derivative
+ * g'(r) = 6 (r/R0)^6 exp(-(r/R0)^6) / r (InteraxThreeBodyForce::setCentroidDampingRadius()).
+ */
+inline void centroidDamping(double r, double invRadius, double& damping, double& dDampingdR) {
+    double x = r*invRadius;
+    double x6 = x*x*x;
+    x6 *= x6;
+    damping = -std::expm1(-x6);
+    dDampingdR = 6*x6*std::exp(-x6)/r;
+}
+
+/**
  * Compute the energy of a triple of sites A, B, C from the minimum image vectors a = AB, b = AC and c = BC, and add
  * the forces on the three sites. The angle at each vertex is the angle between the vectors to its two neighbors,
  * so with u, v, w the squared lengths, P = uvw and p = a.b, q = a.c, s = b.c, the product of the three cosines is
  * -pqs/P and the undamped energy is E0 = C9 [P^(-3/2) - 3 pqs P^(-5/2)]. With damping, E = E0 f(|a|) f(|b|) f(|c|)
  * with the Tang-Toennies f_3 of argument x = rate*r for each pair.
  *
- * @param dampingRates  the rates (dx/dr) of the pairs AB, AC and BC, or NULL for no damping
+ * With a centroid damping radius R0 > 0, E is also multiplied by g(|a|) g(|b|) g(|c|), g(r) = 1 - exp(-(r/R0)^6).
+ *
+ * @param dampingRates   the rates (dx/dr) of the pairs AB, AC and BC, or NULL for no Tang-Toennies damping
+ * @param dampingRadius  the centroid damping radius R0, or 0 for no centroid damping
  * @return the energy of the triple
  */
 inline double computeTriple(const OpenMM::Vec3& a, const OpenMM::Vec3& b, const OpenMM::Vec3& c, double c9, const double* dampingRates,
-        OpenMM::Vec3& forceA, OpenMM::Vec3& forceB, OpenMM::Vec3& forceC) {
+        OpenMM::Vec3& forceA, OpenMM::Vec3& forceB, OpenMM::Vec3& forceC, double dampingRadius=0.0) {
     double u = a.dot(a), v = b.dot(b), w = c.dot(c);
     double p = a.dot(b), q = a.dot(c), s = b.dot(c);
     double invP = 1/(u*v*w);
@@ -91,14 +106,27 @@ inline double computeTriple(const OpenMM::Vec3& a, const OpenMM::Vec3& b, const 
     OpenMM::Vec3 dEda = a*(radial/u) + (b*(q*s) + c*(p*s))*cross;
     OpenMM::Vec3 dEdb = b*(radial/v) + (a*(q*s) + c*(p*q))*cross;
     OpenMM::Vec3 dEdc = c*(radial/w) + (a*(p*s) + b*(p*q))*cross;
-    if (dampingRates != NULL) {
-        // E = E0 fa fb fc, so dE/da = fa fb fc dE0/da + E0 fb fc dfa/da, and similarly for b and c.
+    if (dampingRates != NULL || dampingRadius > 0) {
+        // E = E0 fa fb fc, so dE/da = fa fb fc dE0/da + E0 fb fc dfa/da, and similarly for b and c. Each f is the
+        // Tang-Toennies damping, the centroid damping, or their product.
 
         double lengths[3] = {std::sqrt(u), std::sqrt(v), std::sqrt(w)};
         double f[3], dfdr[3];
         for (int i = 0; i < 3; i++) {
-            tangToenniesDamping3(dampingRates[i]*lengths[i], f[i], dfdr[i]);
-            dfdr[i] *= dampingRates[i];
+            if (dampingRates != NULL) {
+                tangToenniesDamping3(dampingRates[i]*lengths[i], f[i], dfdr[i]);
+                dfdr[i] *= dampingRates[i];
+            }
+            else {
+                f[i] = 1;
+                dfdr[i] = 0;
+            }
+            if (dampingRadius > 0) {
+                double g, dgdr;
+                centroidDamping(lengths[i], 1/dampingRadius, g, dgdr);
+                dfdr[i] = dfdr[i]*g + f[i]*dgdr;
+                f[i] *= g;
+            }
         }
         double damping = f[0]*f[1]*f[2];
         dEda = dEda*damping + a*(energy*dfdr[0]*f[1]*f[2]/lengths[0]);

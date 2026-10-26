@@ -51,6 +51,10 @@ namespace InteraxPlugin {
  * the Tang-Toennies function f_3(x) = 1 - exp(-x) sum_{k<=3} x^k/k!, x = beta 2 r_ij / (s_i + s_j), of each of the
  * three dipole propagators (r^-3) of the triple, with s the site widths and beta the damping scale. Short-range
  * damping is needed for atomic sites, which come much closer than molecular centroids.
+ * Independently of the damping method, a centroid damping radius R0 > 0 (setCentroidDampingRadius()) multiplies each
+ * triple by g(r_AB) g(r_AC) g(r_BC), g(r) = 1 - exp(-(r/R0)^6). It keeps the molecular ATM finite when two centroids
+ * come close (flexible molecules), where the undamped energy diverges as r^-3 per pair. R0 = 0 (the default) means no
+ * centroid damping.
  *
  * Each site belongs to a molecule: a triple containing two sites of the same molecule does not interact, so that
  * only intermolecular triples are counted. The force on a site is shared equally among its particles. Triples are
@@ -158,6 +162,17 @@ public:
      */
     void setDampingScale(double scale);
     /**
+     * Get the centroid damping radius R0 (in nm): each triple is multiplied by g(r_AB) g(r_AC) g(r_BC) with
+     * g(r) = 1 - exp(-(r/R0)^6). 0 means no centroid damping.
+     */
+    double getCentroidDampingRadius() const;
+    /**
+     * Set the centroid damping radius R0 (in nm): each triple is multiplied by g(r_AB) g(r_AC) g(r_BC) with
+     * g(r) = 1 - exp(-(r/R0)^6). 0 (the default) means no centroid damping. It is applied in addition to the damping
+     * method.
+     */
+    void setCentroidDampingRadius(double radius);
+    /**
      * Set whether to use periodic boundary conditions. Each site distance is that of the nearest periodic image,
      * as in CustomCentroidBondForce; the cutoff may exceed half the box size, in which case a triple still
      * interacts only through the nearest image of each of its pairs.
@@ -173,13 +188,14 @@ public:
      */
     void setAlchemicalParameterName(const std::string& name);
     /**
-     * Update the polarizabilities, frequencies and widths of the sites, the scale factor and the damping scale in a
+     * Update the polarizabilities, frequencies and widths of the sites, the scale factor, the damping scale and the
+     * centroid damping radius in a
      * Context to match those stored in this Force object. This method provides an efficient method to update certain
      * parameters in an existing Context without needing to reinitialize it. Simply call setSiteParameters() to modify
      * this object's parameters, then call updateParametersInContext() to copy them over to the Context.
      *
      * The particles and molecules of the sites, the alchemical flags, the damping method and the cutoff cannot be
-     * changed by this method.
+     * changed by this method, nor can the centroid damping be switched on or off (a nonzero radius can be changed).
      */
     void updateParametersInContext(OpenMM::Context& context);
     /**
@@ -194,7 +210,7 @@ protected:
     OpenMM::ForceImpl* createImpl() const;
 private:
     class SiteInfo;
-    double cutoffDistance, scaleFactor, dampingScale;
+    double cutoffDistance, scaleFactor, dampingScale, centroidDampingRadius;
     DampingMethod dampingMethod;
     bool usePeriodic;
     std::string alchemicalParameterName;

@@ -465,7 +465,7 @@ void CommonCalcInteraxThreeBodyForceKernel::initialize(const System& system, con
     siteParticles.upload(particleVector);
     siteMolecules.upload(moleculeVector);
     initializeParameters(cc, siteParams, numSites, 4, "interaxSiteParams");
-    initializeParameters(cc, globals, 3, 1, "interaxThreeBodyGlobals");
+    initializeParameters(cc, globals, 4, 1, "interaxThreeBodyGlobals");
     setParameters(force);
 
     // The neighbor lists (each site lists all its neighbors) start small and grow when they overflow
@@ -490,6 +490,9 @@ void CommonCalcInteraxThreeBodyForceKernel::initialize(const System& system, con
         defines["USE_PERIODIC"] = "1";
     if (force.getDampingMethod() == InteraxThreeBodyForce::TangToennies)
         defines["USE_DAMPING"] = "1";
+    useCentroidDamping = (force.getCentroidDampingRadius() > 0);
+    if (useCentroidDamping)
+        defines["USE_CENTROID_DAMPING"] = "1";
     defines["TILE_SIZE"] = cc.intToString(TileSize);
     defines["TRIPLE_BLOCK_SIZE"] = cc.intToString(TripleBlockSize);
     ComputeProgram program = cc.compileProgram(CommonInteraxKernelSources::interaxThreeBody, defines);
@@ -540,7 +543,7 @@ double CommonCalcInteraxThreeBodyForceKernel::execute(ContextImpl& context, bool
     ContextSelector selector(cc);
     double lambda = (hasAlchemicalSites ? context.getParameter(alchemicalParameter) : 1.0);
     if (lambda != lastLambda) {
-        vector<double> values = {lambda, scaleFactor, dampingScale};
+        vector<double> values = {lambda, scaleFactor, dampingScale, useCentroidDamping ? 1/centroidDampingRadius : 0.0};
         globals.upload(values, true);
         lastLambda = lambda;
     }
@@ -576,6 +579,8 @@ void CommonCalcInteraxThreeBodyForceKernel::copyParametersToContext(ContextImpl&
     ContextSelector selector(cc);
     if (force.getNumSites() != numSites)
         throw OpenMMException("updateParametersInContext: The number of sites has changed");
+    if (numSites > 0 && (force.getCentroidDampingRadius() > 0) != useCentroidDamping)
+        throw OpenMMException("updateParametersInContext: The centroid damping cannot be switched on or off");
     if (numSites > 0)
         setParameters(force);
     cc.invalidateMolecules();
@@ -594,5 +599,6 @@ void CommonCalcInteraxThreeBodyForceKernel::setParameters(const InteraxThreeBody
     siteParams.upload(paramVector, true);
     scaleFactor = force.getScaleFactor();
     dampingScale = force.getDampingScale();
+    centroidDampingRadius = force.getCentroidDampingRadius();
     lastLambda = -1; // Force the global parameters to be uploaded with the new values.
 }

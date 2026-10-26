@@ -36,7 +36,7 @@ using namespace InteraxPlugin;
 using namespace OpenMM;
 using namespace std;
 
-InteraxThreeBodyForce::InteraxThreeBodyForce() : cutoffDistance(1.2), scaleFactor(1.0), dampingScale(1.0), dampingMethod(NoDamping),
+InteraxThreeBodyForce::InteraxThreeBodyForce() : cutoffDistance(1.2), scaleFactor(1.0), dampingScale(1.0), centroidDampingRadius(0.0), dampingMethod(NoDamping),
         usePeriodic(false), alchemicalParameterName("lambda_sterics") {
 }
 
@@ -99,6 +99,16 @@ double InteraxThreeBodyForce::getDampingScale() const {
 
 void InteraxThreeBodyForce::setDampingScale(double scale) {
     dampingScale = scale;
+}
+
+double InteraxThreeBodyForce::getCentroidDampingRadius() const {
+    return centroidDampingRadius;
+}
+
+void InteraxThreeBodyForce::setCentroidDampingRadius(double radius) {
+    if (radius < 0)
+        throw OpenMMException("InteraxThreeBodyForce: The centroid damping radius cannot be negative");
+    centroidDampingRadius = radius;
 }
 
 void InteraxThreeBodyForce::setUsesPeriodicBoundaryConditions(bool periodic) {

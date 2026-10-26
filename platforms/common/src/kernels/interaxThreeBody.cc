@@ -81,6 +81,26 @@ DEVICE real tangToenniesDamping3(real x, real* derivative) {
 }
 #endif
 
+#ifdef USE_CENTROID_DAMPING
+/**
+ * The centroid damping g = 1 - exp(-x^6) of a pair of sites, x = r/R0, and its derivative dg/dx = 6 x^5 exp(-x^6).
+ * For x^6 < 0.1 the closed form cancels, and the series of 1 - exp(-y) is used instead (relative error < 3e-15).
+ */
+DEVICE real centroidDamping(real x, real* derivative) {
+    const real x3 = x*x*x;
+    const real y = x3*x3;
+    const real expY = EXP(-y);
+    *derivative = 6*x3*x*x*expY;
+    if (y < (real) 0.1) {
+        real series = 1;
+        for (int k = 9; k >= 2; k--)
+            series = 1-series*y/k;
+        return y*series;
+    }
+    return 1-expY;
+}
+#endif
+
 // The molecule recorded for a candidate that is not a neighbor of A (when scanning all the sites after an overflow).
 #define NOT_A_NEIGHBOR (-2147483647-1)
 
@@ -135,6 +155,9 @@ KERNEL void computeTriples(int numSites, int maxNeighbors, GLOBAL const real4* R
     const real scaleFactor = globals[1];
 #ifdef USE_DAMPING
     const real dampingScale = globals[2];
+#endif
+#ifdef USE_CENTROID_DAMPING
+    const real invDampingRadius = globals[3];
 #endif
     mixed energy = 0;
     for (int siteA = GROUP_ID; siteA < numSites; siteA += NUM_GROUPS) {
@@ -214,6 +237,22 @@ KERNEL void computeTriples(int numSites, int maxNeighbors, GLOBAL const real4* R
                     dEda = dEda*damping + a*(tripleEnergy*rateA*dfA*fB*fC/lengthA);
                     dEdb = dEdb*damping + b*(tripleEnergy*fA*rateB*dfB*fC/lengthB);
                     tripleEnergy *= damping;
+#endif
+#ifdef USE_CENTROID_DAMPING
+                    // Centroid damping g(r) = 1 - exp(-(r/R0)^6) of the three pairs; only g(|a|) and g(|b|) depend on
+                    // the position of site A.
+                    {
+                        const real lenA = SQRT(u), lenB = SQRT(v), lenC = SQRT(w);
+                        real dgA, dgB;
+                        const real gA = centroidDamping(lenA*invDampingRadius, &dgA);
+                        const real gB = centroidDamping(lenB*invDampingRadius, &dgB);
+                        real unusedDg;
+                        const real gC = centroidDamping(lenC*invDampingRadius, &unusedDg);
+                        const real g = gA*gB*gC;
+                        dEda = dEda*g + a*(tripleEnergy*invDampingRadius*dgA*gB*gC/lenA);
+                        dEdb = dEdb*g + b*(tripleEnergy*gA*invDampingRadius*dgB*gC/lenB);
+                        tripleEnergy *= g;
+                    }
 #endif
                     energy += tripleEnergy;
                     forceA += dEda + dEdb;

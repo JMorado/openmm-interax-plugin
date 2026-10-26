@@ -1,7 +1,7 @@
 """
 Test InteraxThreeBodyForce on its own, without InteraxFF: random sites in a periodic box, in the molecular form (one
 site per molecule, the centroid of several particles, no damping) and the atomic form (one site per atom, triples
-within a molecule excluded, Tang-Toennies damping). The energy is compared with an independent NumPy evaluation, the
+within a molecule excluded, Tang-Toennies damping), each also with the centroid damping 1 - exp(-(r/R0)^6). The energy is compared with an independent NumPy evaluation, the
 Reference forces with finite differences of the energy, and every other platform with Reference.
 
 Usage: python -m pytest test_three_body.py      (INTERAX_PLUGIN_PREFIX: where the plugin is installed)
@@ -29,7 +29,11 @@ PLATFORMS = [("CPU", None), ("CUDA", "mixed"), ("CUDA", "double")]
 AVAILABLE = {openmm.Platform.getPlatform(i).getName() for i in range(openmm.Platform.getNumPlatforms())}
 
 
-def make_system(atomic, seed=1):
+# (atomic, centroid damping radius R0 in nm): R0 = 0.5 nm damps a large part of the triples of this box
+VARIANTS = [(False, 0.0), (True, 0.0), (False, 0.5), (True, 0.5)]
+
+
+def make_system(atomic, seed=1, centroid_r0=0.0):
     """A box of triatomic molecules and an InteraxThreeBodyForce on them, molecular or atomic."""
     rng = np.random.default_rng(seed)
     centres = rng.random((NUM_MOLECULES, 3)) * BOX
@@ -42,6 +46,7 @@ def make_system(atomic, seed=1):
     force.setCutoffDistance(CUTOFF)
     force.setUsesPeriodicBoundaryConditions(True)
     force.setScaleFactor(1.3)
+    force.setCentroidDampingRadius(centroid_r0)
     if atomic:
         force.setDampingMethod(ip.InteraxThreeBodyForce.TangToennies)
         force.setDampingScale(0.8)
@@ -72,6 +77,7 @@ def numpy_energy(force, positions):
     sites = np.array(sites)
     damped = force.getDampingMethod() == ip.InteraxThreeBodyForce.TangToennies
     beta, scale, cutoff = force.getDampingScale(), force.getScaleFactor(), force.getCutoffDistance()
+    r0 = force.getCentroidDampingRadius()
 
     def delta(i, j):
         d = sites[j] - sites[i]
@@ -91,6 +97,8 @@ def numpy_energy(force, positions):
         e = c9 * (1 + 3 * cosines) / (ra * rb * rc) ** 3
         if damped:
             e *= tang_toennies_3(2 * beta * ra / (s1 + s2)) * tang_toennies_3(2 * beta * rb / (s1 + s3)) * tang_toennies_3(2 * beta * rc / (s2 + s3))
+        if r0 > 0:
+            e *= -math.expm1(-((ra / r0) ** 6)) * -math.expm1(-((rb / r0) ** 6)) * -math.expm1(-((rc / r0) ** 6))
         energy += e
         magnitude += abs(e)
     return energy, magnitude
@@ -105,9 +113,9 @@ def evaluate(system, positions, platform, precision=None):
             state.getForces(asNumpy=True).value_in_unit(openmm.unit.kilojoule_per_mole / openmm.unit.nanometer))
 
 
-@pytest.mark.parametrize("atomic", [False, True])
-def test_reference_energy_and_forces(atomic):
-    system, force, positions = make_system(atomic)
+@pytest.mark.parametrize("atomic,centroid_r0", VARIANTS)
+def test_reference_energy_and_forces(atomic, centroid_r0):
+    system, force, positions = make_system(atomic, centroid_r0=centroid_r0)
     energy, forces = evaluate(system, positions, "Reference")
     expected, _ = numpy_energy(force, positions)
     assert expected != 0
@@ -123,19 +131,20 @@ def test_reference_energy_and_forces(atomic):
     assert abs(numeric - analytic) <= 1e-5 * abs(analytic), (numeric, analytic)
 
 
-@pytest.mark.parametrize("atomic", [False, True])
+@pytest.mark.parametrize("atomic,centroid_r0", VARIANTS)
 @pytest.mark.parametrize("platform,precision", PLATFORMS)
-def test_platform_matches_reference(atomic, platform, precision):
+def test_platform_matches_reference(atomic, centroid_r0, platform, precision):
     if platform not in AVAILABLE:
         pytest.skip(f"the {platform} platform is not available")
-    system, force, positions = make_system(atomic)
+    system, force, positions = make_system(atomic, centroid_r0=centroid_r0)
     energy, forces = evaluate(system, positions, platform, precision)
     reference_energy, reference_forces = evaluate(system, positions, "Reference")
     _, magnitude = numpy_energy(force, positions)
     tolerance = 1e-10 if precision == "double" else 2e-5
     assert abs(energy - reference_energy) <= tolerance * magnitude, (energy, reference_energy, magnitude)
     rms = np.sqrt((reference_forces ** 2).mean())
-    assert np.abs(forces - reference_forces).max() <= 10 * tolerance * rms
+    # CUDA accumulates forces in 2^-32 fixed point: an absolute floor of ~4 quanta (the damped variants have small forces)
+    assert np.abs(forces - reference_forces).max() <= max(10 * tolerance * rms, 1e-9)
 
 
 def test_neighbor_list_growth():
@@ -159,11 +168,25 @@ def test_neighbor_list_growth():
     assert np.abs(forces - reference_forces).max() <= 1e-8 * np.sqrt((reference_forces ** 2).mean())
 
 
-def test_serialization():
-    system, force, positions = make_system(True)
-    deserialized = openmm.XmlSerializer.deserialize(openmm.XmlSerializer.serialize(force))
+def test_centroid_damping_off_is_unchanged():
+    """R0 = 0 is exactly the undamped force, and a very small R0 (g = 1 to rounding at these distances) too."""
+    system, force, positions = make_system(False)
+    energy, forces = evaluate(system, positions, "Reference")
+    force.setCentroidDampingRadius(1e-4)
+    energy2, forces2 = evaluate(system, positions, "Reference")
+    assert energy2 == energy and np.array_equal(forces2, forces)
+
+
+@pytest.mark.parametrize("centroid_r0", [0.0, 0.5])
+def test_serialization(centroid_r0):
+    system, force, positions = make_system(True, centroid_r0=centroid_r0)
+    xml = openmm.XmlSerializer.serialize(force)
+    # Without centroid damping the version 2 format is written (readable by older builds)
+    assert ('version="2"' in xml) == (centroid_r0 == 0.0) and ("centroidDampingRadius" in xml) == (centroid_r0 != 0.0)
+    deserialized = openmm.XmlSerializer.deserialize(xml)
     copy = ip.InteraxThreeBodyForce.cast(deserialized)  # deserialized keeps ownership of the force
     assert copy.getNumSites() == force.getNumSites()
     assert copy.getDampingMethod() == force.getDampingMethod() and copy.getDampingScale() == force.getDampingScale()
+    assert copy.getCentroidDampingRadius() == force.getCentroidDampingRadius()
     for i in range(force.getNumSites()):
         assert copy.getSiteParameters(i) == force.getSiteParameters(i)

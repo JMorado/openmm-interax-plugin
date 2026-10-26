@@ -199,7 +199,8 @@ def convert_three_body(force, dispersion):
     """
     Convert the molecular ATM CustomCentroidBondForce. The export stores only the C9 of every triple, so the
     molecular polarizabilities and frequencies are recomputed from the atomic dispersion parameters, exactly as the
-    export computes them, and checked against the stored C9 values.
+    export computes them, and checked against the stored C9 values. The centroid damping radius of the export (global
+    parameter atm_damping_r0, if present) becomes the plugin's centroid damping radius.
     """
     expression = force.getEnergyFunction()
     if force.getNumGroupsPerBond() != 3 or "C9" not in expression:
@@ -242,6 +243,11 @@ def convert_three_body(force, dispersion):
         if abs(ratio - scale) > 1e-6 * abs(scale):
             raise ValueError(f"The stored C9 of triple {tuple(groups)} does not match the molecular parameters.")
     plugin.setScaleFactor(1.0 if scale is None else scale)
+    # Centroid damping g(r) = 1 - exp(-(r/R0)^6) of every pair of a triple (interax.openmm.add_molecular_atm_dispersion_force
+    # with damping_r0 > 0 stores R0 in nm as the global parameter atm_damping_r0); absent means undamped.
+    r0 = _global_parameters(force).get("atm_damping_r0", 0.0)
+    if r0 > 0:
+        plugin.setCentroidDampingRadius(r0)
     plugin.setForceGroup(force.getForceGroup())
     plugin.setName(type(plugin).__name__)
     return plugin

@@ -144,7 +144,7 @@ private:
 class CommonCalcInteraxThreeBodyForceKernel : public CalcInteraxThreeBodyForceKernel {
 public:
     CommonCalcInteraxThreeBodyForceKernel(std::string name, const OpenMM::Platform& platform, OpenMM::ComputeContext& cc) :
-            CalcInteraxThreeBodyForceKernel(name, platform), cc(cc), numSites(0), numEvaluations(0), hasComputed(false), lastLambda(-1) {
+            CalcInteraxThreeBodyForceKernel(name, platform), cc(cc), numSites(0), numEvaluations(0), hasComputed(false), useCentroidDamping(false), lastLambda(-1) {
     }
     void initialize(const OpenMM::System& system, const InteraxThreeBodyForce& force);
     double execute(OpenMM::ContextImpl& context, bool includeForces, bool includeEnergy);
@@ -159,8 +159,8 @@ private:
     void checkNeighborListSize();
     OpenMM::ComputeContext& cc;
     int numSites, maxNeighbors, numEvaluations;
-    bool periodic, hasAlchemicalSites, hasComputed;
-    double scaleFactor, dampingScale, lastLambda;
+    bool periodic, hasAlchemicalSites, hasComputed, useCentroidDamping;
+    double scaleFactor, dampingScale, centroidDampingRadius, lastLambda;
     std::string alchemicalParameter;
     OpenMM::ComputeArray siteOffsets, siteParticles, siteMolecules, siteParams, sites, neighbors, neighborDeltas, numNeighbors, maxNeighborCount,
             siteForce, globals;

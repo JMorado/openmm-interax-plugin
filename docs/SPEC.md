@@ -129,6 +129,14 @@ Two forms are supported:
   `x = beta 2 r_ij / (s_i + s_j)` (as in the dispersion), with the dispersion widths. Triples with two sites of the same
   molecule are excluded. This is not a term of the trained models: its scale and damping would have to be fitted.
 
+Independently of the damping method, a **centroid damping radius** `R0 > 0` (`setCentroidDampingRadius`, nm) multiplies
+each `f_ij` by `g(r_ij) = 1 - exp(-(r_ij/R0)^6)` (`g' = 6 (r/R0)^6 exp(-(r/R0)^6) / r`). The undamped molecular ATM
+diverges as `r^-3` per pair and ran away to -1e4..-1e5 kJ/mol when the centroids of flexible glycols / polyamines came
+within 1.5-2 A. `R0 = 0` (the default) leaves every result bit-identical. The export
+(`add_molecular_atm_dispersion_force(damping_r0=...)`, global parameter `atm_damping_r0`), the converter and the torch
+trimer energy (`ForceField.atm_damping_r0`, Angstrom) use the same function. The GPU kernel evaluates `1 - exp(-y)`
+by its series below `y = 0.1`. Serialized with version 3 (version 2, readable by older builds, when `R0 = 0`).
+
 The angle at each vertex is the angle between the minimum-image vectors to its two neighbors, exactly as in the
 export (`theta = angle(g1, g2, g3)` of `CustomCentroidBondForce`). With `a = x_B - x_A`, `b = x_C - x_A`,
 `c = x_C - x_B` (each the minimum image under periodic boundary conditions), `u, v, w` their squared lengths,
