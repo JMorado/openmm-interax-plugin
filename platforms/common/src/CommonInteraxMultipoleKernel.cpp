@@ -596,23 +596,26 @@ void CommonCalcInteraxMultipoleForceKernel::initialize(const System& system, con
         }
     }
 
-    // Add the interaction to the default nonbonded kernel.
+    // Add the real-space interaction. By default (as HippoNonbondedForce) it replaces the source of the default nonbonded
+    // kernel, which then cannot evaluate other interactions. With useOwnKernel the force only registers its cutoff and
+    // exclusions with the nonbonded utilities (as AMOEBA does), so they build the neighbor list it needs, and evaluates
+    // the interaction with a kernel of its own (computeElectrostatics()), built from the same source.
 
     string physicsDefines = definesToSource(getPhysicsDefines());
     NonbondedUtilities& nb = cc.getNonbondedUtilities();
-    nb.setKernelSource(physicsDefines+CommonInteraxKernelSources::interaxMultipoleInteractionHeader+CommonInteraxKernelSources::interaxMultipoleNonbonded);
-    nb.addArgument(ComputeParameterInfo(torque, "torqueBuffers", "mm_ulong", 1, false));
-    nb.addArgument(ComputeParameterInfo(extrapolatedDipole, "extrapolatedDipole", "real", 1));
-    nb.addParameter(ComputeParameterInfo(coreCharge, "coreCharge", "real", 1));
-    nb.addParameter(ComputeParameterInfo(valenceCharge, "valenceCharge", "real", 1));
-    nb.addParameter(ComputeParameterInfo(alpha, "alpha", "real", 1));
-    nb.addParameter(ComputeParameterInfo(labDipoles,"dipole", "real", 3));
-    nb.addParameter(ComputeParameterInfo(inducedDipole, "inducedDipole", "real", 3));
-    nb.addParameter(ComputeParameterInfo(labQuadrupoles[0], "qXX", "real", 1));
-    nb.addParameter(ComputeParameterInfo(labQuadrupoles[1], "qXY", "real", 1));
-    nb.addParameter(ComputeParameterInfo(labQuadrupoles[2], "qXZ", "real", 1));
-    nb.addParameter(ComputeParameterInfo(labQuadrupoles[3], "qYY", "real", 1));
-    nb.addParameter(ComputeParameterInfo(labQuadrupoles[4], "qYZ", "real", 1));
+    useOwnKernel = force.getUseOwnKernel();
+    electrostaticsArgs = {{&torque, "torqueBuffers", "mm_ulong", 1, false}, {&extrapolatedDipole, "extrapolatedDipole", "real", 1, true}};
+    electrostaticsParams = {{&coreCharge, "coreCharge", "real", 1, true}, {&valenceCharge, "valenceCharge", "real", 1, true},
+            {&alpha, "alpha", "real", 1, true}, {&labDipoles, "dipole", "real", 3, true}, {&inducedDipole, "inducedDipole", "real", 3, true},
+            {&labQuadrupoles[0], "qXX", "real", 1, true}, {&labQuadrupoles[1], "qXY", "real", 1, true}, {&labQuadrupoles[2], "qXZ", "real", 1, true},
+            {&labQuadrupoles[3], "qYY", "real", 1, true}, {&labQuadrupoles[4], "qYZ", "real", 1, true}};
+    if (!useOwnKernel) {
+        nb.setKernelSource(physicsDefines+CommonInteraxKernelSources::interaxMultipoleInteractionHeader+CommonInteraxKernelSources::interaxMultipoleNonbonded);
+        for (auto& a : electrostaticsArgs)
+            nb.addArgument(ComputeParameterInfo(*a.array, a.name, a.componentType, a.numComponents, a.constant));
+        for (auto& p : electrostaticsParams)
+            nb.addParameter(ComputeParameterInfo(*p.array, p.name, p.componentType, p.numComponents, p.constant));
+    }
     map<string, string> replacements;
     replacements["ENERGY_SCALE_FACTOR"] = cc.doubleToString(ONE_4PI_EPS0);
     replacements["MAX_EXTRAPOLATION_ORDER"] = cc.intToString(maxExtrapolationOrder);
@@ -621,7 +624,13 @@ void CommonCalcInteraxMultipoleForceKernel::initialize(const System& system, con
     replacements["PME_ALPHA"] = (usePME ? cc.doubleToString(pmeAlpha) : "0");
     replacements["SQRT_PI"] = cc.doubleToString(sqrt(M_PI));
     string interactionSource = cc.replaceStrings(CommonInteraxKernelSources::interaxMultipoleInteraction, replacements);
-    nb.addInteraction(usePME, usePME, true, force.getCutoffDistance(), exclusions, interactionSource, force.getForceGroup());
+    if (useOwnKernel) {
+        nb.addInteraction(usePME, usePME, true, force.getCutoffDistance(), exclusions, "", force.getForceGroup());
+        electrostaticsSource = interactionSource;
+        singlePairsPlaceholder.initialize<mm_int2>(cc, 1, "singlePairsPlaceholder");
+    }
+    else
+        nb.addInteraction(usePME, usePME, true, force.getCutoffDistance(), exclusions, interactionSource, force.getForceGroup());
     nb.setUsePadding(false);
 
     // Create the kernel for computing exceptions.
@@ -655,6 +664,7 @@ void CommonCalcInteraxMultipoleForceKernel::initialize(const System& system, con
     cc.addForce(new ForceInfo(force));
     cc.addPostComputation(new TorquePostComputation(*this));
     fieldThreadBlockSize = max(32, cc.getNonbondedUtilities().getForceThreadBlockSize());
+    forceThreadBlockSize = cc.getNonbondedUtilities().getForceThreadBlockSize();
 }
 
 void CommonCalcInteraxMultipoleForceKernel::createFieldKernel(const string& interactionSrc, vector<ComputeArray*> params,
@@ -752,6 +762,143 @@ void CommonCalcInteraxMultipoleForceKernel::createFieldKernel(const string& inte
         for (auto param : params)
             exceptionKernel->addArg(*param);
     }
+}
+
+ComputeKernel& CommonCalcInteraxMultipoleForceKernel::getElectrostaticsKernel(bool includeForces, bool includeEnergy) {
+    // The kernel of the real-space interactions for useOwnKernel: the same source, placeholders and defines that the
+    // CUDA nonbonded utilities use for the default kernel when HippoNonbondedForce replaces its source
+    // (CudaNonbondedUtilities::createInteractionKernel in OpenMM 8.1), for this force's parameters only. Its arguments
+    // are those of the default kernel, so it walks the same neighbor list.
+
+    int key = (includeForces ? 2 : 0) + (includeEnergy ? 1 : 0);
+    auto existing = electrostaticsKernels.find(key);
+    if (existing != electrostaticsKernels.end())
+        return existing->second;
+    NonbondedUtilities& nb = cc.getNonbondedUtilities();
+    const string suffixes[] = {"x", "y", "z", "w"};
+    stringstream localData, args, load1, broadcast, declareLocal, loadLocal2, load2j, load2g, clearLocal, shuffle;
+    int localDataSize = 0;
+    int elementSize = (cc.getUseDoublePrecision() ? sizeof(double) : sizeof(float));
+    for (auto& p : electrostaticsParams) {
+        string type = p.getType();
+        if (p.numComponents == 1)
+            localData << type << " " << p.name << ";\n";
+        else
+            for (int j = 0; j < p.numComponents; j++)
+                localData << p.componentType << " " << p.name << "_" << suffixes[j] << ";\n";
+        localDataSize += p.numComponents*elementSize;
+        args << ", " << (p.constant ? "const " : "") << type << "* __restrict__ global_" << p.name;
+        load1 << type << " " << p.name << "1 = global_" << p.name << "[atom1];\n";
+        broadcast << type << " shfl" << p.name << ";\n";
+        for (int j = 0; j < p.numComponents; j++) {
+            if (p.numComponents == 1)
+                broadcast << "shfl" << p.name << "=real_shfl(" << p.name << "1,j);\n";
+            else
+                broadcast << "shfl" << p.name << "." << suffixes[j] << "=real_shfl(" << p.name << "1." << suffixes[j] << ",j);\n";
+        }
+        declareLocal << type << " shfl" << p.name << ";\n";
+        loadLocal2 << "shfl" << p.name << " = global_" << p.name << "[j];\n";
+        load2j << type << " " << p.name << "2 = shfl" << p.name << ";\n";
+        load2g << type << " " << p.name << "2 = global_" << p.name << "[atom2];\n";
+        clearLocal << "shfl" << p.name << " = " << (p.numComponents == 1 ? "0" : "make_"+type+"(0)") << ";\n";
+        if (p.numComponents == 1)
+            shuffle << "shfl" << p.name << "=real_shfl(shfl" << p.name << ", tgx+1);\n";
+        else
+            for (int j = 0; j < p.numComponents; j++)
+                shuffle << "shfl" << p.name << "." << suffixes[j] << "=real_shfl(shfl" << p.name << "." << suffixes[j] << ", tgx+1);\n";
+    }
+    for (auto& a : electrostaticsArgs)
+        args << ", " << (a.constant ? "const " : "") << a.getType() << "* __restrict__ " << a.name;
+    stringstream broadcastWarpData, shuffleWarpData;
+    broadcastWarpData << "posq2.x = real_shfl(shflPosq.x, j);\nposq2.y = real_shfl(shflPosq.y, j);\n";
+    broadcastWarpData << "posq2.z = real_shfl(shflPosq.z, j);\nposq2.w = real_shfl(shflPosq.w, j);\n" << broadcast.str();
+    shuffleWarpData << "shflPosq.x = real_shfl(shflPosq.x, tgx+1);\nshflPosq.y = real_shfl(shflPosq.y, tgx+1);\n";
+    shuffleWarpData << "shflPosq.z = real_shfl(shflPosq.z, tgx+1);\nshflPosq.w = real_shfl(shflPosq.w, tgx+1);\n";
+    shuffleWarpData << "shflForce.x = real_shfl(shflForce.x, tgx+1);\nshflForce.y = real_shfl(shflForce.y, tgx+1);\n";
+    shuffleWarpData << "shflForce.z = real_shfl(shflForce.z, tgx+1);\n" << shuffle.str();
+    map<string, string> replacements;
+    replacements["COMPUTE_INTERACTION"] = electrostaticsSource;
+    replacements["ATOM_PARAMETER_DATA"] = localData.str();
+    replacements["PARAMETER_ARGUMENTS"] = args.str();
+    replacements["LOAD_ATOM1_PARAMETERS"] = load1.str();
+    replacements["BROADCAST_WARP_DATA"] = broadcastWarpData.str();
+    replacements["DECLARE_LOCAL_PARAMETERS"] = declareLocal.str();
+    replacements["LOAD_LOCAL_PARAMETERS_FROM_GLOBAL"] = loadLocal2.str();
+    replacements["LOAD_ATOM2_PARAMETERS"] = load2j.str();
+    replacements["LOAD_ATOM2_PARAMETERS_FROM_GLOBAL"] = load2g.str();
+    replacements["CLEAR_LOCAL_PARAMETERS"] = clearLocal.str();
+    replacements["INIT_DERIVATIVES"] = "";
+    replacements["SAVE_DERIVATIVES"] = "";
+    replacements["SHUFFLE_WARP_DATA"] = shuffleWarpData.str();
+    map<string, string> defines;
+    if (nb.getUseCutoff()) {
+        defines["USE_CUTOFF"] = "1";
+        defines["USE_NEIGHBOR_LIST"] = "1";
+    }
+    if (usePME)
+        defines["USE_PERIODIC"] = "1";
+    defines["USE_EXCLUSIONS"] = "1";
+    defines["USE_SYMMETRIC"] = "1";
+    defines["ENABLE_SHUFFLE"] = "1";
+    if (includeForces)
+        defines["INCLUDE_FORCES"] = "1";
+    if (includeEnergy)
+        defines["INCLUDE_ENERGY"] = "1";
+    defines["THREAD_BLOCK_SIZE"] = cc.intToString(forceThreadBlockSize);
+    defines["CUTOFF_SQUARED"] = cc.doubleToString(cutoff*cutoff);
+    defines["MAX_CUTOFF"] = cc.doubleToString(cutoff);
+    defines["NUM_ATOMS"] = cc.intToString(cc.getNumAtoms());
+    defines["PADDED_NUM_ATOMS"] = cc.intToString(cc.getPaddedNumAtoms());
+    defines["NUM_BLOCKS"] = cc.intToString(cc.getNumAtomBlocks());
+    defines["TILE_SIZE"] = cc.intToString(ComputeContext::TileSize);
+    int numExclusionTiles = nb.getExclusionTiles().getSize();
+    defines["NUM_TILES_WITH_EXCLUSIONS"] = cc.intToString(numExclusionTiles);
+    int numContexts = cc.getNumContexts();
+    defines["FIRST_EXCLUSION_TILE"] = cc.intToString(cc.getContextIndex()*numExclusionTiles/numContexts);
+    defines["LAST_EXCLUSION_TILE"] = cc.intToString((cc.getContextIndex()+1)*numExclusionTiles/numContexts);
+    if ((localDataSize/4)%2 == 0 && !cc.getUseDoublePrecision())
+        defines["PARAMETER_SIZE_IS_EVEN"] = "1";
+    string src = definesToSource(getPhysicsDefines())+cc.replaceStrings(CommonInteraxKernelSources::interaxMultipoleInteractionHeader+
+            CommonInteraxKernelSources::interaxMultipoleNonbonded, replacements);
+    ComputeProgram program = cc.compileProgram(src, defines);
+    ComputeKernel kernel = program->createKernel("computeNonbonded");
+    kernel->addArg(cc.getLongForceBuffer());
+    kernel->addArg(cc.getEnergyBuffer());
+    kernel->addArg(cc.getPosq());
+    kernel->addArg(nb.getExclusions());
+    kernel->addArg(nb.getExclusionTiles());
+    kernel->addArg((unsigned int) nb.getStartTileIndex());
+    kernel->addArg((unsigned long long) nb.getNumTiles());
+    if (nb.getUseCutoff()) {
+        kernel->addArg(nb.getInteractingTiles());
+        kernel->addArg(nb.getInteractionCount());
+        for (int i = 0; i < 5; i++)
+            kernel->addArg(); // Periodic box, set in computeElectrostatics()
+        kernel->addArg((unsigned int) maxTiles);
+        kernel->addArg(nb.getBlockCenters());
+        kernel->addArg(nb.getBlockBoundingBoxes());
+        kernel->addArg(nb.getInteractingAtoms());
+        // The interaction does not support the separate pair list (as with HippoNonbondedForce, the nonbonded utilities
+        // then never use it), so the kernel does not read the single pairs.
+        kernel->addArg(0u);
+        kernel->addArg(singlePairsPlaceholder);
+    }
+    for (auto& p : electrostaticsParams)
+        kernel->addArg(*p.array);
+    for (auto& a : electrostaticsArgs)
+        kernel->addArg(*a.array);
+    electrostaticsKernels[key] = kernel;
+    return electrostaticsKernels[key];
+}
+
+void CommonCalcInteraxMultipoleForceKernel::computeElectrostatics(bool includeForces, bool includeEnergy) {
+    NonbondedUtilities& nb = cc.getNonbondedUtilities();
+    ComputeKernel& kernel = getElectrostaticsKernel(includeForces, includeEnergy);
+    if (nb.getUseCutoff()) {
+        setMultipoleBoxArgs(cc, kernel, 9);
+        kernel->setArg(14, (unsigned int) maxTiles); // Arrays are bound by reference; maxTiles follows the capacity
+    }
+    kernel->execute(nb.getNumForceThreadBlocks()*forceThreadBlockSize, forceThreadBlockSize);
 }
 
 double CommonCalcInteraxMultipoleForceKernel::execute(ContextImpl& context, bool includeForces, bool includeEnergy) {
@@ -895,6 +1042,12 @@ double CommonCalcInteraxMultipoleForceKernel::execute(ContextImpl& context, bool
             setMultipoleBoxArgs(cc, computeExceptionsKernel, 19);
         computeExceptionsKernel->execute(exceptionAtoms.getSize());
     }
+
+    // Compute the real-space interactions, if this force has its own kernel for them (otherwise the default nonbonded
+    // kernel computes them after this).
+
+    if (useOwnKernel && (includeForces || includeEnergy))
+        computeElectrostatics(includeForces, includeEnergy);
 
     // Record the current atom positions so we can tell later if they have changed.
 

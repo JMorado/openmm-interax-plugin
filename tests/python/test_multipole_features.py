@@ -8,6 +8,8 @@ systems (electrostatics and polarization only):
   lambda         the first molecule alchemical, lambda_electrostatics = 0.3 and the end states (lambda = 0 against the
                  system without its multipoles and polarizabilities)
   serialization  an XML round trip of the force gives the same energy
+  own kernel     setUseOwnKernel(True): the force alone, and in one context with a NonbondedForce (Lennard-Jones, same
+                 exclusions) that uses the default nonbonded kernel, against the Reference platform
 
 Systems: the non-periodic cluster and the periodic methanol box of compare_export.py.
 Usage: python test_multipole_features.py [--platform CUDA] [--precision double]
@@ -94,6 +96,29 @@ def run(name, topology, positions, platform, precision, ff, nagl, tolerance):
     # two GPU contexts in single or mixed precision differ by rounding (the order of the atomic sums)
     ok &= report("XML round trip", evaluate(clone, positions, platform, precision, lam),
                  evaluate(reference, positions, platform, precision, lam), 1e-12 if precision == "double" else 1e-7)
+
+    # own kernel: alone, and sharing the context (and neighbor list) with a NonbondedForce
+    force = interaxplugin_convert.convert_multipoles(hippo, core_damping=True, core_damping_scale=0.6, mutual_damping_scale=0.8)
+    force.setUseOwnKernel(True)
+    if not interaxplugin.InteraxMultipoleForce.cast(openmm.XmlSerializer.deserialize(openmm.XmlSerializer.serialize(force))).getUseOwnKernel():
+        print("  FAIL useOwnKernel lost in the XML round trip")
+        ok = False
+    own = single(system, force)
+    ok &= report("own kernel", evaluate(own, positions, platform, precision), evaluate(own, positions, "Reference", "double"), tolerance)
+    lj = openmm.NonbondedForce()
+    periodic = hippo.getNonbondedMethod() == openmm.HippoNonbondedForce.PME
+    lj.setNonbondedMethod(openmm.NonbondedForce.PME if periodic else openmm.NonbondedForce.NoCutoff)
+    lj.setCutoffDistance(force.getCutoffDistance())
+    lj.setUseDispersionCorrection(False)
+    for i in range(force.getNumParticles()):
+        lj.addParticle(0.0, 0.3, 0.2)
+    for k in range(hippo.getNumExceptions()):  # the exceptions of force (convert_multipoles copies them)
+        i, j = hippo.getExceptionParameters(k)[:2]
+        lj.addException(i, j, 0.0, 1.0, 0.0)
+    lj.setForceGroup(1)
+    own.addForce(lj)
+    ok &= report("own kernel + NonbondedForce, one context", evaluate(own, positions, platform, precision),
+                 evaluate(own, positions, "Reference", "double"), tolerance)
     return ok
 
 

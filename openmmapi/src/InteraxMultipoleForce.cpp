@@ -40,7 +40,7 @@ using namespace OpenMM;
 using namespace std;
 
 InteraxMultipoleForce::InteraxMultipoleForce() : nonbondedMethod(NoCutoff), cutoffDistance(1.0), ewaldErrorTol(1e-4), alpha(0.0),
-        nx(0), ny(0), nz(0), coreDamping(false), coreDampingScale(1.0), mutualDampingScale(1.0), alchemicalParameterName("lambda_electrostatics") {
+        nx(0), ny(0), nz(0), coreDamping(false), useOwnKernel(false), coreDampingScale(1.0), mutualDampingScale(1.0), alchemicalParameterName("lambda_electrostatics") {
     extrapolationCoefficients = {0.042, 0.635, 0.414};
 }
 
@@ -96,6 +96,14 @@ double InteraxMultipoleForce::getEwaldErrorTolerance() const {
 
 void InteraxMultipoleForce::setEwaldErrorTolerance(double tol) {
     ewaldErrorTol = tol;
+}
+
+bool InteraxMultipoleForce::getUseOwnKernel() const {
+    return useOwnKernel;
+}
+
+void InteraxMultipoleForce::setUseOwnKernel(bool enabled) {
+    useOwnKernel = enabled;
 }
 
 bool InteraxMultipoleForce::getCoreDamping() const {

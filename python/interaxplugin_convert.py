@@ -305,7 +305,36 @@ def convert_multipoles(hippo, core_damping=False, mutual_damping_scale=1.0, alch
     return plugin
 
 
-def convert_system(system, copy=True, overlap="exact"):
+def unwrap_multipoles(system):
+    """
+    Replace, in place, each CustomCVForce that only wraps an InteraxMultipoleForce (its energy is the collective
+    variable itself, with no global parameters) by a copy of that force with its own GPU kernel (setUseOwnKernel), in
+    the wrapper's force group, at the end of the force list. The force can then share the context with the other
+    nonbonded forces, which saves the inner context of the wrapper. Returns the number of forces unwrapped.
+    """
+    found = []
+    for index in range(system.getNumForces()):
+        force = system.getForce(index)
+        if (isinstance(force, openmm.CustomCVForce) and force.getNumCollectiveVariables() == 1 and force.getNumGlobalParameters() == 0
+                and force.getNumEnergyParameterDerivatives() == 0
+                and force.getEnergyFunction().strip() == force.getCollectiveVariableName(0)
+                and ip.InteraxMultipoleForce.isinstance(force.getCollectiveVariable(0))):
+            copy = openmm.XmlSerializer.deserialize(openmm.XmlSerializer.serialize(force.getCollectiveVariable(0)))
+            typed = ip.InteraxMultipoleForce.cast(copy)  # a view of copy, which owns the force until addForce
+            typed.setUseOwnKernel(True)
+            typed.setForceGroup(force.getForceGroup())
+            found.append((index, copy))
+    for index, _ in reversed(found):
+        system.removeForce(index)
+    for _, copy in found:
+        system.addForce(copy)
+    return len(found)
+
+
+_unwrap_multipoles = unwrap_multipoles
+
+
+def convert_system(system, copy=True, overlap="exact", unwrap_multipoles=False):
     """
     Return a copy of an exported InteraxFF System in which the dispersion, exchange repulsion, short-range correction
     and molecular three-body dispersion use the plugin forces, named after their classes. Forces keep their group;
@@ -316,6 +345,9 @@ def convert_system(system, copy=True, overlap="exact"):
     InteraxFF Taylor scheme of the export, evaluated as the export does (the converted forces reproduce it to
     rounding), and with overlap="exact" the plugin's accurate scheme (the exact integral, which the export
     approximates to ~1e-6 relative).
+
+    With unwrap_multipoles=True, an InteraxMultipoleForce wrapped in a CustomCVForce is also put directly into the
+    System with its own GPU kernel (see unwrap_multipoles()).
     """
     if overlap not in ("export", "exact"):
         raise ValueError(f"overlap must be 'export' or 'exact', got {overlap!r}")
@@ -344,4 +376,6 @@ def convert_system(system, copy=True, overlap="exact"):
     for index in sorted(replacements):
         if replacements[index] is not None:
             system.addForce(replacements[index])
+    if unwrap_multipoles:
+        _unwrap_multipoles(system)
     return system

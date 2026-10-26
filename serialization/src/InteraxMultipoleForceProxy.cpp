@@ -52,6 +52,7 @@ void InteraxMultipoleForceProxy::serialize(const void* object, SerializationNode
     force.getPMEParameters(alpha, nx, ny, nz);
     node.setDoubleProperty("pmeAlpha", alpha).setIntProperty("pmeNx", nx).setIntProperty("pmeNy", ny).setIntProperty("pmeNz", nz);
     node.setBoolProperty("coreDamping", force.getCoreDamping());
+    node.setBoolProperty("useOwnKernel", force.getUseOwnKernel());
     node.setDoubleProperty("mutualDampingScale", force.getMutualDampingScale());
     node.setDoubleProperty("coreDampingScale", force.getCoreDampingScale());
     node.setStringProperty("alchemicalParameter", force.getAlchemicalParameterName());
@@ -97,6 +98,7 @@ void* InteraxMultipoleForceProxy::deserialize(const SerializationNode& node) con
         force->setEwaldErrorTolerance(node.getDoubleProperty("ewaldErrorTolerance"));
         force->setPMEParameters(node.getDoubleProperty("pmeAlpha"), node.getIntProperty("pmeNx"), node.getIntProperty("pmeNy"), node.getIntProperty("pmeNz"));
         force->setCoreDamping(node.getBoolProperty("coreDamping"));
+        force->setUseOwnKernel(node.getBoolProperty("useOwnKernel", false));
         force->setMutualDampingScale(node.getDoubleProperty("mutualDampingScale"));
         force->setCoreDampingScale(node.getDoubleProperty("coreDampingScale", 1.0));
         force->setAlchemicalParameterName(node.getStringProperty("alchemicalParameter"));

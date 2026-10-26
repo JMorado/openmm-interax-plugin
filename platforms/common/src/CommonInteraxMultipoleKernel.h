@@ -73,10 +73,31 @@ protected:
     void createFieldKernel(const std::string& interactionSrc, std::vector<OpenMM::ComputeArray*> params, OpenMM::ComputeArray& fieldBuffer,
                            OpenMM::ComputeKernel& kernel, OpenMM::ComputeKernel& exceptionKernel, OpenMM::ComputeArray& exceptionScale);
     std::map<std::string, std::string> getPhysicsDefines() const;
+    OpenMM::ComputeKernel& getElectrostaticsKernel(bool includeForces, bool includeEnergy);
+    void computeElectrostatics(bool includeForces, bool includeEnergy);
+    /**
+     * A per-atom array that the kernel of the real-space interactions reads (useOwnKernel), as the nonbonded utilities
+     * would pass it: a parameter (copied to the local data of the tile) or a plain argument.
+     */
+    struct KernelParameter {
+        OpenMM::ComputeArray* array;
+        std::string name, componentType;
+        int numComponents;
+        bool constant;
+        std::string getType() const {
+            return (numComponents == 1 ? componentType : componentType+std::to_string(numComponents));
+        }
+    };
     int numParticles, maxExtrapolationOrder, maxTiles, fieldThreadBlockSize;
     int gridSizeX, gridSizeY, gridSizeZ;
     double pmeAlpha, cutoff, coreDampingScale, mutualDampingScale, lastLambda;
     bool usePME, coreDamping, hasAlchemicalParticles, hasInitializedKernels, multipolesAreValid;
+    bool useOwnKernel;
+    int forceThreadBlockSize;
+    std::string electrostaticsSource;
+    std::vector<KernelParameter> electrostaticsParams, electrostaticsArgs;
+    std::map<int, OpenMM::ComputeKernel> electrostaticsKernels;
+    OpenMM::ComputeArray singlePairsPlaceholder;
     std::string alchemicalParameter;
     std::vector<double> extrapolationCoefficients;
     OpenMM::ComputeContext& cc;

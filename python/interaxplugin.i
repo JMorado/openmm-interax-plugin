@@ -184,6 +184,8 @@ public:
     void setDampingMethod(DampingMethod method);
     double getDampingScale() const;
     void setDampingScale(double scale);
+    double getCentroidDampingRadius() const;
+    void setCentroidDampingRadius(double radius);
     void setUsesPeriodicBoundaryConditions(bool periodic);
     bool usesPeriodicBoundaryConditions() const;
     const std::string& getAlchemicalParameterName() const;
@@ -224,6 +226,8 @@ public:
     void setCoreDampingScale(double eta);
     double getMutualDampingScale() const;
     void setMutualDampingScale(double kappa);
+    bool getUseOwnKernel() const;
+    void setUseOwnKernel(bool enabled);
     const std::string& getAlchemicalParameterName() const;
     void setAlchemicalParameterName(const std::string& name);
     void updateParametersInContext(OpenMM::Context& context);

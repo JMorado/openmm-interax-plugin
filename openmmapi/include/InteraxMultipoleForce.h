@@ -235,6 +235,18 @@ public:
      */
     void setMutualDampingScale(double kappa);
     /**
+     * Get whether the GPU platforms evaluate the real-space multipole interactions with a kernel of this force's own
+     * (true) instead of replacing the source of the context's default nonbonded kernel, as HippoNonbondedForce does
+     * (false, the default). With true the force can share a Context with other forces that use the default nonbonded
+     * kernel (NonbondedForce, CustomNonbondedForce, the InteraxFF pair forces); their exclusions must then be the same
+     * as the exceptions of this force, and forces in the same force group must use the same cutoff.
+     */
+    bool getUseOwnKernel() const;
+    /**
+     * Set whether the GPU platforms evaluate the real-space multipole interactions with a kernel of this force's own.
+     */
+    void setUseOwnKernel(bool enabled);
+    /**
      * Get the name of the context parameter that scales the multipoles and polarizabilities of alchemical particles.
      */
     const std::string& getAlchemicalParameterName() const;
@@ -271,7 +283,7 @@ private:
     double ewaldErrorTol;
     double alpha;
     int nx, ny, nz;
-    bool coreDamping;
+    bool coreDamping, useOwnKernel;
     double coreDampingScale, mutualDampingScale;
     std::string alchemicalParameterName;
     std::vector<ParticleInfo> particles;
