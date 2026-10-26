@@ -42,16 +42,20 @@ namespace InteraxPlugin {
 class ReferenceInteraxThreeBodyIxn {
 public:
     /**
-     * Create a ReferenceInteraxThreeBodyIxn for the sites, cutoff, damping and periodicity of a force.
+     * Create a ReferenceInteraxThreeBodyIxn.
+     *
+     * @param force    the force whose sites, cutoff, damping method and periodic boundary conditions to use
      */
     explicit ReferenceInteraxThreeBodyIxn(const InteraxThreeBodyForce& force);
     /**
-     * Copy the polarizabilities, frequencies and widths of the sites, the scale factor and the damping scale from a
-     * force.
+     * Copy the polarizabilities, frequencies and widths of the sites, the scale factor, the damping scale and the
+     * centroid damping radius from a force.
+     *
+     * @param force    the force to copy the parameters from
      */
     void setParameters(const InteraxThreeBodyForce& force);
     /**
-     * Compute the interactions.
+     * Calculate the three-body interactions.
      *
      * @param positions      the particle positions
      * @param boxVectors     the periodic box vectors
@@ -61,6 +65,9 @@ public:
      */
     double calculateIxn(const std::vector<OpenMM::Vec3>& positions, const OpenMM::Vec3* boxVectors, double lambda, std::vector<OpenMM::Vec3>& forces) const;
 private:
+    /**
+     * Get the displacement between two positions, applying periodic boundary conditions if the force uses them.
+     */
     OpenMM::Vec3 getDelta(const OpenMM::Vec3& from, const OpenMM::Vec3& to, const OpenMM::Vec3* boxVectors) const;
     std::vector<std::vector<int> > siteParticles;
     std::vector<int> molecule;

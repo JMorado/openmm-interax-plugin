@@ -1,5 +1,7 @@
 /* Portions copyright (c) 2006-2022 Stanford University and Simbios.
  * Contributors: Pande Group
+ * Portions copyright (c) 2026 the Authors.
+ * Authors: Joao Morado
  *
  * Permission is hereby granted, free of charge, to any person obtaining
  * a copy of this software and associated documentation files (the
@@ -35,6 +37,7 @@
 
 namespace OpenMM {
 
+// InteraxFF: this class implements InteraxMultipoleForce, which is defined in the plugin's namespace.
 using InteraxPlugin::InteraxMultipoleForce;
 
 /**
@@ -43,13 +46,13 @@ using InteraxPlugin::InteraxMultipoleForce;
 class InteraxDouble4 {
 public:
     /**
-     * Create a InteraxDouble4 whose elements are all 0.
+     * Create an InteraxDouble4 whose elements are all 0.
      */
     InteraxDouble4() {
         data[0] = data[1] = data[2] = data[3] = 0.0;
     }
     /**
-     * Create a InteraxDouble4 with specified x, y, z, w components.
+     * Create an InteraxDouble4 with specified x, y, z, w components.
      */
     InteraxDouble4(double x, double y, double z, double w) {
         data[0] = x;
@@ -119,8 +122,10 @@ public:
     InteraxMultipoleForce::NonbondedMethod getNonbondedMethod() const;
 
     /**
-     * Set the value of the alchemical parameter, which scales the multipoles and polarizabilities of the alchemical
-     * particles.
+     * InteraxFF: set the value of the alchemical parameter, which scales the charges, multipoles and polarizabilities
+     * of the alchemical particles.
+     *
+     * @param lambda    the value of the alchemical parameter
      */
     void setLambda(double lambda) {
         _lambda = lambda;
@@ -179,8 +184,9 @@ protected:
             Vec3 dipole, localDipole, qiDipole, qiInducedDipole;
             double quadrupole[6], localQuadrupole[6], qiQuadrupole[6];
             double coreCharge, valenceCharge, alpha, polarizability;
+            // InteraxFF: whether the particle is alchemical, and its parameters before scaling by the alchemical
+            // parameter (loadParticleData() sets the scaled ones)
             bool isAlchemical;
-            // parameters before scaling by the alchemical parameter
             Vec3 baseLocalDipole;
             double baseLocalQuadrupole[6], baseCoreCharge, baseValenceCharge, basePolarizability;
     };
@@ -207,13 +213,15 @@ protected:
     unsigned int _numParticles;
     InteraxMultipoleForce::NonbondedMethod _nonbondedMethod;
     double _electric, _cutoffDistance, _cutoffDistanceSquared;
+    // InteraxFF: core damping of the polarizing fields, the scale of the exponents in the damping of the induced
+    // dipole couplings, and the value of the alchemical parameter
     bool _coreDamping;
     double _coreDampingScale, _mutualDampingScale, _lambda;
     std::map<std::pair<int, int>, Exception> exceptions;
     std::vector<MultipoleParticleData> particleData;
     std::vector<TransformedMultipole> _transformed;
     std::vector<Vec3> _fixedMultipoleField;
-    std::vector<Vec3> _polarizingField; // the permanent field on the induced dipoles (before multiplying by the polarizabilities)
+    std::vector<Vec3> _polarizingField; // InteraxFF: the permanent field at each particle, before multiplying by the polarizability
     std::vector<Vec3> _inducedDipole;
     std::vector<Vec3> _inducedDipoleField;
     std::vector<std::vector<Vec3> > _ptDipoleD;
@@ -257,11 +265,6 @@ protected:
      * @param fdamp3       outputs the damping factor for the r^-3 term
      * @param fdamp5       outputs the damping factor for the r^-5 term
      */
-    /**
-     * Compute HIPPO's damping factors of the overlap of two Slater densities with exponents aI and aJ, for the r^-1,
-     * r^-3, ..., r^-11 terms (unequal exponents; a series where they are nearly equal).
-     */
-    static void computePairDampingFactors(double aI, double aJ, double r, double (&fdamp)[6]);
     void computeMutualFieldDampingFactors(const MultipoleParticleData& particleI, const MultipoleParticleData& particleJ, double r, double& fdamp3, double& fdamp5) const;
     /**
      * Compute the damping factors for the overlap of two particles.
@@ -290,6 +293,17 @@ protected:
             double& fdampI1, double& fdampI3, double& fdampI5, double& fdampI7, double& fdampI9,
             double& fdampJ1, double& fdampJ3, double& fdampJ5, double& fdampJ7, double& fdampJ9,
             double& fdampIJ1, double& fdampIJ3, double& fdampIJ5, double& fdampIJ7, double& fdampIJ9, double& fdampIJ11) const;
+    /**
+     * InteraxFF: compute the damping factors for the overlap of two Slater densities with different exponents (the
+     * expressions used by computeOverlapDampingFactors() for unequal exponents, and a series in the difference of the
+     * exponents when they are nearly equal, where those expressions lose precision).
+     *
+     * @param aI       the exponent of the first density
+     * @param aJ       the exponent of the second density
+     * @param r        the distance between the two particles
+     * @param fdamp    outputs the damping factors for the r^-1, r^-3, r^-5, r^-7, r^-9 and r^-11 terms
+     */
+    static void computePairDampingFactors(double aI, double aJ, double r, double (&fdamp)[6]);
     /**
      * Check if multipoles at chiral site should be inverted.
      *
@@ -380,36 +394,6 @@ protected:
     virtual void calculateFixedMultipoleFieldPairIxn(const MultipoleParticleData& particleI, const MultipoleParticleData& particleJ);
 
     /**
-     * Core damping: the field of particle J (not split by Ewald, with the exception scale) at particle I, which
-     * core damping multiplies by f_I(r) = 1 - (1 + a r + (a r)^2/2) exp(-a r) (a: the exponent of I).
-     *
-     * @param particleI    the polarized particle
-     * @param particleJ    the source particle
-     * @param deltaR       the position of J relative to I
-     * @return the field (in the sign convention of _fixedMultipoleField, which subtracts it)
-     */
-    Vec3 calculateDirectPairField(const MultipoleParticleData& particleI, const MultipoleParticleData& particleJ, const Vec3& deltaR) const;
-
-    /**
-     * Core damping: the damping function f(r) of the polarized particle and its derivative df/dr.
-     */
-    void computeCoreDampingFactor(const MultipoleParticleData& particle, double r, double& f, double& dfdr) const;
-
-    /**
-     * Core damping: add (f - 1) times the pair fields to the fixed multipole fields (for all pairs within the cutoff),
-     * so that the fields that polarize each particle are damped.
-     */
-    void addCoreDampingFields();
-
-    /**
-     * Core damping: the forces and torques of the polarization energy from the damping of the permanent fields of
-     * particles I and K (in the quasi-internal frame). They are added to the undamped ones computed by
-     * calculateInducedDipolePairIxn().
-     */
-    void calculateCoreDampingPairIxn(const MultipoleParticleData& particleI, const MultipoleParticleData& particleK,
-                                     double r, Vec3& force, Vec3& torqueI, Vec3& torqueK) const;
-
-    /**
      * Initialize induced dipoles
      */
     virtual void initializeInducedDipoles(); 
@@ -479,8 +463,47 @@ protected:
     virtual void calculateInducedDipolePairIxn(const MultipoleParticleData& particleI, const MultipoleParticleData& particleK,
                                                Vec3 deltaR, double r, Vec3& force, Vec3& torqueI, Vec3& torqueK, Vec3& labForce) const;
 
+    /**
+     * InteraxFF: compute the field at particle I due to the fixed multipoles of particle J, without the Ewald
+     * splitting and scaled by the exception scale.
+     *
+     * @param particleI    positions and parameters (charge, labFrame dipoles, quadrupoles, ...) for particle I
+     * @param particleJ    positions and parameters (charge, labFrame dipoles, quadrupoles, ...) for particle J
+     * @param deltaR       the position of particle J relative to particle I
+     * @return the field, in the sign convention of _fixedMultipoleField (from which it is subtracted)
+     */
+    Vec3 calculateDirectPairField(const MultipoleParticleData& particleI, const MultipoleParticleData& particleJ, const Vec3& deltaR) const;
 
+    /**
+     * InteraxFF: compute the core damping factor f(r) = 1 - (1 + ar + (ar)^2/2) exp(-ar) of the field at a particle,
+     * where a is the core damping scale times the exponent of the particle.
+     *
+     * @param particle     parameters for the polarized particle
+     * @param r            the distance from the particle
+     * @param f            outputs the damping factor
+     * @param dfdr         outputs the derivative of the damping factor with respect to r
+     */
+    void computeCoreDampingFactor(const MultipoleParticleData& particle, double r, double& f, double& dfdr) const;
 
+    /**
+     * InteraxFF: apply core damping to the fixed multipole fields, by adding (f-1) times the field of each other
+     * particle (within the cutoff) to the field at each particle.
+     */
+    void addCoreDampingFields();
+
+    /**
+     * InteraxFF: calculate the forces and torques that core damping of the fixed multipole fields adds to the
+     * interaction of the induced dipoles on particles I and K (computed by calculateInducedDipolePairIxn() without it).
+     *
+     * @param particleI         positions and parameters (charge, labFrame dipoles, quadrupoles, ...) for particle I
+     * @param particleK         positions and parameters (charge, labFrame dipoles, quadrupoles, ...) for particle K
+     * @param r                 the distance between the two particles
+     * @param force             the force to apply (in the quasi-internal frame) to particle I should be added to this
+     * @param torqueI           the torque to apply (in the quasi-internal frame) to particle I should be added to this
+     * @param torqueK           the torque to apply (in the quasi-internal frame) to particle K should be added to this
+     */
+    void calculateCoreDampingPairIxn(const MultipoleParticleData& particleI, const MultipoleParticleData& particleK,
+                                     double r, Vec3& force, Vec3& torqueI, Vec3& torqueK) const;
 
     /**
      * Map particle torque to force.
@@ -580,7 +603,6 @@ public:
      */
     double getAlphaEwald() const;
 
-
     /**
      * Get PME grid dimensions.
      *
@@ -590,7 +612,6 @@ public:
      */
     void getPmeGridDimensions(std::vector<int>& pmeGridDimensions) const;
 
-
     /**
      * Set PME grid dimensions.
      *
@@ -598,7 +619,6 @@ public:
      *
      */
     void setPmeGridDimensions(std::vector<int>& pmeGridDimensions);
-
 
     /**
      * Set periodic box size.
@@ -841,7 +861,6 @@ private:
     void calculateInducedDipolePairIxn(const MultipoleParticleData& particleI, const MultipoleParticleData& particleK,
                                        Vec3 deltaR, double r, Vec3& force, Vec3& torqueI, Vec3& torqueK, Vec3& labForce) const;
 
-
     /**
      * Calculate reciprocal space force/torque for dipole interaction.
      * 
@@ -851,7 +870,6 @@ private:
      */
      void computeReciprocalSpaceInducedDipoleForce(const std::vector<MultipoleParticleData>& particleData,
                                                    std::vector<Vec3>& forces, std::vector<Vec3>& torques) const;
-
 
     /**
      * Calculate the forces and energy.

@@ -9,6 +9,9 @@ FILE(GLOB SOURCE_FILES ${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp)
 FILE(GLOB SOURCE_INCLUDE_FILES ${CMAKE_CURRENT_SOURCE_DIR}/src/*.h ${CMAKE_CURRENT_SOURCE_DIR}/include/*.h)
 INCLUDE_DIRECTORIES(BEFORE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 INCLUDE_DIRECTORIES(BEFORE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+
+# The multipole force uses OpenMM's internal reference headers (ReferencePME.h, SimTKOpenMMRealType.h, ...) and
+# pocketfft, as the AMOEBA plugin's reference platform does.
 INCLUDE_DIRECTORIES(${CMAKE_SOURCE_DIR}/third_party/pocketfft ${OPENMM_DIR}/include/openmm/reference)
 
 # Create the library

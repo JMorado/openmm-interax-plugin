@@ -49,11 +49,14 @@ namespace InteraxPlugin {
 class ReferenceInteraxPairIxn {
 public:
     /**
-     * Create a ReferenceInteraxPairIxn for the cutoff, switching, exclusions and alchemical flags of a pair force.
+     * Create a ReferenceInteraxPairIxn.
+     *
+     * @param force    the force whose nonbonded method, cutoff, switching function, exclusions, soft-core radius and
+     *                 alchemical particles to use
      */
     explicit ReferenceInteraxPairIxn(const InteraxPairForce& force);
     /**
-     * Compute the interactions.
+     * Calculate the pair interactions.
      *
      * @param positions      the particle positions
      * @param boxVectors     the periodic box vectors
@@ -65,7 +68,7 @@ public:
      * @return the energy
      */
     template <class PairEnergy>
-    double calculateIxn(const std::vector<OpenMM::Vec3>& positions, const OpenMM::Vec3* boxVectors, double lambda,
+    double calculatePairIxn(const std::vector<OpenMM::Vec3>& positions, const OpenMM::Vec3* boxVectors, double lambda,
             std::vector<OpenMM::Vec3>& forces, const PairEnergy& pairEnergy);
 private:
     InteraxPairForce::NonbondedMethod nonbondedMethod;
@@ -77,7 +80,7 @@ private:
 };
 
 template <class PairEnergy>
-double ReferenceInteraxPairIxn::calculateIxn(const std::vector<OpenMM::Vec3>& positions, const OpenMM::Vec3* boxVectors, double lambda,
+double ReferenceInteraxPairIxn::calculatePairIxn(const std::vector<OpenMM::Vec3>& positions, const OpenMM::Vec3* boxVectors, double lambda,
         std::vector<OpenMM::Vec3>& forces, const PairEnergy& pairEnergy) {
     bool periodic = (nonbondedMethod == InteraxPairForce::CutoffPeriodic);
     if (nonbondedMethod != InteraxPairForce::NoCutoff)

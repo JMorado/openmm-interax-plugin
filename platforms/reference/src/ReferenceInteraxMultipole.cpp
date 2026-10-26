@@ -1,6 +1,8 @@
 
 /* Portions copyright (c) 2006-2022 Stanford University and Simbios.
  * Contributors: Pande Group
+ * Portions copyright (c) 2026 the Authors.
+ * Authors: Joao Morado
  *
  * Permission is hereby granted, free of charge, to any person obtaining
  * a copy of this software and associated documentation files (the
@@ -46,19 +48,34 @@ ReferenceInteraxMultipole::ReferenceInteraxMultipole(const InteraxMultipoleForce
     particleData.resize(_numParticles);
     std::vector<double> dipoles, quadrupoles;
     for (int i = 0; i < _numParticles; i++) {
+        particleData[i].index = i;
+
         MultipoleParticleData& p = particleData[i];
-        p.index = i;
         double charge;
-        force.getParticleParameters(i, charge, dipoles, quadrupoles, p.baseCoreCharge, p.alpha, p.basePolarizability, p.axisType,
-                p.multipoleAtomZ, p.multipoleAtomX, p.multipoleAtomY, p.isAlchemical);
-        p.baseValenceCharge = charge-p.baseCoreCharge;
-        p.baseLocalDipole = Vec3(dipoles[0], dipoles[1], dipoles[2]);
-        p.baseLocalQuadrupole[QXX] = quadrupoles[0];
-        p.baseLocalQuadrupole[QXY] = quadrupoles[1];
-        p.baseLocalQuadrupole[QXZ] = quadrupoles[2];
-        p.baseLocalQuadrupole[QYY] = quadrupoles[4];
-        p.baseLocalQuadrupole[QYZ] = quadrupoles[5];
-        p.baseLocalQuadrupole[QZZ] = quadrupoles[8];
+        force.getParticleParameters(i, charge, dipoles, quadrupoles, p.coreCharge, p.alpha, p.polarizability,
+                p.axisType, p.multipoleAtomZ, p.multipoleAtomX, p.multipoleAtomY, p.isAlchemical);
+        p.valenceCharge = charge-p.coreCharge;
+
+        particleData[i].localDipole[0]            = dipoles[0];
+        particleData[i].localDipole[1]            = dipoles[1];
+        particleData[i].localDipole[2]            = dipoles[2];
+
+        particleData[i].localQuadrupole[QXX]      = quadrupoles[0];
+        particleData[i].localQuadrupole[QXY]      = quadrupoles[1];
+        particleData[i].localQuadrupole[QXZ]      = quadrupoles[2];
+        particleData[i].localQuadrupole[QYY]      = quadrupoles[4];
+        particleData[i].localQuadrupole[QYZ]      = quadrupoles[5];
+        particleData[i].localQuadrupole[QZZ]      = quadrupoles[8];
+
+        // InteraxFF: keep the parameters before alchemical scaling (loadParticleData() scales them), and start the
+        // lab frame moments of particles without an axis from zero.
+
+        p.baseCoreCharge = p.coreCharge;
+        p.baseValenceCharge = p.valenceCharge;
+        p.basePolarizability = p.polarizability;
+        p.baseLocalDipole = p.localDipole;
+        for (int k = 0; k < 6; k++)
+            p.baseLocalQuadrupole[k] = p.localQuadrupole[k];
         p.dipole = Vec3();
         for (int k = 0; k < 6; k++)
             p.quadrupole[k] = 0.0;
@@ -74,6 +91,7 @@ ReferenceInteraxMultipole::ReferenceInteraxMultipole(const InteraxMultipoleForce
     _nonbondedMethod = force.getNonbondedMethod();
     _cutoffDistance = force.getCutoffDistance();
     _cutoffDistanceSquared = _cutoffDistance*_cutoffDistance;
+    // InteraxFF: core damping and the mutual damping scale
     _coreDamping = force.getCoreDamping();
     _coreDampingScale = force.getCoreDampingScale();
     _mutualDampingScale = force.getMutualDampingScale();
@@ -112,6 +130,9 @@ void ReferenceInteraxMultipole::loadParticleData(const vector<Vec3>& particlePos
     for (int i = 0; i < _numParticles; i++) {
         MultipoleParticleData& p = particleData[i];
         p.position = particlePositions[i];
+
+        // InteraxFF: scale the charges, multipoles and polarizabilities of alchemical particles by lambda.
+
         double scale = (p.isAlchemical ? _lambda : 1.0);
         p.coreCharge = scale*p.baseCoreCharge;
         p.valenceCharge = scale*p.baseValenceCharge;
@@ -352,8 +373,73 @@ void ReferenceInteraxMultipole::computeDirectFieldDampingFactors(const Multipole
     fdamp7 = 1 - (1 + ar + ar2*(1.0/2) + ar3*(1.0/6) + ar4*(1.0/30))*expAR;
 }
 
-// f_n = 1 - exp(-x) sum_m t^(2m) sum_j PAIR_DAMPING_SERIES[n][m][j] x^j, n = 1, 3, 5, 7, 9, 11 (index 0..5), m = 0..3;
-// x = a r and t = (aJ - aI)/(aI + aJ) with the mean exponent a = (aI + aJ)/2 (generated with sympy)
+void ReferenceInteraxMultipole::computeMutualFieldDampingFactors(const MultipoleParticleData& particleI, const MultipoleParticleData& particleJ, double r, double& fdamp3, double& fdamp5) const {
+    // InteraxFF: the exponents are scaled by the mutual damping scale kappa (HIPPO: kappa = 1), and the series of
+    // computePairDampingFactors() is used when they are equal or nearly equal.
+    double fdamp[6];
+    computePairDampingFactors(_mutualDampingScale*particleI.alpha, _mutualDampingScale*particleJ.alpha, r, fdamp);
+    fdamp3 = fdamp[1];
+    fdamp5 = fdamp[2];
+}
+
+void ReferenceInteraxMultipole::computeOverlapDampingFactors(const MultipoleParticleData& particleI, const MultipoleParticleData& particleJ, double r,
+                                double& fdampI1, double& fdampI3, double& fdampI5, double& fdampI7, double& fdampI9,
+                                double& fdampJ1, double& fdampJ3, double& fdampJ5, double& fdampJ7, double& fdampJ9,
+                                double& fdampIJ1, double& fdampIJ3, double& fdampIJ5, double& fdampIJ7, double& fdampIJ9, double& fdampIJ11) const {
+    double arI = particleI.alpha*r;
+    double arI2 = arI*arI;
+    double arI3 = arI2*arI;
+    double arI4 = arI2*arI2;
+    double arI5 = arI3*arI2;
+    double arI6 = arI3*arI3;
+    double expARI = exp(-arI);
+    fdampI1 = 1 - (1 + arI*(1.0/2))*expARI;
+    fdampI3 = 1 - (1 + arI + arI2*(1.0/2))*expARI;
+    fdampI5 = 1 - (1 + arI + arI2*(1.0/2) + arI3*(1.0/6))*expARI;
+    fdampI7 = 1 - (1 + arI + arI2*(1.0/2) + arI3*(1.0/6) + arI4*(1.0/30))*expARI;
+    fdampI9 = 1 - (1 + arI + arI2*(1.0/2) + arI3*(1.0/6) + arI4*(4.0/105) + arI5*(1.0/210))*expARI;
+    if (particleI.alpha == particleJ.alpha) {
+        fdampJ1 = fdampI1;
+        fdampJ3 = fdampI3;
+        fdampJ5 = fdampI5;
+        fdampJ7 = fdampI7;
+        fdampJ9 = fdampI9;
+        double arI7 = arI4*arI3;
+        double arI8 = arI4*arI4;
+        fdampIJ1 = 1 - (1 + arI*(11.0/16) + arI2*(3.0/16) + arI3*(1.0/48))*expARI;
+        fdampIJ3 = 1 - (1 + arI + arI2*(1.0/2) + arI3*(7.0/48) + arI4*(1.0/48))*expARI;
+        fdampIJ5 = 1 - (1 + arI + arI2*(1.0/2) + arI3*(1.0/6) + arI4*(1.0/24) + arI5*(1.0/144))*expARI;
+        fdampIJ7 = 1 - (1 + arI + arI2*(1.0/2) + arI3*(1.0/6) + arI4*(1.0/24) + arI5*(1.0/120) + arI6*(1.0/720))*expARI;
+        fdampIJ9 = 1 - (1 + arI + arI2*(1.0/2) + arI3*(1.0/6) + arI4*(1.0/24) + arI5*(1.0/120) + arI6*(1.0/720) + arI7*(1.0/5040))*expARI;
+        fdampIJ11 = 1 - (1 + arI + arI2*(1.0/2) + arI3*(1.0/6) + arI4*(1.0/24) + arI5*(1.0/120) + arI6*(1.0/720) + arI7*(1.0/5040) + arI8*(1.0/45360))*expARI;
+    }
+    else {
+        double arJ = particleJ.alpha*r;
+        double arJ2 = arJ*arJ;
+        double arJ3 = arJ2*arJ;
+        double arJ4 = arJ2*arJ2;
+        double arJ5 = arJ3*arJ2;
+        double expARJ = exp(-arJ);
+        fdampJ1 = 1 - (1 + arJ*(1.0/2))*expARJ;
+        fdampJ3 = 1 - (1 + arJ + arJ2*(1.0/2))*expARJ;
+        fdampJ5 = 1 - (1 + arJ + arJ2*(1.0/2) + arJ3*(1.0/6))*expARJ;
+        fdampJ7 = 1 - (1 + arJ + arJ2*(1.0/2) + arJ3*(1.0/6) + arJ4*(1.0/30))*expARJ;
+        fdampJ9 = 1 - (1 + arJ + arJ2*(1.0/2) + arJ3*(1.0/6) + 4*arJ4*(1.0/105) + arJ5*(1.0/210))*expARJ;
+        // InteraxFF: computePairDampingFactors() switches to a series when the exponents are nearly equal.
+        double fdamp[6];
+        computePairDampingFactors(particleI.alpha, particleJ.alpha, r, fdamp);
+        fdampIJ1 = fdamp[0];
+        fdampIJ3 = fdamp[1];
+        fdampIJ5 = fdamp[2];
+        fdampIJ7 = fdamp[3];
+        fdampIJ9 = fdamp[4];
+        fdampIJ11 = fdamp[5];
+    }
+}
+
+// InteraxFF: the coefficients of the series of the overlap damping factors in t = (aJ-aI)/(aI+aJ), used when the two
+// exponents are nearly equal: f_n = 1 - exp(-x) sum_m t^(2m) sum_j PAIR_DAMPING_SERIES[n][m][j] x^j, where
+// n = 1, 3, 5, 7, 9, 11 (index 0..5), m = 0..3 and x = r (aI+aJ)/2.
 static const double PAIR_DAMPING_SERIES[6][4][15] = {
     {
         {1.0, 0.6875, 0.1875, 0.020833333333333332, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0},
@@ -393,8 +479,8 @@ static const double PAIR_DAMPING_SERIES[6][4][15] = {
     },
 };
 
-// Below this |t| the pair damping factors use the series (HIPPO's closed form for unequal exponents loses precision to
-// cancellation as the exponents approach each other; in double precision the series to t^6 is accurate to ~1e-12 here).
+// Below this |t| the pair damping factors use the series: the expressions for unequal exponents lose precision to
+// cancellation as the exponents approach each other, while the series to t^6 is accurate to about 1e-12 here.
 static const double PAIR_DAMPING_SERIES_MAX_T = 0.03;
 
 void ReferenceInteraxMultipole::computePairDampingFactors(double aI, double aJ, double r, double (&fdamp)[6]) {
@@ -447,68 +533,6 @@ void ReferenceInteraxMultipole::computePairDampingFactors(double aI, double aJ, 
                    2*B2*A*(1 + arJ + arJ2*(4.0/9) + arJ3*(1.0/9) + arJ4*(1.0/63) + arJ5*(1.0/945))*expARJ;
 }
 
-void ReferenceInteraxMultipole::computeMutualFieldDampingFactors(const MultipoleParticleData& particleI, const MultipoleParticleData& particleJ, double r, double& fdamp3, double& fdamp5) const {
-    // The induced dipole couplings use the exponents kappa*alpha (HIPPO: kappa = 1).
-    double fdamp[6];
-    computePairDampingFactors(_mutualDampingScale*particleI.alpha, _mutualDampingScale*particleJ.alpha, r, fdamp);
-    fdamp3 = fdamp[1];
-    fdamp5 = fdamp[2];
-}
-
-void ReferenceInteraxMultipole::computeOverlapDampingFactors(const MultipoleParticleData& particleI, const MultipoleParticleData& particleJ, double r,
-                                double& fdampI1, double& fdampI3, double& fdampI5, double& fdampI7, double& fdampI9,
-                                double& fdampJ1, double& fdampJ3, double& fdampJ5, double& fdampJ7, double& fdampJ9,
-                                double& fdampIJ1, double& fdampIJ3, double& fdampIJ5, double& fdampIJ7, double& fdampIJ9, double& fdampIJ11) const {
-    double arI = particleI.alpha*r;
-    double arI2 = arI*arI;
-    double arI3 = arI2*arI;
-    double arI4 = arI2*arI2;
-    double arI5 = arI3*arI2;
-    double arI6 = arI3*arI3;
-    double expARI = exp(-arI);
-    fdampI1 = 1 - (1 + arI*(1.0/2))*expARI;
-    fdampI3 = 1 - (1 + arI + arI2*(1.0/2))*expARI;
-    fdampI5 = 1 - (1 + arI + arI2*(1.0/2) + arI3*(1.0/6))*expARI;
-    fdampI7 = 1 - (1 + arI + arI2*(1.0/2) + arI3*(1.0/6) + arI4*(1.0/30))*expARI;
-    fdampI9 = 1 - (1 + arI + arI2*(1.0/2) + arI3*(1.0/6) + arI4*(4.0/105) + arI5*(1.0/210))*expARI;
-    if (particleI.alpha == particleJ.alpha) {
-        fdampJ1 = fdampI1;
-        fdampJ3 = fdampI3;
-        fdampJ5 = fdampI5;
-        fdampJ7 = fdampI7;
-        fdampJ9 = fdampI9;
-        double arI7 = arI4*arI3;
-        double arI8 = arI4*arI4;
-        fdampIJ1 = 1 - (1 + arI*(11.0/16) + arI2*(3.0/16) + arI3*(1.0/48))*expARI;
-        fdampIJ3 = 1 - (1 + arI + arI2*(1.0/2) + arI3*(7.0/48) + arI4*(1.0/48))*expARI;
-        fdampIJ5 = 1 - (1 + arI + arI2*(1.0/2) + arI3*(1.0/6) + arI4*(1.0/24) + arI5*(1.0/144))*expARI;
-        fdampIJ7 = 1 - (1 + arI + arI2*(1.0/2) + arI3*(1.0/6) + arI4*(1.0/24) + arI5*(1.0/120) + arI6*(1.0/720))*expARI;
-        fdampIJ9 = 1 - (1 + arI + arI2*(1.0/2) + arI3*(1.0/6) + arI4*(1.0/24) + arI5*(1.0/120) + arI6*(1.0/720) + arI7*(1.0/5040))*expARI;
-        fdampIJ11 = 1 - (1 + arI + arI2*(1.0/2) + arI3*(1.0/6) + arI4*(1.0/24) + arI5*(1.0/120) + arI6*(1.0/720) + arI7*(1.0/5040) + arI8*(1.0/45360))*expARI;
-    }
-    else {
-        double arJ = particleJ.alpha*r;
-        double arJ2 = arJ*arJ;
-        double arJ3 = arJ2*arJ;
-        double arJ4 = arJ2*arJ2;
-        double arJ5 = arJ3*arJ2;
-        double expARJ = exp(-arJ);
-        fdampJ1 = 1 - (1 + arJ*(1.0/2))*expARJ;
-        fdampJ3 = 1 - (1 + arJ + arJ2*(1.0/2))*expARJ;
-        fdampJ5 = 1 - (1 + arJ + arJ2*(1.0/2) + arJ3*(1.0/6))*expARJ;
-        fdampJ7 = 1 - (1 + arJ + arJ2*(1.0/2) + arJ3*(1.0/6) + arJ4*(1.0/30))*expARJ;
-        fdampJ9 = 1 - (1 + arJ + arJ2*(1.0/2) + arJ3*(1.0/6) + 4*arJ4*(1.0/105) + arJ5*(1.0/210))*expARJ;
-        double fdamp[6];
-        computePairDampingFactors(particleI.alpha, particleJ.alpha, r, fdamp);
-        fdampIJ1 = fdamp[0];
-        fdampIJ3 = fdamp[1];
-        fdampIJ5 = fdamp[2];
-        fdampIJ7 = fdamp[3];
-        fdampIJ9 = fdamp[4];
-        fdampIJ11 = fdamp[5];
-    }
-}
-
 void ReferenceInteraxMultipole::calculateFixedMultipoleFieldPairIxn(const MultipoleParticleData& particleI,
                                                                              const MultipoleParticleData& particleJ) {
     Vec3 deltaR = particleJ.position - particleI.position;
@@ -546,159 +570,11 @@ void ReferenceInteraxMultipole::calculateFixedMultipoleField() {
         for (int j = 0; j < _numParticles; j++)
             if (i != j)
                 calculateFixedMultipoleFieldPairIxn(particleData[i], particleData[j]);
+
+    // InteraxFF: core damping of the fields.
+
     if (_coreDamping)
         addCoreDampingFields();
-}
-
-void ReferenceInteraxMultipole::computeCoreDampingFactor(const MultipoleParticleData& particle, double r, double& f, double& dfdr) const {
-    double a = _coreDampingScale*particle.alpha;
-    double ar = a*r;
-    double expAR = exp(-ar);
-    f = 1 - (1 + ar + 0.5*ar*ar)*expAR;
-    dfdr = a*0.5*ar*ar*expAR;
-}
-
-Vec3 ReferenceInteraxMultipole::calculateDirectPairField(const MultipoleParticleData& particleI, const MultipoleParticleData& particleJ,
-                                                        const Vec3& deltaR) const {
-    double r = sqrt(deltaR.dot(deltaR));
-    double rInv = 1/r;
-    double rInv3 = rInv*rInv*rInv;
-    double rInv5 = rInv3*rInv*rInv;
-    double rInv7 = rInv5*rInv*rInv;
-    double fdamp3, fdamp5, fdamp7;
-    computeDirectFieldDampingFactors(particleJ, r, fdamp3, fdamp5, fdamp7);
-    double scale = 1;
-    auto exception = exceptions.find(make_pair(particleI.index, particleJ.index));
-    if (exception != exceptions.end())
-        scale = exception->second.dipoleMultipoleScale;
-    double rr3 = scale*rInv3;
-    double rr3j = scale*fdamp3*rInv3;
-    double rr5j = scale*3*fdamp5*rInv5;
-    double rr7j = scale*15*fdamp7*rInv7;
-    Vec3 qDotDelta(deltaR[0]*particleJ.quadrupole[QXX] + deltaR[1]*particleJ.quadrupole[QXY] + deltaR[2]*particleJ.quadrupole[QXZ],
-                   deltaR[0]*particleJ.quadrupole[QXY] + deltaR[1]*particleJ.quadrupole[QYY] + deltaR[2]*particleJ.quadrupole[QYZ],
-                   deltaR[0]*particleJ.quadrupole[QXZ] + deltaR[1]*particleJ.quadrupole[QYZ] + deltaR[2]*particleJ.quadrupole[QZZ]);
-    double factor = rr3*particleJ.coreCharge + rr3j*particleJ.valenceCharge - rr5j*particleJ.dipole.dot(deltaR) + rr7j*qDotDelta.dot(deltaR);
-    return deltaR*factor + particleJ.dipole*rr3j - qDotDelta*2*rr5j;
-}
-
-void ReferenceInteraxMultipole::addCoreDampingFields() {
-    for (int i = 0; i < _numParticles; i++)
-        for (int j = 0; j < _numParticles; j++) {
-            if (i == j)
-                continue;
-            Vec3 deltaR = particleData[j].position - particleData[i].position;
-            getPeriodicDelta(deltaR);
-            double r2 = deltaR.dot(deltaR);
-            if (_nonbondedMethod == InteraxMultipoleForce::PME && r2 > _cutoffDistanceSquared)
-                continue;
-            double f, dfdr;
-            computeCoreDampingFactor(particleData[i], sqrt(r2), f, dfdr);
-            _fixedMultipoleField[i] -= calculateDirectPairField(particleData[i], particleData[j], deltaR)*(f-1);
-        }
-}
-
-void ReferenceInteraxMultipole::calculateCoreDampingPairIxn(const MultipoleParticleData& particleI, const MultipoleParticleData& particleK,
-                                                           double r, Vec3& force, Vec3& torqueI, Vec3& torqueK) const {
-    // The polarization energy has the terms -u_I.E_K(I) - u_K.E_I(K) (permanent fields E with HIPPO's damping); core
-    // damping multiplies them by f_I(r) and f_K(r). Here g = f-1 times their gradients (and torques), plus the radial
-    // derivative of f, are added to HIPPO's undamped terms. Everything is in the quasi-internal frame (K at +z from I),
-    // with the full (not Ewald-split) interaction.
-
-    double fI, dfI, fK, dfK;
-    computeCoreDampingFactor(particleI, r, fI, dfI);
-    computeCoreDampingFactor(particleK, r, fK, dfK);
-    double gI = fI-1, gK = fK-1;
-    double r2 = r*r;
-    double dir = particleI.qiDipole[2]*r;
-    Vec3 qxI = Vec3(particleI.qiQuadrupole[QXX], particleI.qiQuadrupole[QXY], particleI.qiQuadrupole[QXZ]);
-    Vec3 qyI = Vec3(particleI.qiQuadrupole[QXY], particleI.qiQuadrupole[QYY], particleI.qiQuadrupole[QYZ]);
-    Vec3 qzI = Vec3(particleI.qiQuadrupole[QXZ], particleI.qiQuadrupole[QYZ], particleI.qiQuadrupole[QZZ]);
-    Vec3 qi = r*qzI;
-    double qir = qi[2]*r;
-    double dkr = particleK.qiDipole[2]*r;
-    Vec3 qxK = Vec3(particleK.qiQuadrupole[QXX], particleK.qiQuadrupole[QXY], particleK.qiQuadrupole[QXZ]);
-    Vec3 qyK = Vec3(particleK.qiQuadrupole[QXY], particleK.qiQuadrupole[QYY], particleK.qiQuadrupole[QYZ]);
-    Vec3 qzK = Vec3(particleK.qiQuadrupole[QXZ], particleK.qiQuadrupole[QYZ], particleK.qiQuadrupole[QZZ]);
-    Vec3 qk = r*qzK;
-    double qkr = qk[2]*r;
-    const Vec3& ui = particleI.qiInducedDipole;
-    const Vec3& uk = particleK.qiInducedDipole;
-    double uir = ui[2]*r;
-    double ukr = uk[2]*r;
-
-    double rInv = 1/r;
-    double rInv2 = rInv*rInv;
-    double rr3 = rInv*rInv2;
-    double rr5 = 3*rr3*rInv2;
-    double rr7 = 5*rr5*rInv2;
-    double rr9 = 7*rr7*rInv2;
-    double fdampI1, fdampI3, fdampI5, fdampI7, fdampI9;
-    double fdampK1, fdampK3, fdampK5, fdampK7, fdampK9;
-    double fdampIK1, fdampIK3, fdampIK5, fdampIK7, fdampIK9, fdampIK11;
-    computeOverlapDampingFactors(particleI, particleK, r, fdampI1, fdampI3, fdampI5, fdampI7, fdampI9, fdampK1, fdampK3, fdampK5, fdampK7, fdampK9,
-                                 fdampIK1, fdampIK3, fdampIK5, fdampIK7, fdampIK9, fdampIK11);
-    double dmScale = _electric;
-    auto exception = exceptions.find(make_pair(particleI.index, particleK.index));
-    if (exception != exceptions.end())
-        dmScale *= exception->second.dipoleMultipoleScale;
-    double rr3core = rr3*dmScale;
-    double rr5core = rr5*dmScale;
-    double rr3i = rr3*fdampI3*dmScale;
-    double rr5i = rr5*fdampI5*dmScale;
-    double rr7i = rr7*fdampI7*dmScale;
-    double rr9i = rr9*fdampI9*dmScale;
-    double rr3k = rr3*fdampK3*dmScale;
-    double rr5k = rr5*fdampK5*dmScale;
-    double rr7k = rr7*fdampK7*dmScale;
-    double rr9k = rr9*fdampK9*dmScale;
-
-    // Torques on the permanent moments (fields and field gradients of the induced dipoles), as in
-    // calculateInducedDipolePairIxn(), times g of the polarized particle.
-
-    Vec3 torqueFieldI = (rr3i*uk - Vec3(0, 0, rr5i*ukr*r))*gK;
-    Vec3 torqueFieldK = (rr3k*ui - Vec3(0, 0, rr5k*uir*r))*gI;
-    Vec3 dtorqueFieldI = (2*r*rr5i*uk - Vec3(0, 0, r2*rr7i*ukr))*gK;
-    Vec3 dtorqueFieldK = (-2*r*rr5k*ui + Vec3(0, 0, r2*rr7k*uir))*gI;
-
-    // Field gradients of the permanent moments, as in calculateInducedDipolePairIxn().
-
-    double ti[6], tk[6];
-    ti[QXX] = particleI.valenceCharge*rr3i + particleI.coreCharge*rr3core + dir*rr5i - qxI[0]*2*rr5i + qi[2]*r*rr7i;
-    tk[QXX] = particleK.valenceCharge*rr3k + particleK.coreCharge*rr3core - dkr*rr5k - qxK[0]*2*rr5k + qk[2]*r*rr7k;
-    ti[QYY] = particleI.valenceCharge*rr3i + particleI.coreCharge*rr3core + dir*rr5i - qyI[1]*2*rr5i + qi[2]*r*rr7i;
-    tk[QYY] = particleK.valenceCharge*rr3k + particleK.coreCharge*rr3core - dkr*rr5k - qyK[1]*2*rr5k + qk[2]*r*rr7k;
-    ti[QZZ] = particleI.valenceCharge*(rr3i-rr5i*r2) + particleI.coreCharge*(rr3core-rr5core*r2) + particleI.qiDipole[2]*2*rr5i*r -
-              dir*(rr7i*r2-rr5i) - qzI[2]*2*rr5i + qi[2]*5*rr7i*r - qir*rr9i*r2;
-    tk[QZZ] = particleK.valenceCharge*(rr3k-rr5k*r2) + particleK.coreCharge*(rr3core-rr5core*r2) - particleK.qiDipole[2]*2*rr5k*r +
-              dkr*(rr7k*r2-rr5k) - qzK[2]*2*rr5k + qk[2]*5*rr7k*r - qkr*rr9k*r2;
-    ti[QXY] = -qxI[1]*2*rr5i;
-    tk[QXY] = -qxK[1]*2*rr5k;
-    ti[QXZ] = particleI.qiDipole[0]*rr5i*r - qxI[2]*2*rr5i + qi[0]*2*rr7i*r;
-    tk[QXZ] = -particleK.qiDipole[0]*rr5k*r - qxK[2]*2*rr5k + qk[0]*2*rr7k*r;
-    ti[QYZ] = particleI.qiDipole[1]*rr5i*r - qyI[2]*2*rr5i + qi[1]*2*rr7i*r;
-    tk[QYZ] = -particleK.qiDipole[1]*rr5k*r - qyK[2]*2*rr5k + qk[1]*2*rr7k*r;
-    double depx = gK*(ti[QXX]*uk[0] + ti[QXY]*uk[1] + ti[QXZ]*uk[2]) - gI*(tk[QXX]*ui[0] + tk[QXY]*ui[1] + tk[QXZ]*ui[2]);
-    double depy = gK*(ti[QXY]*uk[0] + ti[QYY]*uk[1] + ti[QYZ]*uk[2]) - gI*(tk[QXY]*ui[0] + tk[QYY]*ui[1] + tk[QYZ]*ui[2]);
-    double depz = gK*(ti[QXZ]*uk[0] + ti[QYZ]*uk[1] + ti[QZZ]*uk[2]) - gI*(tk[QXZ]*ui[0] + tk[QYZ]*ui[1] + tk[QZZ]*ui[2]);
-
-    // Radial derivative of f: A_I = u_I.E_K(I), A_K = u_K.E_I(K) (permanent fields in the quasi-internal frame).
-
-    double factorK = rr3core*particleK.coreCharge + rr3k*particleK.valenceCharge - rr5k*dkr + rr7k*qkr;
-    Vec3 fieldKatI = -(Vec3(0, 0, r*factorK) + particleK.qiDipole*rr3k - qk*2*rr5k);
-    double factorI = rr3core*particleI.coreCharge + rr3i*particleI.valenceCharge + rr5i*dir + rr7i*qir;
-    Vec3 fieldIatK = -(Vec3(0, 0, -r*factorI) + particleI.qiDipole*rr3i + qi*2*rr5i);
-    depz += dfI*ui.dot(fieldKatI) + dfK*uk.dot(fieldIatK);
-    force += Vec3(depx, depy, depz);
-
-    torqueI += torqueFieldI.cross(particleI.qiDipole);
-    torqueI[0] += -qxI[1]*dtorqueFieldI[0] - 2*qyI[2]*dtorqueFieldI[2] + (qzI[2]-qyI[1])*dtorqueFieldI[1];
-    torqueI[1] += qxI[1]*dtorqueFieldI[1] + 2*qxI[2]*dtorqueFieldI[2] + (qxI[0]-qzI[2])*dtorqueFieldI[0];
-    torqueI[2] += qyI[2]*dtorqueFieldI[0] - qxI[2]*dtorqueFieldI[1];
-    torqueK += torqueFieldK.cross(particleK.qiDipole);
-    torqueK[0] += -qxK[1]*dtorqueFieldK[0] - 2*qyK[2]*dtorqueFieldK[2] + (qzK[2]-qyK[1])*dtorqueFieldK[1];
-    torqueK[1] += qxK[1]*dtorqueFieldK[1] + 2*qxK[2]*dtorqueFieldK[2] + (qxK[0]-qzK[2])*dtorqueFieldK[0];
-    torqueK[2] += qyK[2]*dtorqueFieldK[0] - qxK[2]*dtorqueFieldK[1];
 }
 
 void ReferenceInteraxMultipole::initializeInducedDipoles() {
@@ -782,6 +658,7 @@ void ReferenceInteraxMultipole::calculateInducedDipoles() {
 
     // initialize inducedDipoles
 
+    // InteraxFF: record the fields before multiplying by the polarizabilities, for the polarization energy.
     _polarizingField = _fixedMultipoleField;
     for (int i = 0; i < _numParticles; i++)
         _fixedMultipoleField[i] *= particleData[i].polarizability;
@@ -962,7 +839,7 @@ void ReferenceInteraxMultipole::calculateInducedDipolePairIxn(const MultipolePar
     double rr7k = rr7*fdampK7*dmScale;
     double rr9k = rr9*fdampK9*dmScale;
     {
-        // the couplings of the induced dipoles use the exponents kappa*alpha
+        // InteraxFF: the couplings of the induced dipoles use the exponents scaled by the mutual damping scale.
         double fdampMutual[6];
         computePairDampingFactors(_mutualDampingScale*particleI.alpha, _mutualDampingScale*particleK.alpha, r, fdampMutual);
         fdampIK5 = fdampMutual[2];
@@ -1071,6 +948,157 @@ void ReferenceInteraxMultipole::calculateInducedDipolePairIxn(const MultipolePar
     torqueK[2] += qyK[2]*dtorqueFieldK[0] - qxK[2]*dtorqueFieldK[1];
 }
 
+void ReferenceInteraxMultipole::computeCoreDampingFactor(const MultipoleParticleData& particle, double r, double& f, double& dfdr) const {
+    double a = _coreDampingScale*particle.alpha;
+    double ar = a*r;
+    double expAR = exp(-ar);
+    f = 1 - (1 + ar + 0.5*ar*ar)*expAR;
+    dfdr = a*0.5*ar*ar*expAR;
+}
+
+Vec3 ReferenceInteraxMultipole::calculateDirectPairField(const MultipoleParticleData& particleI, const MultipoleParticleData& particleJ,
+                                                        const Vec3& deltaR) const {
+    double r = sqrt(deltaR.dot(deltaR));
+    double rInv = 1/r;
+    double rInv3 = rInv*rInv*rInv;
+    double rInv5 = rInv3*rInv*rInv;
+    double rInv7 = rInv5*rInv*rInv;
+    double fdamp3, fdamp5, fdamp7;
+    computeDirectFieldDampingFactors(particleJ, r, fdamp3, fdamp5, fdamp7);
+    double scale = 1;
+    auto exception = exceptions.find(make_pair(particleI.index, particleJ.index));
+    if (exception != exceptions.end())
+        scale = exception->second.dipoleMultipoleScale;
+    double rr3 = scale*rInv3;
+    double rr3j = scale*fdamp3*rInv3;
+    double rr5j = scale*3*fdamp5*rInv5;
+    double rr7j = scale*15*fdamp7*rInv7;
+    Vec3 qDotDelta(deltaR[0]*particleJ.quadrupole[QXX] + deltaR[1]*particleJ.quadrupole[QXY] + deltaR[2]*particleJ.quadrupole[QXZ],
+                   deltaR[0]*particleJ.quadrupole[QXY] + deltaR[1]*particleJ.quadrupole[QYY] + deltaR[2]*particleJ.quadrupole[QYZ],
+                   deltaR[0]*particleJ.quadrupole[QXZ] + deltaR[1]*particleJ.quadrupole[QYZ] + deltaR[2]*particleJ.quadrupole[QZZ]);
+    double factor = rr3*particleJ.coreCharge + rr3j*particleJ.valenceCharge - rr5j*particleJ.dipole.dot(deltaR) + rr7j*qDotDelta.dot(deltaR);
+    return deltaR*factor + particleJ.dipole*rr3j - qDotDelta*2*rr5j;
+}
+
+void ReferenceInteraxMultipole::addCoreDampingFields() {
+    for (int i = 0; i < _numParticles; i++)
+        for (int j = 0; j < _numParticles; j++) {
+            if (i == j)
+                continue;
+            Vec3 deltaR = particleData[j].position - particleData[i].position;
+            getPeriodicDelta(deltaR);
+            double r2 = deltaR.dot(deltaR);
+            if (_nonbondedMethod == InteraxMultipoleForce::PME && r2 > _cutoffDistanceSquared)
+                continue;
+            double f, dfdr;
+            computeCoreDampingFactor(particleData[i], sqrt(r2), f, dfdr);
+            _fixedMultipoleField[i] -= calculateDirectPairField(particleData[i], particleData[j], deltaR)*(f-1);
+        }
+}
+
+void ReferenceInteraxMultipole::calculateCoreDampingPairIxn(const MultipoleParticleData& particleI, const MultipoleParticleData& particleK,
+                                                           double r, Vec3& force, Vec3& torqueI, Vec3& torqueK) const {
+    // The polarization energy has the terms -u_I.E_K(I) - u_K.E_I(K) (permanent fields E with HIPPO's damping); core
+    // damping multiplies them by f_I(r) and f_K(r). Here g = f-1 times their gradients (and torques), plus the radial
+    // derivative of f, are added to HIPPO's undamped terms. Everything is in the quasi-internal frame (K at +z from I),
+    // with the full (not Ewald-split) interaction.
+
+    double fI, dfI, fK, dfK;
+    computeCoreDampingFactor(particleI, r, fI, dfI);
+    computeCoreDampingFactor(particleK, r, fK, dfK);
+    double gI = fI-1, gK = fK-1;
+    double r2 = r*r;
+    double dir = particleI.qiDipole[2]*r;
+    Vec3 qxI = Vec3(particleI.qiQuadrupole[QXX], particleI.qiQuadrupole[QXY], particleI.qiQuadrupole[QXZ]);
+    Vec3 qyI = Vec3(particleI.qiQuadrupole[QXY], particleI.qiQuadrupole[QYY], particleI.qiQuadrupole[QYZ]);
+    Vec3 qzI = Vec3(particleI.qiQuadrupole[QXZ], particleI.qiQuadrupole[QYZ], particleI.qiQuadrupole[QZZ]);
+    Vec3 qi = r*qzI;
+    double qir = qi[2]*r;
+    double dkr = particleK.qiDipole[2]*r;
+    Vec3 qxK = Vec3(particleK.qiQuadrupole[QXX], particleK.qiQuadrupole[QXY], particleK.qiQuadrupole[QXZ]);
+    Vec3 qyK = Vec3(particleK.qiQuadrupole[QXY], particleK.qiQuadrupole[QYY], particleK.qiQuadrupole[QYZ]);
+    Vec3 qzK = Vec3(particleK.qiQuadrupole[QXZ], particleK.qiQuadrupole[QYZ], particleK.qiQuadrupole[QZZ]);
+    Vec3 qk = r*qzK;
+    double qkr = qk[2]*r;
+    const Vec3& ui = particleI.qiInducedDipole;
+    const Vec3& uk = particleK.qiInducedDipole;
+    double uir = ui[2]*r;
+    double ukr = uk[2]*r;
+
+    double rInv = 1/r;
+    double rInv2 = rInv*rInv;
+    double rr3 = rInv*rInv2;
+    double rr5 = 3*rr3*rInv2;
+    double rr7 = 5*rr5*rInv2;
+    double rr9 = 7*rr7*rInv2;
+    double fdampI1, fdampI3, fdampI5, fdampI7, fdampI9;
+    double fdampK1, fdampK3, fdampK5, fdampK7, fdampK9;
+    double fdampIK1, fdampIK3, fdampIK5, fdampIK7, fdampIK9, fdampIK11;
+    computeOverlapDampingFactors(particleI, particleK, r, fdampI1, fdampI3, fdampI5, fdampI7, fdampI9, fdampK1, fdampK3, fdampK5, fdampK7, fdampK9,
+                                 fdampIK1, fdampIK3, fdampIK5, fdampIK7, fdampIK9, fdampIK11);
+    double dmScale = _electric;
+    auto exception = exceptions.find(make_pair(particleI.index, particleK.index));
+    if (exception != exceptions.end())
+        dmScale *= exception->second.dipoleMultipoleScale;
+    double rr3core = rr3*dmScale;
+    double rr5core = rr5*dmScale;
+    double rr3i = rr3*fdampI3*dmScale;
+    double rr5i = rr5*fdampI5*dmScale;
+    double rr7i = rr7*fdampI7*dmScale;
+    double rr9i = rr9*fdampI9*dmScale;
+    double rr3k = rr3*fdampK3*dmScale;
+    double rr5k = rr5*fdampK5*dmScale;
+    double rr7k = rr7*fdampK7*dmScale;
+    double rr9k = rr9*fdampK9*dmScale;
+
+    // Torques on the permanent moments (fields and field gradients of the induced dipoles), as in
+    // calculateInducedDipolePairIxn(), times g of the polarized particle.
+
+    Vec3 torqueFieldI = (rr3i*uk - Vec3(0, 0, rr5i*ukr*r))*gK;
+    Vec3 torqueFieldK = (rr3k*ui - Vec3(0, 0, rr5k*uir*r))*gI;
+    Vec3 dtorqueFieldI = (2*r*rr5i*uk - Vec3(0, 0, r2*rr7i*ukr))*gK;
+    Vec3 dtorqueFieldK = (-2*r*rr5k*ui + Vec3(0, 0, r2*rr7k*uir))*gI;
+
+    // Field gradients of the permanent moments, as in calculateInducedDipolePairIxn().
+
+    double ti[6], tk[6];
+    ti[QXX] = particleI.valenceCharge*rr3i + particleI.coreCharge*rr3core + dir*rr5i - qxI[0]*2*rr5i + qi[2]*r*rr7i;
+    tk[QXX] = particleK.valenceCharge*rr3k + particleK.coreCharge*rr3core - dkr*rr5k - qxK[0]*2*rr5k + qk[2]*r*rr7k;
+    ti[QYY] = particleI.valenceCharge*rr3i + particleI.coreCharge*rr3core + dir*rr5i - qyI[1]*2*rr5i + qi[2]*r*rr7i;
+    tk[QYY] = particleK.valenceCharge*rr3k + particleK.coreCharge*rr3core - dkr*rr5k - qyK[1]*2*rr5k + qk[2]*r*rr7k;
+    ti[QZZ] = particleI.valenceCharge*(rr3i-rr5i*r2) + particleI.coreCharge*(rr3core-rr5core*r2) + particleI.qiDipole[2]*2*rr5i*r -
+              dir*(rr7i*r2-rr5i) - qzI[2]*2*rr5i + qi[2]*5*rr7i*r - qir*rr9i*r2;
+    tk[QZZ] = particleK.valenceCharge*(rr3k-rr5k*r2) + particleK.coreCharge*(rr3core-rr5core*r2) - particleK.qiDipole[2]*2*rr5k*r +
+              dkr*(rr7k*r2-rr5k) - qzK[2]*2*rr5k + qk[2]*5*rr7k*r - qkr*rr9k*r2;
+    ti[QXY] = -qxI[1]*2*rr5i;
+    tk[QXY] = -qxK[1]*2*rr5k;
+    ti[QXZ] = particleI.qiDipole[0]*rr5i*r - qxI[2]*2*rr5i + qi[0]*2*rr7i*r;
+    tk[QXZ] = -particleK.qiDipole[0]*rr5k*r - qxK[2]*2*rr5k + qk[0]*2*rr7k*r;
+    ti[QYZ] = particleI.qiDipole[1]*rr5i*r - qyI[2]*2*rr5i + qi[1]*2*rr7i*r;
+    tk[QYZ] = -particleK.qiDipole[1]*rr5k*r - qyK[2]*2*rr5k + qk[1]*2*rr7k*r;
+    double depx = gK*(ti[QXX]*uk[0] + ti[QXY]*uk[1] + ti[QXZ]*uk[2]) - gI*(tk[QXX]*ui[0] + tk[QXY]*ui[1] + tk[QXZ]*ui[2]);
+    double depy = gK*(ti[QXY]*uk[0] + ti[QYY]*uk[1] + ti[QYZ]*uk[2]) - gI*(tk[QXY]*ui[0] + tk[QYY]*ui[1] + tk[QYZ]*ui[2]);
+    double depz = gK*(ti[QXZ]*uk[0] + ti[QYZ]*uk[1] + ti[QZZ]*uk[2]) - gI*(tk[QXZ]*ui[0] + tk[QYZ]*ui[1] + tk[QZZ]*ui[2]);
+
+    // Radial derivative of f: A_I = u_I.E_K(I), A_K = u_K.E_I(K) (permanent fields in the quasi-internal frame).
+
+    double factorK = rr3core*particleK.coreCharge + rr3k*particleK.valenceCharge - rr5k*dkr + rr7k*qkr;
+    Vec3 fieldKatI = -(Vec3(0, 0, r*factorK) + particleK.qiDipole*rr3k - qk*2*rr5k);
+    double factorI = rr3core*particleI.coreCharge + rr3i*particleI.valenceCharge + rr5i*dir + rr7i*qir;
+    Vec3 fieldIatK = -(Vec3(0, 0, -r*factorI) + particleI.qiDipole*rr3i + qi*2*rr5i);
+    depz += dfI*ui.dot(fieldKatI) + dfK*uk.dot(fieldIatK);
+    force += Vec3(depx, depy, depz);
+
+    torqueI += torqueFieldI.cross(particleI.qiDipole);
+    torqueI[0] += -qxI[1]*dtorqueFieldI[0] - 2*qyI[2]*dtorqueFieldI[2] + (qzI[2]-qyI[1])*dtorqueFieldI[1];
+    torqueI[1] += qxI[1]*dtorqueFieldI[1] + 2*qxI[2]*dtorqueFieldI[2] + (qxI[0]-qzI[2])*dtorqueFieldI[0];
+    torqueI[2] += qyI[2]*dtorqueFieldI[0] - qxI[2]*dtorqueFieldI[1];
+    torqueK += torqueFieldK.cross(particleK.qiDipole);
+    torqueK[0] += -qxK[1]*dtorqueFieldK[0] - 2*qyK[2]*dtorqueFieldK[2] + (qzK[2]-qyK[1])*dtorqueFieldK[1];
+    torqueK[1] += qxK[1]*dtorqueFieldK[1] + 2*qxK[2]*dtorqueFieldK[2] + (qxK[0]-qzK[2])*dtorqueFieldK[0];
+    torqueK[2] += qyK[2]*dtorqueFieldK[0] - qxK[2]*dtorqueFieldK[1];
+}
+
 void ReferenceInteraxMultipole::mapTorqueToForceForParticle(const MultipoleParticleData& particleI,
                                                                 const MultipoleParticleData& particleU,
                                                                 const MultipoleParticleData& particleV,
@@ -1107,8 +1135,7 @@ void ReferenceInteraxMultipole::mapTorqueToForceForParticle(const MultipoleParti
     norms[U] = normalizeVec3(vectorU);
     Vec3 vectorV;
     if (axisType == InteraxMultipoleForce::ZOnly) {
-        // There is no x axis particle: use the lab axis of applyRotationMatrixToParticle(). (HippoNonbondedForce's
-        // reference code reads the position of particle -1 here.)
+        // InteraxFF: there is no x axis particle, so use the lab frame axis chosen by applyRotationMatrixToParticle().
         Vec3 vectorZ = -vectorU;
         vectorV = (fabs(vectorZ[0]) < 0.866 ? Vec3(1.0, 0.0, 0.0) : Vec3(0.0, 1.0, 0.0));
         norms[V] = 1.0;
@@ -1230,8 +1257,8 @@ void ReferenceInteraxMultipole::mapTorqueToForceForParticle(const MultipoleParti
 
     }
     else if (axisType == InteraxMultipoleForce::ThreeFold && particleW) {
-        // Exact chain rule for the frame of applyRotationMatrixToParticle() (Tinker's 3-fold torque mapping is not
-        // the gradient of the energy). With a, b, c the unit vectors from this particle to the z, x and y axis
+        // InteraxFF: the exact chain rule for the frame of applyRotationMatrixToParticle() (Tinker's 3-fold torque
+        // mapping is not the gradient of the energy). With a, b, c the unit vectors from this particle to the z, x and y axis
         // particles, s = a+b+c, z = s/|s|, x' = b-(b.z)z, x = x'/|x'| and y = z cross x, an infinitesimal change of
         // the frame is a rotation dtheta = z cross dz + (y.dx) z, dE = -torque.dtheta, and
         // y.dx = (y.db - (b.z) y.dz)/|x'|, dz = P_z ds/|s|, da = P_a dr_a/|r_a| (P_n = 1 - n n^T).
@@ -1273,6 +1300,7 @@ void ReferenceInteraxMultipole::mapTorqueToForce(vector<Vec3>& torques,
     for (int ii = 0; ii < _numParticles; ii++) {
         MultipoleParticleData& p = particleData[ii];
         if (p.axisType != InteraxMultipoleForce::NoAxisType) {
+             // InteraxFF: Z-only particles have no x axis particle (mapTorqueToForceForParticle() does not use it).
              mapTorqueToForceForParticle(p,
                                          particleData[p.multipoleAtomZ], particleData[p.multipoleAtomX >= 0 ? p.multipoleAtomX : p.multipoleAtomZ],
                                          p.multipoleAtomY > -1 ? &particleData[p.multipoleAtomY] : NULL,
@@ -1306,6 +1334,7 @@ double ReferenceInteraxMultipole::calculateInteractions(vector<Vec3>& torques, v
             Vec3 force, labForce, torqueI, torqueJ;
             energy += calculateElectrostaticPairIxn(particleData[i], particleData[j], r, force, torqueI, torqueJ);
             calculateInducedDipolePairIxn(particleData[i], particleData[j], deltaR, r, force, torqueI, torqueJ, labForce);
+            // InteraxFF: core damping of the fields that polarize the two particles.
             if (_coreDamping)
                 calculateCoreDampingPairIxn(particleData[i], particleData[j], r, force, torqueI, torqueJ);
             force = rotateVectorFromQI(force, mat);
@@ -1318,6 +1347,7 @@ double ReferenceInteraxMultipole::calculateInteractions(vector<Vec3>& torques, v
         }
     }
     for (int i = 0; i < _numParticles; i++)
+        // InteraxFF: use the recorded fields, rather than dividing by the polarizability (which may be zero).
         energy -= 0.5*_electric*_polarizingField[i].dot(_inducedDipole[i]);
     
     return energy;
@@ -1391,8 +1421,6 @@ double ReferenceInteraxMultipolePme::getAlphaEwald() const {
      return _alphaEwald;
 };
 
-;
-
 void ReferenceInteraxMultipolePme::getPmeGridDimensions(vector<int>& pmeGridDimensions) const {
     pmeGridDimensions.resize(3);
 
@@ -1400,8 +1428,6 @@ void ReferenceInteraxMultipolePme::getPmeGridDimensions(vector<int>& pmeGridDime
     pmeGridDimensions[1] = _pmeGridDimensions[1];
     pmeGridDimensions[2] = _pmeGridDimensions[2];
 };
-
-;
 
 void ReferenceInteraxMultipolePme::setPmeGridDimensions(vector<int>& pmeGridDimensions) {
     if ((pmeGridDimensions[0] == _pmeGridDimensions[0]) &&
@@ -1415,8 +1441,6 @@ void ReferenceInteraxMultipolePme::setPmeGridDimensions(vector<int>& pmeGridDime
 
     initializeBSplineModuli();
 };
-
-;
 
 void ReferenceInteraxMultipolePme::setPeriodicBoxSize(OpenMM::Vec3* vectors) {
     if (vectors[0][0] == 0.0 || vectors[1][1] == 0.0 || vectors[2][2] == 0.0) {
@@ -2687,7 +2711,7 @@ void ReferenceInteraxMultipolePme::calculateInducedDipolePairIxn(const Multipole
     double rr7k = _electric*(bn3 - (1-dipoleMultipoleScale*fdampK7)*rr7);
     double rr9k = _electric*(bn4 - (1-dipoleMultipoleScale*fdampK9)*rr9);
     {
-        // the couplings of the induced dipoles use the exponents kappa*alpha
+        // InteraxFF: the couplings of the induced dipoles use the exponents scaled by the mutual damping scale.
         double fdampMutual[6];
         computePairDampingFactors(_mutualDampingScale*particleI.alpha, _mutualDampingScale*particleK.alpha, r, fdampMutual);
         fdampIK5 = fdampMutual[2];

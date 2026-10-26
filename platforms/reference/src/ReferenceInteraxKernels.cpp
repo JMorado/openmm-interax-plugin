@@ -81,7 +81,7 @@ double ReferenceCalcInteraxDispersionForceKernel::execute(ContextImpl& context, 
     vector<Vec3>& forces = extractForces(context);
     Vec3* boxVectors = extractBoxVectors(context);
     double lambda = getAlchemicalParameter(context, hasAlchemicalParticles, alchemicalParameter);
-    double energy = ixn->calculateIxn(positions, boxVectors, lambda, forces, [&] (int i, int j, double r, double& pairEnergy, double& dEdR) {
+    double energy = ixn->calculatePairIxn(positions, boxVectors, lambda, forces, [&] (int i, int j, double r, double& pairEnergy, double& dEdR) {
         const ParticleParameters& p1 = particles[i];
         const ParticleParameters& p2 = particles[j];
         if (p1.alpha*p2.alpha == 0)
@@ -127,7 +127,7 @@ void ReferenceCalcInteraxExchangeForceKernel::initialize(const System& system, c
 
 double ReferenceCalcInteraxExchangeForceKernel::execute(ContextImpl& context, bool includeForces, bool includeEnergy) {
     double lambda = getAlchemicalParameter(context, hasAlchemicalParticles, alchemicalParameter);
-    return ixn->calculateIxn(extractPositions(context), extractBoxVectors(context), lambda, extractForces(context),
+    return ixn->calculatePairIxn(extractPositions(context), extractBoxVectors(context), lambda, extractForces(context),
             [&] (int i, int j, double r, double& pairEnergy, double& dEdR) {
         // The InteraxFF Taylor schemes expand about the width of the particle with the lower index.
         const ParticleParameters& p1 = particles[min(i, j)];
@@ -170,7 +170,7 @@ void ReferenceCalcInteraxShortRangeForceKernel::initialize(const System& system,
 
 double ReferenceCalcInteraxShortRangeForceKernel::execute(ContextImpl& context, bool includeForces, bool includeEnergy) {
     double lambda = getAlchemicalParameter(context, hasAlchemicalParticles, alchemicalParameter);
-    return ixn->calculateIxn(extractPositions(context), extractBoxVectors(context), lambda, extractForces(context),
+    return ixn->calculatePairIxn(extractPositions(context), extractBoxVectors(context), lambda, extractForces(context),
             [&] (int i, int j, double r, double& pairEnergy, double& dEdR) {
         // The InteraxFF Taylor schemes expand about the width of the particle with the lower index.
         const ParticleParameters& p1 = particles[min(i, j)];
