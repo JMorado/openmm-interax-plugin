@@ -1,6 +1,3 @@
-#ifndef CPU_INTERAX_THREEBODY_FORCE_H_
-#define CPU_INTERAX_THREEBODY_FORCE_H_
-
 /* -------------------------------------------------------------------------- *
  *                            OpenMM InteraxFF Plugin                         *
  * -------------------------------------------------------------------------- *
@@ -30,52 +27,20 @@
  * USE OR OTHER DEALINGS IN THE SOFTWARE.                                     *
  * -------------------------------------------------------------------------- */
 
-#include "InteraxThreeBodyForce.h"
-#include "openmm/Vec3.h"
-#include "openmm/internal/ThreadPool.h"
-#include <vector>
+#include "CpuInteraxPairForceFvec.h"
+
+using namespace InteraxPlugin;
+using namespace OpenMM;
 
 namespace InteraxPlugin {
 
-/**
- * This class evaluates InteraxThreeBodyForce on the CPU platform. Each thread takes sites A in turn and computes
- * every triple A < B < C within the cutoff: it marks the neighbors of A, then for each neighbor B of A visits the
- * neighbors C of B that are also marked, so the cost is the sum over sites of the number of neighbor pairs.
- */
-class CpuInteraxThreeBodyForce {
-public:
-    CpuInteraxThreeBodyForce(const InteraxThreeBodyForce& force, int numThreads);
-    /**
-     * Copy the polarizabilities, frequencies and widths of the sites, the scale factor and the damping scale from a
-     * force.
-     */
-    void setParameters(const InteraxThreeBodyForce& force);
-    /**
-     * Compute the interactions.
-     *
-     * @param positions      the particle positions
-     * @param boxVectors     the periodic box vectors
-     * @param lambda         the value of the alchemical parameter
-     * @param forces         the forces are added to this
-     * @param threads        the thread pool to use
-     * @return the energy
-     */
-    double calculateIxn(const std::vector<OpenMM::Vec3>& positions, const OpenMM::Vec3* boxVectors, double lambda,
-            std::vector<OpenMM::Vec3>& forces, OpenMM::ThreadPool& threads);
-private:
-    OpenMM::Vec3 getDelta(const OpenMM::Vec3& from, const OpenMM::Vec3& to, const OpenMM::Vec3* boxVectors) const;
-    std::vector<std::vector<int> > siteParticles;
-    std::vector<int> molecule;
-    std::vector<double> alpha, frequency, width;
-    std::vector<bool> isAlchemical;
-    double cutoff, scaleFactor, dampingScale, dampingRadius;
-    bool periodic, useDamping;
-    std::vector<OpenMM::Vec3> sites;
-    std::vector<std::vector<int> > neighbors;
-    std::vector<std::vector<OpenMM::Vec3> > threadSiteForces;
-    std::vector<std::vector<int> > threadMarks;
-};
+template <class Term>
+CpuInteraxPairForce* createCpuInteraxPairForceVec4(const InteraxPairForce& force, ThreadPool& threads) {
+    return new CpuInteraxPairForceFvec<fvec4, 4, Term>(force, threads);
+}
+
+template CpuInteraxPairForce* createCpuInteraxPairForceVec4<CpuInteraxDispersionTerm>(const InteraxPairForce& force, ThreadPool& threads);
+template CpuInteraxPairForce* createCpuInteraxPairForceVec4<CpuInteraxExchangeTerm>(const InteraxPairForce& force, ThreadPool& threads);
+template CpuInteraxPairForce* createCpuInteraxPairForceVec4<CpuInteraxShortRangeTerm>(const InteraxPairForce& force, ThreadPool& threads);
 
 } // namespace InteraxPlugin
-
-#endif /*CPU_INTERAX_THREEBODY_FORCE_H_*/

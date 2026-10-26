@@ -1,5 +1,5 @@
-#ifndef CPU_INTERAX_KERNELS_H_
-#define CPU_INTERAX_KERNELS_H_
+#ifndef OPENMM_CPU_INTERAX_KERNELS_H_
+#define OPENMM_CPU_INTERAX_KERNELS_H_
 
 /* -------------------------------------------------------------------------- *
  *                            OpenMM InteraxFF Plugin                         *
@@ -72,8 +72,8 @@ public:
      */
     void copyParametersToContext(OpenMM::ContextImpl& context, const InteraxDispersionForce& force);
 private:
-    OpenMM::CpuPlatform::PlatformData& data;
     void setParameters(const InteraxDispersionForce& force);
+    OpenMM::CpuPlatform::PlatformData& data;
     std::unique_ptr<CpuInteraxPairForce> ixn;
     CpuInteraxPairGlobals globals;
     double longRangeCoefficient, alchemicalLongRangeCoefficient;
@@ -114,8 +114,8 @@ public:
      */
     void copyParametersToContext(OpenMM::ContextImpl& context, const InteraxExchangeForce& force);
 private:
-    OpenMM::CpuPlatform::PlatformData& data;
     void setParameters(const InteraxExchangeForce& force);
+    OpenMM::CpuPlatform::PlatformData& data;
     std::unique_ptr<CpuInteraxPairForce> ixn;
     CpuInteraxPairGlobals globals;
     int overlapMethod;
@@ -156,8 +156,8 @@ public:
      */
     void copyParametersToContext(OpenMM::ContextImpl& context, const InteraxShortRangeForce& force);
 private:
-    OpenMM::CpuPlatform::PlatformData& data;
     void setParameters(const InteraxShortRangeForce& force);
+    OpenMM::CpuPlatform::PlatformData& data;
     std::unique_ptr<CpuInteraxPairForce> ixn;
     CpuInteraxPairGlobals globals;
     int overlapMethod;
@@ -206,4 +206,4 @@ private:
 
 } // namespace InteraxPlugin
 
-#endif /*CPU_INTERAX_KERNELS_H_*/
+#endif /*OPENMM_CPU_INTERAX_KERNELS_H_*/

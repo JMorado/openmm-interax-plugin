@@ -1,14 +1,15 @@
 #---------------------------------------------------
 # OpenMM InteraxFF Plugin CPU Platform
+#
+# Creates the InteraxPluginCPU library.
 #----------------------------------------------------
 
 SET(INTERAX_CPU_LIBRARY_NAME InteraxPluginCPU)
 SET(SHARED_TARGET ${INTERAX_CPU_LIBRARY_NAME})
 
 FILE(GLOB SOURCE_FILES ${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp)
-FILE(GLOB SOURCE_INCLUDE_FILES ${CMAKE_CURRENT_SOURCE_DIR}/src/*.h ${CMAKE_CURRENT_SOURCE_DIR}/include/*.h)
+FILE(GLOB SOURCE_INCLUDE_FILES ${CMAKE_CURRENT_SOURCE_DIR}/include/*.h)
 INCLUDE_DIRECTORIES(BEFORE ${CMAKE_CURRENT_SOURCE_DIR}/include)
-INCLUDE_DIRECTORIES(BEFORE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 # CpuPlatform.h includes ReferencePlatform.h without its directory.
 INCLUDE_DIRECTORIES(${OPENMM_DIR}/include/openmm/reference)
 

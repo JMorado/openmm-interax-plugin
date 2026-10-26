@@ -41,6 +41,7 @@ extern "C" OPENMM_EXPORT void registerPlatforms() {
 }
 
 extern "C" OPENMM_EXPORT void registerKernelFactories() {
+    // Register the kernels with the CPU platform, if it is available.
     try {
         Platform& platform = Platform::getPlatformByName("CPU");
         CpuInteraxKernelFactory* factory = new CpuInteraxKernelFactory();
@@ -54,6 +55,10 @@ extern "C" OPENMM_EXPORT void registerKernelFactories() {
     }
 }
 
+/**
+ * Register the kernels with the CPU platform, registering the platform first if it has not been loaded.  This is used
+ * when the plugin is linked directly, as by the tests, rather than loaded from the plugin directory.
+ */
 extern "C" OPENMM_EXPORT void registerInteraxCpuKernelFactories() {
     try {
         Platform::getPlatformByName("CPU");
@@ -74,5 +79,5 @@ KernelImpl* CpuInteraxKernelFactory::createKernelImpl(std::string name, const Pl
         return new CpuCalcInteraxShortRangeForceKernel(name, platform, data);
     if (name == CalcInteraxThreeBodyForceKernel::Name())
         return new CpuCalcInteraxThreeBodyForceKernel(name, platform, data);
-    throw OpenMMException((std::string("Tried to create kernel with illegal kernel name '")+name+"'").c_str());
+    throw OpenMMException((std::string("Tried to create kernel with illegal kernel name '") + name + "'").c_str());
 }

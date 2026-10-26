@@ -1,5 +1,5 @@
-#ifndef CPU_INTERAX_PAIR_FORCE_H_
-#define CPU_INTERAX_PAIR_FORCE_H_
+#ifndef OPENMM_CPU_INTERAX_PAIR_FORCE_H_
+#define OPENMM_CPU_INTERAX_PAIR_FORCE_H_
 
 /* -------------------------------------------------------------------------- *
  *                            OpenMM InteraxFF Plugin                         *
@@ -41,7 +41,7 @@ namespace InteraxPlugin {
 
 /**
  * The global parameters of the pair terms: the damping scale of the dispersion, and the Taylor scheme of the Slater
- * overlap of the exchange repulsion and the short-range correction.
+ * overlap used by the exchange repulsion and the short-range correction.
  */
 struct CpuInteraxPairGlobals {
     float dampingScale;
@@ -49,71 +49,86 @@ struct CpuInteraxPairGlobals {
 };
 
 /**
- * This is the interface of the CPU implementation of an InteraxFF pair force. The implementation
- * (CpuInteraxPairForceFvec) is vectorized with SSE or AVX, chosen at runtime by createCpuInteraxPairForce().
+ * This is the abstract interface to the CPU implementation of the InteraxFF pair forces (InteraxDispersionForce,
+ * InteraxExchangeForce and InteraxShortRangeForce).  The implementation, CpuInteraxPairForceFvec, is vectorized with
+ * SSE or AVX.  Call createCpuInteraxPairForce() to create an instance of the version appropriate for the current CPU.
  */
 class CpuInteraxPairForce {
 public:
     virtual ~CpuInteraxPairForce() {
     }
     /**
-     * Set the per-particle parameters: parameters[i][k] is the k'th parameter of particle i.
+     * Set the per-particle parameters.
+     *
+     * @param parameters   parameters[i][k] is the k'th parameter of particle i
      */
     virtual void setParameters(const std::vector<std::vector<double> >& parameters) = 0;
     /**
-     * Compute the interactions.
+     * Calculate the pair interactions.
      *
-     * @param posq             the single precision positions (x, y, z, charge) of the CPU platform
-     * @param boxVectors       the periodic box vectors
+     * @param posq             atom coordinates and charges in float format, as stored by the CPU platform
+     * @param boxVectors       the vectors defining the periodic box
      * @param lambda           the value of the alchemical parameter
      * @param globals          the global parameters of the pair term
-     * @param threadForce      the per-thread force buffers of the CPU platform; the forces are added to them
-     * @param threads          the thread pool to use
-     * @param includeEnergy    true if the energy should be calculated
-     * @return the energy
+     * @param threadForce      the collection of arrays for each thread to add forces to
+     * @param includeEnergy    whether to compute energy
+     * @param totalEnergy      the energy is added to this
      */
-    virtual double calculateIxn(const OpenMM::AlignedArray<float>& posq, const OpenMM::Vec3* boxVectors, double lambda, const CpuInteraxPairGlobals& globals,
-            std::vector<OpenMM::AlignedArray<float> >& threadForce, OpenMM::ThreadPool& threads, bool includeEnergy) = 0;
+    virtual void calculatePairIxn(const OpenMM::AlignedArray<float>& posq, const OpenMM::Vec3* boxVectors, double lambda, const CpuInteraxPairGlobals& globals,
+            std::vector<OpenMM::AlignedArray<float> >& threadForce, bool includeEnergy, double& totalEnergy) = 0;
 };
 
 /**
- * The per-particle parameters and the pair energy of InteraxDispersionForce, in the form used by
- * CpuInteraxPairForceFvec. A pair interacts only if the product of its GATE_PARAMETER values is positive.
+ * This describes the per-particle parameters and the pair energy of InteraxDispersionForce to CpuInteraxPairForceFvec.
+ * A pair interacts only if the product of the values of GATE_PARAMETER of its two particles is positive.
  */
 struct CpuInteraxDispersionTerm {
     static const int NUM_PARAMETERS = 5;  // m1, m2, m3, alpha, width
     static const int GATE_PARAMETER = 3;  // alpha
+    /**
+     * Compute the energy of a pair and its derivative with respect to the distance, one pair per SIMD lane.
+     */
     template <class FVEC>
     static void compute(FVEC r, const FVEC* p1, const FVEC* p2, const CpuInteraxPairGlobals& globals, FVEC& energy, FVEC& dEdR);
 };
 
 /**
- * The per-particle parameters and the pair energy of InteraxExchangeForce.
+ * This describes the per-particle parameters and the pair energy of InteraxExchangeForce to CpuInteraxPairForceFvec.
  */
 struct CpuInteraxExchangeTerm {
     static const int NUM_PARAMETERS = 2;  // amplitude, width
     static const int GATE_PARAMETER = 1;  // width
+    /**
+     * Compute the energy of a pair and its derivative with respect to the distance, one pair per SIMD lane.
+     */
     template <class FVEC>
     static void compute(FVEC r, const FVEC* p1, const FVEC* p2, const CpuInteraxPairGlobals& globals, FVEC& energy, FVEC& dEdR);
 };
 
 /**
- * The per-particle parameters and the pair energy of InteraxShortRangeForce.
+ * This describes the per-particle parameters and the pair energy of InteraxShortRangeForce to CpuInteraxPairForceFvec.
  */
 struct CpuInteraxShortRangeTerm {
     static const int NUM_PARAMETERS = 3;  // k, l, width
     static const int GATE_PARAMETER = 2;  // width
+    /**
+     * Compute the energy of a pair and its derivative with respect to the distance, one pair per SIMD lane.
+     */
     template <class FVEC>
     static void compute(FVEC r, const FVEC* p1, const FVEC* p2, const CpuInteraxPairGlobals& globals, FVEC& energy, FVEC& dEdR);
 };
 
 /**
- * Create the CPU implementation of a pair force, vectorized with AVX if the processor supports it and with SSE
- * otherwise. Term is one of CpuInteraxDispersionTerm, CpuInteraxExchangeTerm, CpuInteraxShortRangeTerm.
+ * This function is called to create an instance of an appropriate subclass for the current CPU: vectorized with AVX
+ * if the processor supports it, and with SSE otherwise.  Term is CpuInteraxDispersionTerm, CpuInteraxExchangeTerm or
+ * CpuInteraxShortRangeTerm.
+ *
+ * @param force      the force to create it for
+ * @param threads    the thread pool to use
  */
 template <class Term>
-CpuInteraxPairForce* createCpuInteraxPairForce(const InteraxPairForce& force);
+CpuInteraxPairForce* createCpuInteraxPairForce(const InteraxPairForce& force, OpenMM::ThreadPool& threads);
 
 } // namespace InteraxPlugin
 
-#endif /*CPU_INTERAX_PAIR_FORCE_H_*/
+#endif /*OPENMM_CPU_INTERAX_PAIR_FORCE_H_*/

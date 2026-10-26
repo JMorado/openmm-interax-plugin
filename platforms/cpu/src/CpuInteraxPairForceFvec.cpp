@@ -31,21 +31,25 @@
 #include "openmm/internal/hardware.h"
 
 using namespace InteraxPlugin;
+using namespace OpenMM;
 
 namespace InteraxPlugin {
 
 template <class Term>
-CpuInteraxPairForce* createCpuInteraxPairForceAvx(const InteraxPairForce& force);
+CpuInteraxPairForce* createCpuInteraxPairForceVec4(const InteraxPairForce& force, ThreadPool& threads);
+template <class Term>
+CpuInteraxPairForce* createCpuInteraxPairForceAvx(const InteraxPairForce& force, ThreadPool& threads);
 
 template <class Term>
-CpuInteraxPairForce* createCpuInteraxPairForce(const InteraxPairForce& force) {
+CpuInteraxPairForce* createCpuInteraxPairForce(const InteraxPairForce& force, ThreadPool& threads) {
     if (isAvxSupported())
-        return createCpuInteraxPairForceAvx<Term>(force);
-    return new CpuInteraxPairForceFvec<fvec4, 4, Term>(force);
+        return createCpuInteraxPairForceAvx<Term>(force, threads);
+    else
+        return createCpuInteraxPairForceVec4<Term>(force, threads);
 }
 
-template CpuInteraxPairForce* createCpuInteraxPairForce<CpuInteraxDispersionTerm>(const InteraxPairForce& force);
-template CpuInteraxPairForce* createCpuInteraxPairForce<CpuInteraxExchangeTerm>(const InteraxPairForce& force);
-template CpuInteraxPairForce* createCpuInteraxPairForce<CpuInteraxShortRangeTerm>(const InteraxPairForce& force);
+template CpuInteraxPairForce* createCpuInteraxPairForce<CpuInteraxDispersionTerm>(const InteraxPairForce& force, ThreadPool& threads);
+template CpuInteraxPairForce* createCpuInteraxPairForce<CpuInteraxExchangeTerm>(const InteraxPairForce& force, ThreadPool& threads);
+template CpuInteraxPairForce* createCpuInteraxPairForce<CpuInteraxShortRangeTerm>(const InteraxPairForce& force, ThreadPool& threads);
 
 } // namespace InteraxPlugin

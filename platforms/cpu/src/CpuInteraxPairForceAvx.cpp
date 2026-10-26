@@ -27,19 +27,35 @@
  * USE OR OTHER DEALINGS IN THE SOFTWARE.                                     *
  * -------------------------------------------------------------------------- */
 
-// This file is compiled with AVX enabled (platforms/cpu/CMakeLists.txt) and only called when the processor supports it.
+// This file is compiled with AVX enabled (see platforms/cpu/CMakeLists.txt).  It is only called when the processor
+// supports AVX.
 
 #include "CpuInteraxPairForceFvec.h"
+#include "openmm/OpenMMException.h"
+#ifdef __AVX__
+#include "openmm/internal/vectorizeAvx.h"
+#endif
+
+using namespace InteraxPlugin;
+using namespace OpenMM;
 
 namespace InteraxPlugin {
 
+#ifdef __AVX__
 template <class Term>
-CpuInteraxPairForce* createCpuInteraxPairForceAvx(const InteraxPairForce& force) {
-    return new CpuInteraxPairForceFvec<fvec8, 8, Term>(force);
+CpuInteraxPairForce* createCpuInteraxPairForceAvx(const InteraxPairForce& force, ThreadPool& threads) {
+    return new CpuInteraxPairForceFvec<fvec8, 8, Term>(force, threads);
 }
 
-template CpuInteraxPairForce* createCpuInteraxPairForceAvx<CpuInteraxDispersionTerm>(const InteraxPairForce& force);
-template CpuInteraxPairForce* createCpuInteraxPairForceAvx<CpuInteraxExchangeTerm>(const InteraxPairForce& force);
-template CpuInteraxPairForce* createCpuInteraxPairForceAvx<CpuInteraxShortRangeTerm>(const InteraxPairForce& force);
+#else
+template <class Term>
+CpuInteraxPairForce* createCpuInteraxPairForceAvx(const InteraxPairForce& force, ThreadPool& threads) {
+    throw OpenMMException("Internal error: the InteraxFF plugin was compiled without AVX support");
+}
+#endif
+
+template CpuInteraxPairForce* createCpuInteraxPairForceAvx<CpuInteraxDispersionTerm>(const InteraxPairForce& force, ThreadPool& threads);
+template CpuInteraxPairForce* createCpuInteraxPairForceAvx<CpuInteraxExchangeTerm>(const InteraxPairForce& force, ThreadPool& threads);
+template CpuInteraxPairForce* createCpuInteraxPairForceAvx<CpuInteraxShortRangeTerm>(const InteraxPairForce& force, ThreadPool& threads);
 
 } // namespace InteraxPlugin

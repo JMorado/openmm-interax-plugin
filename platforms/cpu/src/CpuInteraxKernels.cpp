@@ -39,19 +39,22 @@ using namespace std;
 
 static vector<Vec3>& extractPositions(ContextImpl& context) {
     ReferencePlatform::PlatformData* data = reinterpret_cast<ReferencePlatform::PlatformData*>(context.getPlatformData());
-    return *((vector<Vec3>*) data->positions);
+    return *data->positions;
 }
 
 static vector<Vec3>& extractForces(ContextImpl& context) {
     ReferencePlatform::PlatformData* data = reinterpret_cast<ReferencePlatform::PlatformData*>(context.getPlatformData());
-    return *((vector<Vec3>*) data->forces);
+    return *data->forces;
 }
 
 static Vec3* extractBoxVectors(ContextImpl& context) {
     ReferencePlatform::PlatformData* data = reinterpret_cast<ReferencePlatform::PlatformData*>(context.getPlatformData());
-    return (Vec3*) data->periodicBoxVectors;
+    return data->periodicBoxVectors;
 }
 
+/**
+ * Get whether any particle of a pair force is alchemical.
+ */
 static bool anyParticleIsAlchemical(const InteraxPairForce& force) {
     for (int i = 0; i < force.getNumParticles(); i++)
         if (force.getParticleIsAlchemical(i))
@@ -59,6 +62,10 @@ static bool anyParticleIsAlchemical(const InteraxPairForce& force) {
     return false;
 }
 
+/**
+ * Get the value of the alchemical parameter, or 1 if the force has no alchemical particles (in which case the
+ * parameter need not be defined).
+ */
 static double getAlchemicalParameter(ContextImpl& context, bool isAlchemical, const string& name) {
     return (isAlchemical ? context.getParameter(name) : 1.0);
 }
@@ -68,8 +75,8 @@ static double getAlchemicalParameter(ContextImpl& context, bool isAlchemical, co
  * -------------------------------------------------------------------------- */
 
 void CpuCalcInteraxDispersionForceKernel::initialize(const System& system, const InteraxDispersionForce& force) {
-    ixn.reset(createCpuInteraxPairForce<CpuInteraxDispersionTerm>(force));
-    globals.taylorScheme = InteraxPairTerms::SlaterTaylorScheme::accurate(false); // Not used by the dispersion
+    ixn.reset(createCpuInteraxPairForce<CpuInteraxDispersionTerm>(force, data.threads));
+    globals.taylorScheme = InteraxPairTerms::SlaterTaylorScheme::accurate(false); // Not used by the dispersion.
     alchemicalParameter = force.getAlchemicalParameterName();
     hasAlchemicalParticles = anyParticleIsAlchemical(force);
     setParameters(force);
@@ -78,7 +85,11 @@ void CpuCalcInteraxDispersionForceKernel::initialize(const System& system, const
 double CpuCalcInteraxDispersionForceKernel::execute(ContextImpl& context, bool includeForces, bool includeEnergy) {
     Vec3* boxVectors = extractBoxVectors(context);
     double lambda = getAlchemicalParameter(context, hasAlchemicalParticles, alchemicalParameter);
-    double energy = ixn->calculateIxn(data.posq, boxVectors, lambda, globals, data.threadForce, data.threads, includeEnergy);
+    double energy = 0;
+    ixn->calculatePairIxn(data.posq, boxVectors, lambda, globals, data.threadForce, includeEnergy, energy);
+
+    // Add in the long range correction.
+
     if (longRangeCoefficient != 0 || alchemicalLongRangeCoefficient != 0)
         energy += (longRangeCoefficient+lambda*alchemicalLongRangeCoefficient)/(boxVectors[0][0]*boxVectors[1][1]*boxVectors[2][2]);
     return energy;
@@ -107,7 +118,7 @@ void CpuCalcInteraxDispersionForceKernel::setParameters(const InteraxDispersionF
  * -------------------------------------------------------------------------- */
 
 void CpuCalcInteraxExchangeForceKernel::initialize(const System& system, const InteraxExchangeForce& force) {
-    ixn.reset(createCpuInteraxPairForce<CpuInteraxExchangeTerm>(force));
+    ixn.reset(createCpuInteraxPairForce<CpuInteraxExchangeTerm>(force, data.threads));
     globals.dampingScale = 0;
     overlapMethod = force.getOverlapMethod();
     globals.taylorScheme = getSlaterTaylorScheme(force, false);
@@ -118,7 +129,9 @@ void CpuCalcInteraxExchangeForceKernel::initialize(const System& system, const I
 
 double CpuCalcInteraxExchangeForceKernel::execute(ContextImpl& context, bool includeForces, bool includeEnergy) {
     double lambda = getAlchemicalParameter(context, hasAlchemicalParticles, alchemicalParameter);
-    return ixn->calculateIxn(data.posq, extractBoxVectors(context), lambda, globals, data.threadForce, data.threads, includeEnergy);
+    double energy = 0;
+    ixn->calculatePairIxn(data.posq, extractBoxVectors(context), lambda, globals, data.threadForce, includeEnergy, energy);
+    return energy;
 }
 
 void CpuCalcInteraxExchangeForceKernel::copyParametersToContext(ContextImpl& context, const InteraxExchangeForce& force) {
@@ -143,7 +156,7 @@ void CpuCalcInteraxExchangeForceKernel::setParameters(const InteraxExchangeForce
  * -------------------------------------------------------------------------- */
 
 void CpuCalcInteraxShortRangeForceKernel::initialize(const System& system, const InteraxShortRangeForce& force) {
-    ixn.reset(createCpuInteraxPairForce<CpuInteraxShortRangeTerm>(force));
+    ixn.reset(createCpuInteraxPairForce<CpuInteraxShortRangeTerm>(force, data.threads));
     globals.dampingScale = 0;
     overlapMethod = force.getOverlapMethod();
     globals.taylorScheme = getSlaterTaylorScheme(force, false);
@@ -154,7 +167,9 @@ void CpuCalcInteraxShortRangeForceKernel::initialize(const System& system, const
 
 double CpuCalcInteraxShortRangeForceKernel::execute(ContextImpl& context, bool includeForces, bool includeEnergy) {
     double lambda = getAlchemicalParameter(context, hasAlchemicalParticles, alchemicalParameter);
-    return ixn->calculateIxn(data.posq, extractBoxVectors(context), lambda, globals, data.threadForce, data.threads, includeEnergy);
+    double energy = 0;
+    ixn->calculatePairIxn(data.posq, extractBoxVectors(context), lambda, globals, data.threadForce, includeEnergy, energy);
+    return energy;
 }
 
 void CpuCalcInteraxShortRangeForceKernel::copyParametersToContext(ContextImpl& context, const InteraxShortRangeForce& force) {
@@ -179,7 +194,7 @@ void CpuCalcInteraxShortRangeForceKernel::setParameters(const InteraxShortRangeF
  * -------------------------------------------------------------------------- */
 
 void CpuCalcInteraxThreeBodyForceKernel::initialize(const System& system, const InteraxThreeBodyForce& force) {
-    ixn.reset(new CpuInteraxThreeBodyForce(force, data.threads.getNumThreads()));
+    ixn.reset(new CpuInteraxThreeBodyForce(force, data.threads));
     alchemicalParameter = force.getAlchemicalParameterName();
     hasAlchemicalSites = false;
     for (int i = 0; i < force.getNumSites(); i++) {
@@ -194,7 +209,9 @@ void CpuCalcInteraxThreeBodyForceKernel::initialize(const System& system, const 
 
 double CpuCalcInteraxThreeBodyForceKernel::execute(ContextImpl& context, bool includeForces, bool includeEnergy) {
     double lambda = getAlchemicalParameter(context, hasAlchemicalSites, alchemicalParameter);
-    return ixn->calculateIxn(extractPositions(context), extractBoxVectors(context), lambda, extractForces(context), data.threads);
+    double energy = 0;
+    ixn->calculateIxn(extractPositions(context), extractBoxVectors(context), lambda, extractForces(context), energy);
+    return energy;
 }
 
 void CpuCalcInteraxThreeBodyForceKernel::copyParametersToContext(ContextImpl& context, const InteraxThreeBodyForce& force) {
