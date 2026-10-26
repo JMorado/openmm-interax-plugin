@@ -96,9 +96,17 @@ scale their interactions with the rest of the System by the alchemical parameter
 Test Cases
 ==========
 
-Build the `test` target (`make test`, or `ctest` in the build directory) to run the C++ tests: every platform is
-checked against energies and forces of the InteraxFF export stored in `tests/data`, the CUDA tests in single, mixed and
-double precision. The Python tests in `tests/python` need the plugin to be installed:
+Build the `test` target (`make test`, or `ctest` in the build directory) to run the C++ tests. As in OpenMM, the tests
+of each force are written once in a shared header (`tests/TestInteraxDispersionForce.h`, `TestInteraxExchangeForce.h`,
+`TestInteraxShortRangeForce.h`, `TestInteraxThreeBodyForce.h`, `TestInteraxMultipoleForce.h`) and run on every platform
+through thin wrappers (`platforms/<platform>/tests/Test<Platform>Interax<Force>.cpp`), the CUDA tests in single, mixed
+and double precision. They compare energies and forces with values computed from the documented formulas, check forces
+against finite differences, cutoffs, periodic boxes, exclusions, alchemical scaling and parameter updates, and, with
+HIPPO's options, compare `InteraxMultipoleForce` with `HippoNonbondedForce`. `TestInteraxExportValues` checks every
+platform against energies and forces of the InteraxFF export stored in `tests/data`, and
+`serialization/tests/TestSerializeInterax<Force>.cpp` the serialization of every force. The CPU pair forces support
+rectangular boxes only (triclinic boxes raise an exception). The Python tests in `tests/python` need the plugin to be
+installed:
 
 | Test | What it checks |
 |---|---|
@@ -121,14 +129,17 @@ Implementation
 Each force has a Reference, a CPU and a common compute (CUDA) implementation:
 
 * The pair forces share their math (`openmmapi/include/internal/InteraxPairTerms.h`) between the Reference and the CPU
-  platforms, which vectorizes it with SSE or AVX. On the GPU they add their interactions to OpenMM's nonbonded kernel
+  platforms, which vectorizes it with SSE or AVX (`CpuInteraxPairForceVec4.cpp`, `CpuInteraxPairForceAvx.cpp`, chosen
+  at run time in `CpuInteraxPairForceFvec.cpp`, as OpenMM's `CpuCustomNonbondedForce`). On the GPU they add their interactions to OpenMM's nonbonded kernel
   (`platforms/common/src/kernels/interax*.cc`), so they share its neighbor list.
 * The three-body force finds its triples from a neighbor list of the sites. On the GPU each thread block takes a site
   and loops over the pairs of its neighbors, loaded in tiles into local memory.
 
 * `InteraxMultipoleForce` keeps HIPPO's structure: the Reference platform (also used by the CPU platform) is HIPPO's
   reference code, the GPU kernels are HIPPO's common kernels (`platforms/common/src/kernels/interaxMultipole*.cc`) with
-  cuFFT for PME. Core damping adds (f - 1) times the full pair field to the field that polarizes each atom and the
+  cuFFT for PME. The files derived from OpenMM keep the upstream code, names and comments wherever the code is the
+  same, so that `diff` against OpenMM 8.1.2 (`plugins/amoeba`) shows only the InteraxFF changes, each marked at the point
+  of change. Core damping adds (f - 1) times the full pair field to the field that polarizes each atom and the
   corresponding forces and torques; the series of the pair damping factors to t^6 is used where its error is below
   the cancellation error of the closed form (thresholds per precision in `CommonInteraxMultipoleKernel.cpp`).
 
