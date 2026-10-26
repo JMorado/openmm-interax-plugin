@@ -70,6 +70,9 @@ protected:
             const InteraxPairTerms::SlaterTaylorScheme& taylorScheme, OpenMM::ComputeArray& params, OpenMM::ComputeArray& extra);
     /**
      * Upload the global parameters (the alchemical parameter and one force-specific value) if they have changed.
+     *
+     * @param context   the context in which the kernel is executed
+     * @param value     the force-specific value
      */
     void updateGlobals(OpenMM::ContextImpl& context, double value);
     OpenMM::ComputeContext& cc;
@@ -88,8 +91,28 @@ public:
     CommonCalcInteraxDispersionForceKernel(std::string name, const OpenMM::Platform& platform, OpenMM::ComputeContext& cc) :
             CalcInteraxDispersionForceKernel(name, platform), CommonInteraxPairForceKernel(cc) {
     }
+    /**
+     * Initialize the kernel.
+     *
+     * @param system     the System this kernel will be applied to
+     * @param force      the InteraxDispersionForce this kernel will be used for
+     */
     void initialize(const OpenMM::System& system, const InteraxDispersionForce& force);
+    /**
+     * Execute the kernel to calculate the forces and/or energy.
+     *
+     * @param context        the context in which to execute this kernel
+     * @param includeForces  true if forces should be calculated
+     * @param includeEnergy  true if the energy should be calculated
+     * @return the potential energy due to the force
+     */
     double execute(OpenMM::ContextImpl& context, bool includeForces, bool includeEnergy);
+    /**
+     * Copy changed parameters over to a context.
+     *
+     * @param context    the context to copy parameters to
+     * @param force      the InteraxDispersionForce to copy the parameters from
+     */
     void copyParametersToContext(OpenMM::ContextImpl& context, const InteraxDispersionForce& force);
 private:
     class ForceInfo;
@@ -107,8 +130,28 @@ public:
     CommonCalcInteraxExchangeForceKernel(std::string name, const OpenMM::Platform& platform, OpenMM::ComputeContext& cc) :
             CalcInteraxExchangeForceKernel(name, platform), CommonInteraxPairForceKernel(cc) {
     }
+    /**
+     * Initialize the kernel.
+     *
+     * @param system     the System this kernel will be applied to
+     * @param force      the InteraxExchangeForce this kernel will be used for
+     */
     void initialize(const OpenMM::System& system, const InteraxExchangeForce& force);
+    /**
+     * Execute the kernel to calculate the forces and/or energy.
+     *
+     * @param context        the context in which to execute this kernel
+     * @param includeForces  true if forces should be calculated
+     * @param includeEnergy  true if the energy should be calculated
+     * @return the potential energy due to the force
+     */
     double execute(OpenMM::ContextImpl& context, bool includeForces, bool includeEnergy);
+    /**
+     * Copy changed parameters over to a context.
+     *
+     * @param context    the context to copy parameters to
+     * @param force      the InteraxExchangeForce to copy the parameters from
+     */
     void copyParametersToContext(OpenMM::ContextImpl& context, const InteraxExchangeForce& force);
 private:
     class ForceInfo;
@@ -126,8 +169,28 @@ public:
     CommonCalcInteraxShortRangeForceKernel(std::string name, const OpenMM::Platform& platform, OpenMM::ComputeContext& cc) :
             CalcInteraxShortRangeForceKernel(name, platform), CommonInteraxPairForceKernel(cc) {
     }
+    /**
+     * Initialize the kernel.
+     *
+     * @param system     the System this kernel will be applied to
+     * @param force      the InteraxShortRangeForce this kernel will be used for
+     */
     void initialize(const OpenMM::System& system, const InteraxShortRangeForce& force);
+    /**
+     * Execute the kernel to calculate the forces and/or energy.
+     *
+     * @param context        the context in which to execute this kernel
+     * @param includeForces  true if forces should be calculated
+     * @param includeEnergy  true if the energy should be calculated
+     * @return the potential energy due to the force
+     */
     double execute(OpenMM::ContextImpl& context, bool includeForces, bool includeEnergy);
+    /**
+     * Copy changed parameters over to a context.
+     *
+     * @param context    the context to copy parameters to
+     * @param force      the InteraxShortRangeForce to copy the parameters from
+     */
     void copyParametersToContext(OpenMM::ContextImpl& context, const InteraxShortRangeForce& force);
 private:
     class ForceInfo;
@@ -146,8 +209,28 @@ public:
     CommonCalcInteraxThreeBodyForceKernel(std::string name, const OpenMM::Platform& platform, OpenMM::ComputeContext& cc) :
             CalcInteraxThreeBodyForceKernel(name, platform), cc(cc), numSites(0), numEvaluations(0), hasComputed(false), useCentroidDamping(false), lastLambda(-1) {
     }
+    /**
+     * Initialize the kernel.
+     *
+     * @param system     the System this kernel will be applied to
+     * @param force      the InteraxThreeBodyForce this kernel will be used for
+     */
     void initialize(const OpenMM::System& system, const InteraxThreeBodyForce& force);
+    /**
+     * Execute the kernel to calculate the forces and/or energy.
+     *
+     * @param context        the context in which to execute this kernel
+     * @param includeForces  true if forces should be calculated
+     * @param includeEnergy  true if the energy should be calculated
+     * @return the potential energy due to the force
+     */
     double execute(OpenMM::ContextImpl& context, bool includeForces, bool includeEnergy);
+    /**
+     * Copy changed parameters over to a context.
+     *
+     * @param context    the context to copy parameters to
+     * @param force      the InteraxThreeBodyForce to copy the parameters from
+     */
     void copyParametersToContext(OpenMM::ContextImpl& context, const InteraxThreeBodyForce& force);
 private:
     class ForceInfo;

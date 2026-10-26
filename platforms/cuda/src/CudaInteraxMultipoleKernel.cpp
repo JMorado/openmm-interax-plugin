@@ -37,6 +37,10 @@ using namespace InteraxPlugin;
 using namespace OpenMM;
 using namespace std;
 
+/* -------------------------------------------------------------------------- *
+ *                          InteraxMultipoleForce                             *
+ * -------------------------------------------------------------------------- */
+
 CudaCalcInteraxMultipoleForceKernel::~CudaCalcInteraxMultipoleForceKernel() {
     ContextSelector selector(cc);
     if (hasInitializedFFT) {
@@ -55,6 +59,8 @@ void CudaCalcInteraxMultipoleForceKernel::initialize(const System& system, const
         result = cufftPlan3d(&fftBackward, gridSizeX, gridSizeY, gridSizeZ, cc.getUseDoublePrecision() ? CUFFT_Z2D : CUFFT_C2R);
         if (result != CUFFT_SUCCESS)
             throw OpenMMException("Error initializing FFT: "+cc.intToString(result));
+        // Run the FFTs on the stream of the context, like the other kernels.
+
         CudaContext& cu = dynamic_cast<CudaContext&>(cc);
         cufftSetStream(fftForward, cu.getCurrentStream());
         cufftSetStream(fftBackward, cu.getCurrentStream());

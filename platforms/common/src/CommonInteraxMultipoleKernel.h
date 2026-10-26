@@ -42,42 +42,78 @@
 namespace InteraxPlugin {
 
 /**
- * The common (CUDA/OpenCL) implementation of InteraxMultipoleForce: OpenMM's HippoNonbondedForce kernels without
- * repulsion, dispersion and charge transfer, with core damping, the mutual damping scale, alchemical scaling and the
- * series for nearly equal exponents. The FFTs are platform specific (computeFFT()).
+ * This kernel is invoked by InteraxMultipoleForce to calculate the forces acting on the system and the energy of the system.
  *
- * Like HippoNonbondedForce, it replaces the kernel of the default NonbondedUtilities, so it cannot share a Context
- * with other nonbonded forces (the InteraxFF export wraps it in a CustomCVForce).
+ * It is derived from the common implementation of HippoNonbondedForce, without repulsion, dispersion and charge transfer.
+ * InteraxFF adds core damping of the permanent fields on the induced dipoles, a scale of the exponents in the damping of
+ * the induced dipole couplings, alchemical scaling of the multipoles and polarizabilities, and a series for the damping
+ * of Slater densities with nearly equal exponents. Like HippoNonbondedForce, by default it replaces the source of the
+ * default nonbonded kernel, so it cannot share a Context with other forces that use it; with
+ * InteraxMultipoleForce::setUseOwnKernel() it evaluates the real-space interactions with a kernel of its own instead.
  */
 class CommonCalcInteraxMultipoleForceKernel : public CalcInteraxMultipoleForceKernel {
 public:
-    CommonCalcInteraxMultipoleForceKernel(const std::string& name, const OpenMM::Platform& platform, OpenMM::ComputeContext& cc,
-                                          const OpenMM::System& system);
+    CommonCalcInteraxMultipoleForceKernel(const std::string& name, const OpenMM::Platform& platform, OpenMM::ComputeContext& cc, const OpenMM::System& system);
+    /**
+     * Initialize the kernel.
+     * 
+     * @param system     the System this kernel will be applied to
+     * @param force      the InteraxMultipoleForce this kernel will be used for
+     */
     void initialize(const OpenMM::System& system, const InteraxMultipoleForce& force);
+    /**
+     * Compute the FFT.
+     */
     virtual void computeFFT(bool forward) = 0;
+    /**
+     * Get whether charge spreading should be done in fixed point.
+     */
     virtual bool useFixedPointChargeSpreading() const = 0;
+    /**
+     * Execute the kernel to calculate the forces and/or energy.
+     *
+     * @param context        the context in which to execute this kernel
+     * @param includeForces  true if forces should be calculated
+     * @param includeEnergy  true if the energy should be calculated
+     * @return the potential energy due to the force
+     */
     double execute(OpenMM::ContextImpl& context, bool includeForces, bool includeEnergy);
+    /**
+     * Get the induced dipole moments of all particles.
+     * 
+     * @param context    the Context for which to get the induced dipoles
+     * @param dipoles    the induced dipole moment of particle i is stored into the i'th element
+     */
     void getInducedDipoles(OpenMM::ContextImpl& context, std::vector<OpenMM::Vec3>& dipoles);
+    /**
+     * Get the fixed dipole moments of all particles in the global reference frame.
+     * 
+     * @param context    the Context for which to get the fixed dipoles
+     * @param dipoles    the fixed dipole moment of particle i is stored into the i'th element
+     */
     void getLabFramePermanentDipoles(OpenMM::ContextImpl& context, std::vector<OpenMM::Vec3>& dipoles);
+    /**
+     * Copy changed parameters over to a context.
+     *
+     * @param context    the context to copy parameters to
+     * @param force      the InteraxMultipoleForce to copy the parameters from
+     */
     void copyParametersToContext(OpenMM::ContextImpl& context, const InteraxMultipoleForce& force);
+    /**
+     * Get the parameters being used for PME.
+     * 
+     * @param alpha   the separation parameter
+     * @param nx      the number of grid points along the X axis
+     * @param ny      the number of grid points along the Y axis
+     * @param nz      the number of grid points along the Z axis
+     */
     void getPMEParameters(double& alpha, int& nx, int& ny, int& nz) const;
 protected:
     class ForceInfo;
     class TorquePostComputation;
-    void setParticleParameters(const InteraxMultipoleForce& force);
-    void computeInducedField(int optOrder);
-    void updateFieldKernelMaxTiles();
-    void computeExtrapolatedDipoles();
-    void ensureMultipolesValid(OpenMM::ContextImpl& context);
-    void addTorquesToForces();
-    void createFieldKernel(const std::string& interactionSrc, std::vector<OpenMM::ComputeArray*> params, OpenMM::ComputeArray& fieldBuffer,
-                           OpenMM::ComputeKernel& kernel, OpenMM::ComputeKernel& exceptionKernel, OpenMM::ComputeArray& exceptionScale);
-    std::map<std::string, std::string> getPhysicsDefines() const;
-    OpenMM::ComputeKernel& getElectrostaticsKernel(bool includeForces, bool includeEnergy);
-    void computeElectrostatics(bool includeForces, bool includeEnergy);
     /**
-     * A per-atom array that the kernel of the real-space interactions reads (useOwnKernel), as the nonbonded utilities
-     * would pass it: a parameter (copied to the local data of the tile) or a plain argument.
+     * A per-atom array passed to the kernel of the real-space interactions: as a parameter (loaded for both atoms of
+     * each pair) or as a plain argument, as the nonbonded utilities pass them to the default kernel.
      */
     struct KernelParameter {
         OpenMM::ComputeArray* array;
@@ -88,18 +124,36 @@ protected:
             return (numComponents == 1 ? componentType : componentType+std::to_string(numComponents));
         }
     };
-    int numParticles, maxExtrapolationOrder, maxTiles, fieldThreadBlockSize;
+    void computeInducedField(int optOrder);
+    void computeExtrapolatedDipoles();
+    void ensureMultipolesValid(OpenMM::ContextImpl& context);
+    void addTorquesToForces();
+    void createFieldKernel(const std::string& interactionSrc, std::vector<OpenMM::ComputeArray*> params, OpenMM::ComputeArray& fieldBuffer,
+        OpenMM::ComputeKernel& kernel, OpenMM::ComputeKernel& exceptionKernel, OpenMM::ComputeArray& exceptionScale);
+    /**
+     * Get the defines of the InteraxFF terms, which all kernels of the real-space interactions need.
+     */
+    std::map<std::string, std::string> getPhysicsDefines() const;
+    /**
+     * Set the maximum number of tiles in the field kernels to the current size of the neighbor list.
+     */
+    void updateFieldKernelMaxTiles();
+    /**
+     * Get the kernel of the real-space interactions (useOwnKernel), creating it if necessary.
+     */
+    OpenMM::ComputeKernel& getElectrostaticsKernel(bool includeForces, bool includeEnergy);
+    /**
+     * Compute the real-space interactions with the kernel of this force (useOwnKernel).
+     */
+    void computeElectrostatics(bool includeForces, bool includeEnergy);
+    int numParticles, maxExtrapolationOrder, maxTiles, fieldThreadBlockSize, forceThreadBlockSize;
     int gridSizeX, gridSizeY, gridSizeZ;
     double pmeAlpha, cutoff, coreDampingScale, mutualDampingScale, lastLambda;
-    bool usePME, coreDamping, hasAlchemicalParticles, hasInitializedKernels, multipolesAreValid;
-    bool useOwnKernel;
-    int forceThreadBlockSize;
-    std::string electrostaticsSource;
+    bool usePME, hasInitializedKernels, multipolesAreValid, coreDamping, hasAlchemicalParticles, useOwnKernel;
+    std::string alchemicalParameter, electrostaticsSource;
+    std::vector<double> extrapolationCoefficients;
     std::vector<KernelParameter> electrostaticsParams, electrostaticsArgs;
     std::map<int, OpenMM::ComputeKernel> electrostaticsKernels;
-    OpenMM::ComputeArray singlePairsPlaceholder;
-    std::string alchemicalParameter;
-    std::vector<double> extrapolationCoefficients;
     OpenMM::ComputeContext& cc;
     const OpenMM::System& system;
     OpenMM::ComputeArray multipoleParticles, isAlchemical;
@@ -118,7 +172,8 @@ protected:
     OpenMM::ComputeArray lastPositions;
     OpenMM::ComputeArray exceptionScales[3];
     OpenMM::ComputeArray exceptionAtoms;
-    OpenMM::ComputeKernel alchemicalKernel, computeMomentsKernel, recordInducedDipolesKernel, mapTorqueKernel;
+    OpenMM::ComputeArray singlePairsPlaceholder;
+    OpenMM::ComputeKernel computeMomentsKernel, recordInducedDipolesKernel, mapTorqueKernel, alchemicalKernel;
     OpenMM::ComputeKernel fixedFieldKernel, fixedFieldExceptionKernel, mutualFieldKernel, mutualFieldExceptionKernel, computeExceptionsKernel;
     OpenMM::ComputeKernel pmeSpreadFixedMultipolesKernel, pmeSpreadInducedDipolesKernel, pmeFinishSpreadChargeKernel, pmeConvolutionKernel;
     OpenMM::ComputeKernel pmeFixedPotentialKernel, pmeInducedPotentialKernel, pmeFixedForceKernel, pmeInducedForceKernel, pmeRecordInducedFieldDipolesKernel;

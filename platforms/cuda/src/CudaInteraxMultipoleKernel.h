@@ -39,7 +39,8 @@
 namespace InteraxPlugin {
 
 /**
- * The CUDA implementation of InteraxMultipoleForce: the common kernels with cuFFT for PME.
+ * This kernel is invoked by InteraxMultipoleForce to calculate the forces acting on the system and the energy of the system.
+ * It is the common implementation, with cuFFT for the FFTs of PME.
  */
 class CudaCalcInteraxMultipoleForceKernel : public CommonCalcInteraxMultipoleForceKernel {
 public:
@@ -47,8 +48,20 @@ public:
             CommonCalcInteraxMultipoleForceKernel(name, platform, cu, system), hasInitializedFFT(false) {
     }
     ~CudaCalcInteraxMultipoleForceKernel();
+    /**
+     * Initialize the kernel.
+     * 
+     * @param system     the System this kernel will be applied to
+     * @param force      the InteraxMultipoleForce this kernel will be used for
+     */
     void initialize(const OpenMM::System& system, const InteraxMultipoleForce& force);
+    /**
+     * Compute the FFT.
+     */
     void computeFFT(bool forward);
+    /**
+     * Get whether charge spreading should be done in fixed point.
+     */
     bool useFixedPointChargeSpreading() const {
         return cc.getUseDoublePrecision();
     }

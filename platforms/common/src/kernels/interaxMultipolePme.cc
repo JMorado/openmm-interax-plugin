@@ -73,7 +73,11 @@ DEVICE void computeBSplinePoint(real4* thetai, real w, real* array) {
  * Convert the fixed multipoles from Cartesian to fractional coordinates.
  */
 KERNEL void transformMultipolesToFractionalCoordinates(GLOBAL const real* RESTRICT labDipole,
+#ifdef HIPPO
         GLOBAL const real* RESTRICT labQXX, GLOBAL const real* RESTRICT labQXY, GLOBAL const real* RESTRICT labQXZ, GLOBAL const real* RESTRICT labQYY, GLOBAL const real* RESTRICT labQYZ,
+#else
+        GLOBAL const real* RESTRICT labQuadrupole,
+#endif
         GLOBAL real* RESTRICT fracDipole, GLOBAL real* RESTRICT fracQuadrupole, real4 recipBoxVecX, real4 recipBoxVecY, real4 recipBoxVecZ) {
     // Build matrices for transforming the dipoles and quadrupoles.
     
@@ -113,12 +117,19 @@ KERNEL void transformMultipolesToFractionalCoordinates(GLOBAL const real* RESTRI
             fracDipole[3*i+j] = dipole;
         }
         for (int j = 0; j < 6; j++) {
+#ifdef HIPPO
             real quadrupole = quadScale[0]*b[j][0]*labQXX[i] +
                               quadScale[1]*b[j][1]*labQXY[i] +
                               quadScale[2]*b[j][2]*labQXZ[i] +
                               quadScale[3]*b[j][3]*labQYY[i] +
                               quadScale[4]*b[j][4]*labQYZ[i] -
                               quadScale[5]*b[j][5]*(labQXX[i]+labQYY[i]);
+#else
+            real quadrupole = 0;
+            for (int k = 0; k < 5; k++)
+                quadrupole += quadScale[k]*b[j][k]*labQuadrupole[5*i+k];
+            quadrupole -= quadScale[5]*b[j][5]*(labQuadrupole[5*i]+labQuadrupole[5*i+3]);
+#endif
             fracQuadrupole[6*i+j] = quadrupole;
         }
     }
@@ -179,7 +190,9 @@ KERNEL void gridSpreadFixedMultipoles(GLOBAL const real4* RESTRICT posq, GLOBAL 
 #else
         GLOBAL real2* RESTRICT pmeGrid,
 #endif
+#ifdef HIPPO
         GLOBAL const real* RESTRICT coreCharge, GLOBAL const real* RESTRICT valenceCharge,
+#endif
         real4 periodicBoxVecX, real4 periodicBoxVecY, real4 periodicBoxVecZ, real4 recipBoxVecX, real4 recipBoxVecY, real4 recipBoxVecZ) {
 #if __CUDA_ARCH__ < 500
     real array[PME_ORDER*PME_ORDER];
@@ -197,7 +210,11 @@ KERNEL void gridSpreadFixedMultipoles(GLOBAL const real4* RESTRICT posq, GLOBAL 
         pos -= periodicBoxVecZ*floor(pos.z*recipBoxVecZ.z+0.5f);
         pos -= periodicBoxVecY*floor(pos.y*recipBoxVecY.z+0.5f);
         pos -= periodicBoxVecX*floor(pos.x*recipBoxVecX.z+0.5f);
+#ifdef HIPPO
         real atomCharge = coreCharge[m]+valenceCharge[m];
+#else
+        real atomCharge = pos.w;
+#endif
         real atomDipoleX = fracDipole[m*3];
         real atomDipoleY = fracDipole[m*3+1];
         real atomDipoleZ = fracDipole[m*3+2];
@@ -256,11 +273,19 @@ KERNEL void gridSpreadFixedMultipoles(GLOBAL const real4* RESTRICT posq, GLOBAL 
                     int index = ybase + zindex;
                     real4 v = theta3[iz];
                     real add = term0*v.x + term1*v.y + term2*v.z;
+#ifdef HIPPO
     #ifdef USE_FIXED_POINT_CHARGE_SPREADING
                     ATOMIC_ADD(&pmeGrid[index], (mm_ulong) realToFixedPoint(add));
     #else
                     ATOMIC_ADD(&pmeGrid[index], add);
     #endif
+#else
+    #ifdef USE_FIXED_POINT_CHARGE_SPREADING
+                    ATOMIC_ADD(&pmeGrid[2*index], (mm_ulong) realToFixedPoint(add));
+    #else
+                    ATOMIC_ADD(&pmeGrid[index].x, add);
+    #endif
+#endif
                 }
             }
         }
@@ -268,6 +293,9 @@ KERNEL void gridSpreadFixedMultipoles(GLOBAL const real4* RESTRICT posq, GLOBAL 
 }
 
 KERNEL void gridSpreadInducedDipoles(GLOBAL const real4* RESTRICT posq, GLOBAL const real* RESTRICT inducedDipole,
+#ifndef HIPPO
+        GLOBAL const real* RESTRICT inducedDipolePolar,
+#endif
 #ifdef USE_FIXED_POINT_CHARGE_SPREADING
         GLOBAL mm_ulong* RESTRICT pmeGrid,
 #elif defined(HIPPO)
@@ -309,6 +337,12 @@ KERNEL void gridSpreadInducedDipoles(GLOBAL const real4* RESTRICT posq, GLOBAL c
         real3 finducedDipole = make_real3(cinducedDipole.x*cartToFrac[0][0] + cinducedDipole.y*cartToFrac[0][1] + cinducedDipole.z*cartToFrac[0][2],
                                           cinducedDipole.x*cartToFrac[1][0] + cinducedDipole.y*cartToFrac[1][1] + cinducedDipole.z*cartToFrac[1][2],
                                           cinducedDipole.x*cartToFrac[2][0] + cinducedDipole.y*cartToFrac[2][1] + cinducedDipole.z*cartToFrac[2][2]);
+#ifndef HIPPO
+        real3 cinducedDipolePolar = make_real3(inducedDipolePolar[3*m], inducedDipolePolar[3*m+1], inducedDipolePolar[3*m+2]);
+        real3 finducedDipolePolar = make_real3(cinducedDipolePolar.x*cartToFrac[0][0] + cinducedDipolePolar.y*cartToFrac[0][1] + cinducedDipolePolar.z*cartToFrac[0][2],
+                                               cinducedDipolePolar.x*cartToFrac[1][0] + cinducedDipolePolar.y*cartToFrac[1][1] + cinducedDipolePolar.z*cartToFrac[1][2],
+                                               cinducedDipolePolar.x*cartToFrac[2][0] + cinducedDipolePolar.y*cartToFrac[2][1] + cinducedDipolePolar.z*cartToFrac[2][2]);
+#endif
 
         // Since we need the full set of thetas, it's faster to compute them here than load them
         // from global memory.
@@ -350,6 +384,10 @@ KERNEL void gridSpreadInducedDipoles(GLOBAL const real4* RESTRICT posq, GLOBAL c
                 real4 u = theta2[iy];
                 real term01 = finducedDipole.y*t.x*u.y + finducedDipole.x*t.y*u.x;
                 real term11 = finducedDipole.z*t.x*u.x;
+#ifndef HIPPO
+                real term02 = finducedDipolePolar.y*t.x*u.y + finducedDipolePolar.x*t.y*u.x;
+                real term12 = finducedDipolePolar.z*t.x*u.x;
+#endif                
                 for (int iz = 0; iz < PME_ORDER; iz++) {
                     int zindex = igrid3+iz;
                     zindex -= (zindex >= GRID_SIZE_Z ? GRID_SIZE_Z : 0);
@@ -357,11 +395,22 @@ KERNEL void gridSpreadInducedDipoles(GLOBAL const real4* RESTRICT posq, GLOBAL c
                     real4 v = theta3[iz];
 
                     real add1 = term01*v.x + term11*v.y;
+#ifdef HIPPO
     #ifdef USE_FIXED_POINT_CHARGE_SPREADING
                     ATOMIC_ADD(&pmeGrid[index], (mm_ulong) realToFixedPoint(add1));
     #else
                     ATOMIC_ADD(&pmeGrid[index], add1);
     #endif
+#else
+                    real add2 = term02*v.x + term12*v.y;
+    #ifdef USE_FIXED_POINT_CHARGE_SPREADING
+                    ATOMIC_ADD(&pmeGrid[2*index], (mm_ulong) realToFixedPoint(add1));
+                    ATOMIC_ADD(&pmeGrid[2*index+1], (mm_ulong) realToFixedPoint(add2));
+    #else
+                    ATOMIC_ADD(&pmeGrid[index].x, add1);
+                    ATOMIC_ADD(&pmeGrid[index].y, add2);
+    #endif
+#endif
                 }
             }
         }
@@ -372,7 +421,11 @@ KERNEL void gridSpreadInducedDipoles(GLOBAL const real4* RESTRICT posq, GLOBAL c
  * In double precision, we have to use fixed point to accumulate the grid values, so convert them to floating point.
  */
 KERNEL void finishSpreadCharge(GLOBAL const mm_long* RESTRICT pmeGridLong, GLOBAL real* RESTRICT pmeGrid) {
+#ifdef HIPPO
     const unsigned int gridSize = GRID_SIZE_X*GRID_SIZE_Y*GRID_SIZE_Z;
+#else
+    const unsigned int gridSize = 2*GRID_SIZE_X*GRID_SIZE_Y*GRID_SIZE_Z;
+#endif
     real scale = 1/(real) 0x100000000;
     for (int index = GLOBAL_ID; index < gridSize; index += GLOBAL_SIZE)
         pmeGrid[index] = scale*pmeGridLong[index];
@@ -381,15 +434,26 @@ KERNEL void finishSpreadCharge(GLOBAL const mm_long* RESTRICT pmeGridLong, GLOBA
 KERNEL void reciprocalConvolution(GLOBAL real2* RESTRICT pmeGrid, GLOBAL const real* RESTRICT pmeBsplineModuliX,
         GLOBAL const real* RESTRICT pmeBsplineModuliY, GLOBAL const real* RESTRICT pmeBsplineModuliZ, real4 periodicBoxSize,
         real4 recipBoxVecX, real4 recipBoxVecY, real4 recipBoxVecZ) {
+#ifdef HIPPO
     // R2C stores into a half complex matrix where the last dimension is cut by half
     const unsigned int gridSize = GRID_SIZE_X*GRID_SIZE_Y*(GRID_SIZE_Z/2+1);
+#else
+    const unsigned int gridSize = GRID_SIZE_X*GRID_SIZE_Y*GRID_SIZE_Z;
+#endif
     real expFactor = M_PI*M_PI/(EWALD_ALPHA*EWALD_ALPHA);
     real scaleFactor = RECIP(M_PI*periodicBoxSize.x*periodicBoxSize.y*periodicBoxSize.z);
     for (int index = GLOBAL_ID; index < gridSize; index += GLOBAL_SIZE) {
+#ifdef HIPPO
         int kx = index/(GRID_SIZE_Y*(GRID_SIZE_Z/2+1));
         int remainder = index-kx*GRID_SIZE_Y*(GRID_SIZE_Z/2+1);
         int ky = remainder/(GRID_SIZE_Z/2+1);
         int kz = remainder-ky*(GRID_SIZE_Z/2+1);
+#else
+        int kx = index/(GRID_SIZE_Y*GRID_SIZE_Z);
+        int remainder = index-kx*GRID_SIZE_Y*GRID_SIZE_Z;
+        int ky = remainder/GRID_SIZE_Z;
+        int kz = remainder-ky*GRID_SIZE_Z;
+#endif
         if (kx == 0 && ky == 0 && kz == 0) {
             pmeGrid[index] = make_real2(0, 0);
             continue;
@@ -412,8 +476,15 @@ KERNEL void reciprocalConvolution(GLOBAL real2* RESTRICT pmeGrid, GLOBAL const r
 }
 
 KERNEL void computeFixedPotentialFromGrid(
+#ifdef HIPPO
         GLOBAL const real* RESTRICT pmeGrid,
+#else
+        GLOBAL const real2* RESTRICT pmeGrid,
+#endif
         GLOBAL real* RESTRICT phi, GLOBAL mm_long* RESTRICT fieldBuffers,
+#ifndef HIPPO
+        GLOBAL mm_long* RESTRICT fieldPolarBuffers,
+#endif
         GLOBAL const real4* RESTRICT posq, GLOBAL const real* RESTRICT labDipole, real4 periodicBoxVecX, real4 periodicBoxVecY, real4 periodicBoxVecZ,
         real4 recipBoxVecX, real4 recipBoxVecY, real4 recipBoxVecZ) {
 #if __CUDA_ARCH__ < 500
@@ -513,7 +584,11 @@ KERNEL void computeFixedPotentialFromGrid(
                 for (int iz = 0; iz < PME_ORDER; iz++) {
                     int k = igrid3+iz-(igrid3+iz >= GRID_SIZE_Z ? GRID_SIZE_Z : 0);
                     int gridIndex = i*GRID_SIZE_Y*GRID_SIZE_Z + j*GRID_SIZE_Z + k;
+#ifdef HIPPO
                     real tq = pmeGrid[gridIndex];
+#else
+                    real tq = pmeGrid[gridIndex].x;
+#endif
                     real4 tadd = theta3[iz];
                     t.x += tq*tadd.x;
                     t.y += tq*tadd.y;
@@ -579,11 +654,20 @@ KERNEL void computeFixedPotentialFromGrid(
         fieldBuffers[m] = fieldx;
         fieldBuffers[m+PADDED_NUM_ATOMS] = fieldy;
         fieldBuffers[m+2*PADDED_NUM_ATOMS] = fieldz;
+#ifndef HIPPO
+        fieldPolarBuffers[m] = fieldx;
+        fieldPolarBuffers[m+PADDED_NUM_ATOMS] = fieldy;
+        fieldPolarBuffers[m+2*PADDED_NUM_ATOMS] = fieldz;
+#endif
     }
 }
 
 KERNEL void computeInducedPotentialFromGrid(
+#ifdef HIPPO
         GLOBAL const real* RESTRICT pmeGrid, GLOBAL real* RESTRICT extrapolatedPhi, int order,
+#else
+        GLOBAL const real2* RESTRICT pmeGrid, GLOBAL real* RESTRICT phid, GLOBAL real* RESTRICT phip,
+#endif
         GLOBAL real* RESTRICT phidp, GLOBAL const real4* RESTRICT posq,
         real4 periodicBoxVecX, real4 periodicBoxVecY, real4 periodicBoxVecZ, real4 recipBoxVecX,
         real4 recipBoxVecY, real4 recipBoxVecZ) {
@@ -631,6 +715,26 @@ KERNEL void computeInducedPotentialFromGrid(
 
         // Compute the potential from this grid point.
 
+#ifndef HIPPO
+        real tuv100_1 = 0;
+        real tuv010_1 = 0;
+        real tuv001_1 = 0;
+        real tuv200_1 = 0;
+        real tuv020_1 = 0;
+        real tuv002_1 = 0;
+        real tuv110_1 = 0;
+        real tuv101_1 = 0;
+        real tuv011_1 = 0;
+        real tuv100_2 = 0;
+        real tuv010_2 = 0;
+        real tuv001_2 = 0;
+        real tuv200_2 = 0;
+        real tuv020_2 = 0;
+        real tuv002_2 = 0;
+        real tuv110_2 = 0;
+        real tuv101_2 = 0;
+        real tuv011_2 = 0;
+#endif
         real tuv000 = 0;
         real tuv001 = 0;
         real tuv010 = 0;
@@ -654,6 +758,20 @@ KERNEL void computeInducedPotentialFromGrid(
         for (int ix = 0; ix < PME_ORDER; ix++) {
             int i = igrid1+ix-(igrid1+ix >= GRID_SIZE_X ? GRID_SIZE_X : 0);
             real4 v = theta1[ix];
+#ifndef HIPPO
+            real tu00_1 = 0;
+            real tu01_1 = 0;
+            real tu10_1 = 0;
+            real tu20_1 = 0;
+            real tu11_1 = 0;
+            real tu02_1 = 0;
+            real tu00_2 = 0;
+            real tu01_2 = 0;
+            real tu10_2 = 0;
+            real tu20_2 = 0;
+            real tu11_2 = 0;
+            real tu02_2 = 0;
+#endif
             real tu00 = 0;
             real tu10 = 0;
             real tu01 = 0;
@@ -667,20 +785,57 @@ KERNEL void computeInducedPotentialFromGrid(
             for (int iy = 0; iy < PME_ORDER; iy++) {
                 int j = igrid2+iy-(igrid2+iy >= GRID_SIZE_Y ? GRID_SIZE_Y : 0);
                 real4 u = theta2[iy];
+#ifdef HIPPO
                 real t0 = 0;
                 real t1 = 0;
                 real t2 = 0;
+#else
+                real t0_1 = 0;
+                real t1_1 = 0;
+                real t2_1 = 0;
+                real t0_2 = 0;
+                real t1_2 = 0;
+                real t2_2 = 0;
+#endif
                 real t3 = 0;
                 for (int iz = 0; iz < PME_ORDER; iz++) {
                     int k = igrid3+iz-(igrid3+iz >= GRID_SIZE_Z ? GRID_SIZE_Z : 0);
                     int gridIndex = i*GRID_SIZE_Y*GRID_SIZE_Z + j*GRID_SIZE_Z + k;
                     real4 tadd = theta3[iz];
+#ifdef HIPPO
                     real tq = pmeGrid[gridIndex];
                     t0 += tq*tadd.x;
                     t1 += tq*tadd.y;
                     t2 += tq*tadd.z;
                     t3 += tq*tadd.w;
+#else
+                    real2 tq = pmeGrid[gridIndex];
+                    t0_1 += tq.x*tadd.x;
+                    t1_1 += tq.x*tadd.y;
+                    t2_1 += tq.x*tadd.z;
+                    t0_2 += tq.y*tadd.x;
+                    t1_2 += tq.y*tadd.y;
+                    t2_2 += tq.y*tadd.z;
+                    t3 += (tq.x+tq.y)*tadd.w;
+#endif
                 }
+#ifndef HIPPO
+                tu00_1 += u.x*t0_1;
+                tu10_1 += u.y*t0_1;
+                tu01_1 += u.x*t1_1;
+                tu20_1 += u.z*t0_1;
+                tu11_1 += u.y*t1_1;
+                tu02_1 += u.x*t2_1;
+                tu00_2 += u.x*t0_2;
+                tu10_2 += u.y*t0_2;
+                tu01_2 += u.x*t1_2;
+                tu20_2 += u.z*t0_2;
+                tu11_2 += u.y*t1_2;
+                tu02_2 += u.x*t2_2;
+                real t0 = t0_1 + t0_2;
+                real t1 = t1_1 + t1_2;
+                real t2 = t2_1 + t2_2;
+#endif
                 tu00 += u.x*t0;
                 tu10 += u.y*t0;
                 tu01 += u.x*t1;
@@ -692,6 +847,26 @@ KERNEL void computeInducedPotentialFromGrid(
                 tu12 += u.y*t2;
                 tu03 += u.x*t3;
             }
+#ifndef HIPPO
+            tuv100_1 += v.y*tu00_1;
+            tuv010_1 += v.x*tu10_1;
+            tuv001_1 += v.x*tu01_1;
+            tuv200_1 += v.z*tu00_1;
+            tuv020_1 += v.x*tu20_1;
+            tuv002_1 += v.x*tu02_1;
+            tuv110_1 += v.y*tu10_1;
+            tuv101_1 += v.y*tu01_1;
+            tuv011_1 += v.x*tu11_1;
+            tuv100_2 += v.y*tu00_2;
+            tuv010_2 += v.x*tu10_2;
+            tuv001_2 += v.x*tu01_2;
+            tuv200_2 += v.z*tu00_2;
+            tuv020_2 += v.x*tu20_2;
+            tuv002_2 += v.x*tu02_2;
+            tuv110_2 += v.y*tu10_2;
+            tuv101_2 += v.y*tu01_2;
+            tuv011_2 += v.x*tu11_2;
+#endif
             tuv000 += v.x*tu00;
             tuv100 += v.y*tu00;
             tuv010 += v.x*tu10;
@@ -713,6 +888,29 @@ KERNEL void computeInducedPotentialFromGrid(
             tuv012 += v.x*tu12;
             tuv111 += v.y*tu11;
         }
+#ifndef HIPPO
+        phid[m]   = 0;
+        phid[m+NUM_ATOMS] = tuv100_1;
+        phid[m+NUM_ATOMS*2] = tuv010_1;
+        phid[m+NUM_ATOMS*3] = tuv001_1;
+        phid[m+NUM_ATOMS*4] = tuv200_1;
+        phid[m+NUM_ATOMS*5] = tuv020_1;
+        phid[m+NUM_ATOMS*6] = tuv002_1;
+        phid[m+NUM_ATOMS*7] = tuv110_1;
+        phid[m+NUM_ATOMS*8] = tuv101_1;
+        phid[m+NUM_ATOMS*9] = tuv011_1;
+
+        phip[m]   = 0;
+        phip[m+NUM_ATOMS] = tuv100_2;
+        phip[m+NUM_ATOMS*2] = tuv010_2;
+        phip[m+NUM_ATOMS*3] = tuv001_2;
+        phip[m+NUM_ATOMS*4] = tuv200_2;
+        phip[m+NUM_ATOMS*5] = tuv020_2;
+        phip[m+NUM_ATOMS*6] = tuv002_2;
+        phip[m+NUM_ATOMS*7] = tuv110_2;
+        phip[m+NUM_ATOMS*8] = tuv101_2;
+        phip[m+NUM_ATOMS*9] = tuv011_2;
+#endif
         phidp[m] = tuv000;
         phidp[m+NUM_ATOMS*1] = tuv100;
         phidp[m+NUM_ATOMS*2] = tuv010;
@@ -733,6 +931,7 @@ KERNEL void computeInducedPotentialFromGrid(
         phidp[m+NUM_ATOMS*17] = tuv102;
         phidp[m+NUM_ATOMS*18] = tuv012;
         phidp[m+NUM_ATOMS*19] = tuv111;
+#ifdef HIPPO
         extrapolatedPhi[10*NUM_ATOMS*order+m] = tuv000;
         extrapolatedPhi[10*NUM_ATOMS*order+m+NUM_ATOMS*1] = tuv100;
         extrapolatedPhi[10*NUM_ATOMS*order+m+NUM_ATOMS*2] = tuv010;
@@ -743,13 +942,18 @@ KERNEL void computeInducedPotentialFromGrid(
         extrapolatedPhi[10*NUM_ATOMS*order+m+NUM_ATOMS*7] = tuv110;
         extrapolatedPhi[10*NUM_ATOMS*order+m+NUM_ATOMS*8] = tuv101;
         extrapolatedPhi[10*NUM_ATOMS*order+m+NUM_ATOMS*9] = tuv011;
+#endif
     }
 }
 
 KERNEL void computeFixedMultipoleForceAndEnergy(GLOBAL real4* RESTRICT posq, GLOBAL mm_ulong* RESTRICT forceBuffers,
         GLOBAL mm_long* RESTRICT torqueBuffers, GLOBAL mixed* RESTRICT energyBuffer, GLOBAL const real* RESTRICT labDipole,
+#ifdef HIPPO
         GLOBAL const real* RESTRICT coreCharge, GLOBAL const real* RESTRICT valenceCharge, GLOBAL const real* RESTRICT labQXX,
         GLOBAL const real* RESTRICT labQXY, GLOBAL const real* RESTRICT labQXZ, GLOBAL const real* RESTRICT labQYY, GLOBAL const real* RESTRICT labQYZ,
+#else
+        GLOBAL const real* RESTRICT labQuadrupole,
+#endif
         GLOBAL const real* RESTRICT fracDipole, GLOBAL const real* RESTRICT fracQuadrupole,
         GLOBAL const real* RESTRICT phi, GLOBAL const real* RESTRICT cphi_global, real4 recipBoxVecX, real4 recipBoxVecY, real4 recipBoxVecZ) {
     real multipole[10];
@@ -776,12 +980,21 @@ KERNEL void computeFixedMultipoleForceAndEnergy(GLOBAL real4* RESTRICT posq, GLO
         multipole[1] = labDipole[i*3];
         multipole[2] = labDipole[i*3+1];
         multipole[3] = labDipole[i*3+2];
+#ifdef HIPPO
         multipole[0] = coreCharge[i]+valenceCharge[i];
         multipole[4] = labQXX[i];
         multipole[5] = labQYY[i];
         multipole[7] = 2*labQXY[i];
         multipole[8] = 2*labQXZ[i];
         multipole[9] = 2*labQYZ[i];
+#else
+        multipole[0] = posq[i].w;
+        multipole[4] = labQuadrupole[i*5];
+        multipole[5] = labQuadrupole[i*5+3];
+        multipole[7] = 2*labQuadrupole[i*5+1];
+        multipole[8] = 2*labQuadrupole[i*5+2];
+        multipole[9] = 2*labQuadrupole[i*5+4];
+#endif
         multipole[6] = -(multipole[4]+multipole[5]);
 
         GLOBAL const real* cphi = &cphi_global[10*i];
@@ -832,11 +1045,21 @@ KERNEL void computeFixedMultipoleForceAndEnergy(GLOBAL real4* RESTRICT posq, GLO
 
 KERNEL void computeInducedDipoleForceAndEnergy(GLOBAL real4* RESTRICT posq, GLOBAL mm_ulong* RESTRICT forceBuffers,
         GLOBAL mm_long* RESTRICT torqueBuffers, GLOBAL mixed* RESTRICT energyBuffer, GLOBAL const real* RESTRICT labDipole,
+#ifdef HIPPO
         GLOBAL const real* RESTRICT coreCharge, GLOBAL const real* RESTRICT valenceCharge, GLOBAL const real* RESTRICT extrapolatedDipole,
         GLOBAL const real* RESTRICT extrapolatedPhi, GLOBAL const real* RESTRICT labQXX, GLOBAL const real* RESTRICT labQXY,
         GLOBAL const real* RESTRICT labQXZ, GLOBAL const real* RESTRICT labQYY, GLOBAL const real* RESTRICT labQYZ,
+#else
+        GLOBAL const real* RESTRICT labQuadrupole,
+#endif
         GLOBAL const real* RESTRICT fracDipole, GLOBAL const real* RESTRICT fracQuadrupole, GLOBAL const real* RESTRICT inducedDipole_global,
+#ifndef HIPPO
+        GLOBAL const real* RESTRICT inducedDipolePolar_global,
+#endif
         GLOBAL const real* RESTRICT phi,
+#ifndef HIPPO
+        GLOBAL const real* RESTRICT phid, GLOBAL const real* RESTRICT phip,
+#endif
         GLOBAL const real* RESTRICT phidp, GLOBAL const real* RESTRICT cphi_global, real4 recipBoxVecX, real4 recipBoxVecY, real4 recipBoxVecZ) {
     real multipole[10];
     real cinducedDipole[3], inducedDipole[3];
@@ -844,7 +1067,9 @@ KERNEL void computeInducedDipoleForceAndEnergy(GLOBAL real4* RESTRICT posq, GLOB
     const int deriv1[] = {1, 4, 7, 8, 10, 15, 17, 13, 14, 19};
     const int deriv2[] = {2, 7, 5, 9, 13, 11, 18, 15, 19, 16};
     const int deriv3[] = {3, 8, 9, 6, 14, 16, 12, 19, 17, 18};
+#ifdef HIPPO
     const real coeff[] = {EXTRAPOLATION_COEFFICIENTS_SUM};
+#endif
     mixed energy = 0;
     LOCAL real fracToCart[3][3];
     if (LOCAL_ID == 0) {
@@ -865,6 +1090,7 @@ KERNEL void computeInducedDipoleForceAndEnergy(GLOBAL real4* RESTRICT posq, GLOB
         multipole[1] = labDipole[i*3];
         multipole[2] = labDipole[i*3+1];
         multipole[3] = labDipole[i*3+2];
+#ifdef HIPPO
         multipole[0] = coreCharge[i]+valenceCharge[i];
         multipole[4] = labQXX[i];
         multipole[5] = labQYY[i];
@@ -872,6 +1098,15 @@ KERNEL void computeInducedDipoleForceAndEnergy(GLOBAL real4* RESTRICT posq, GLOB
         multipole[8] = 2*labQXZ[i];
         multipole[9] = 2*labQYZ[i];
         const real scale = EPSILON_FACTOR;
+#else
+        multipole[0] = posq[i].w;
+        multipole[4] = labQuadrupole[i*5];
+        multipole[5] = labQuadrupole[i*5+3];
+        multipole[7] = 2*labQuadrupole[i*5+1];
+        multipole[8] = 2*labQuadrupole[i*5+2];
+        multipole[9] = 2*labQuadrupole[i*5+4];
+        const real scale = EPSILON_FACTOR/2;
+#endif
         multipole[6] = -(multipole[4]+multipole[5]);
         GLOBAL const real* cphi = &cphi_global[10*i];
  
@@ -905,20 +1140,39 @@ KERNEL void computeInducedDipoleForceAndEnergy(GLOBAL real4* RESTRICT posq, GLOB
         cinducedDipole[0] = inducedDipole_global[3*i];
         cinducedDipole[1] = inducedDipole_global[3*i+1];
         cinducedDipole[2] = inducedDipole_global[3*i+2];
+#ifndef HIPPO
+        cinducedDipolePolar[0] = inducedDipolePolar_global[3*i];
+        cinducedDipolePolar[1] = inducedDipolePolar_global[3*i+1];
+        cinducedDipolePolar[2] = inducedDipolePolar_global[3*i+2];
+#endif
         
         // Multiply the dipoles by cartToFrac, which is just the transpose of fracToCart.
         
         inducedDipole[0] = cinducedDipole[0]*fracToCart[0][0] + cinducedDipole[1]*fracToCart[1][0] + cinducedDipole[2]*fracToCart[2][0];
         inducedDipole[1] = cinducedDipole[0]*fracToCart[0][1] + cinducedDipole[1]*fracToCart[1][1] + cinducedDipole[2]*fracToCart[2][1];
         inducedDipole[2] = cinducedDipole[0]*fracToCart[0][2] + cinducedDipole[1]*fracToCart[1][2] + cinducedDipole[2]*fracToCart[2][2];
+#ifndef HIPPO
+        inducedDipolePolar[0] = cinducedDipolePolar[0]*fracToCart[0][0] + cinducedDipolePolar[1]*fracToCart[1][0] + cinducedDipolePolar[2]*fracToCart[2][0];
+        inducedDipolePolar[1] = cinducedDipolePolar[0]*fracToCart[0][1] + cinducedDipolePolar[1]*fracToCart[1][1] + cinducedDipolePolar[2]*fracToCart[2][1];
+        inducedDipolePolar[2] = cinducedDipolePolar[0]*fracToCart[0][2] + cinducedDipolePolar[1]*fracToCart[1][2] + cinducedDipolePolar[2]*fracToCart[2][2];
+        energy += (inducedDipole[0]+inducedDipolePolar[0])*phi[i+NUM_ATOMS];
+        energy += (inducedDipole[1]+inducedDipolePolar[1])*phi[i+NUM_ATOMS*2];
+        energy += (inducedDipole[2]+inducedDipolePolar[2])*phi[i+NUM_ATOMS*3];
+#endif
         real3 f = make_real3(0, 0, 0);
         for (int k = 0; k < 3; k++) {
             int j1 = deriv1[k+1];
             int j2 = deriv2[k+1];
             int j3 = deriv3[k+1];
+#ifdef HIPPO
             f.x += inducedDipole[k]*phi[i+NUM_ATOMS*j1];
             f.y += inducedDipole[k]*phi[i+NUM_ATOMS*j2];
             f.z += inducedDipole[k]*phi[i+NUM_ATOMS*j3];
+#else
+            f.x += (inducedDipole[k]+inducedDipolePolar[k])*phi[i+NUM_ATOMS*j1];
+            f.y += (inducedDipole[k]+inducedDipolePolar[k])*phi[i+NUM_ATOMS*j2];
+            f.z += (inducedDipole[k]+inducedDipolePolar[k])*phi[i+NUM_ATOMS*j3];
+#endif
 #ifdef MUTUAL_POLARIZATION
             f.x += (inducedDipole[k]*phip[i+NUM_ATOMS*j1] + inducedDipolePolar[k]*phid[i+NUM_ATOMS*j1]);
             f.y += (inducedDipole[k]*phip[i+NUM_ATOMS*j2] + inducedDipolePolar[k]*phid[i+NUM_ATOMS*j2]);
@@ -932,6 +1186,7 @@ KERNEL void computeInducedDipoleForceAndEnergy(GLOBAL real4* RESTRICT posq, GLOB
             f.z += multipole[k]*phidp[i+NUM_ATOMS*deriv3[k]];
         }
 
+#ifdef HIPPO
         // Account for dipole response terms in the OPT method
 
         for (int j = 0; j < MAX_EXTRAPOLATION_ORDER-1; j++) {
@@ -947,6 +1202,7 @@ KERNEL void computeInducedDipoleForceAndEnergy(GLOBAL real4* RESTRICT posq, GLOB
                 f += coeff[j+m+1]*h;
             }
         }
+#endif
         f = make_real3(scale*(f.x*fracToCart[0][0] + f.y*fracToCart[0][1] + f.z*fracToCart[0][2]),
                        scale*(f.x*fracToCart[1][0] + f.y*fracToCart[1][1] + f.z*fracToCart[1][2]),
                        scale*(f.x*fracToCart[2][0] + f.y*fracToCart[2][1] + f.z*fracToCart[2][2]));
@@ -954,8 +1210,12 @@ KERNEL void computeInducedDipoleForceAndEnergy(GLOBAL real4* RESTRICT posq, GLOB
         forceBuffers[i+PADDED_NUM_ATOMS] -= (mm_ulong) realToFixedPoint(f.y);
         forceBuffers[i+PADDED_NUM_ATOMS*2] -= (mm_ulong) realToFixedPoint(f.z);
     }
+#ifndef HIPPO
+    energyBuffer[GLOBAL_ID] += 0.25f*EPSILON_FACTOR*energy;
+#endif
 }
 
+#ifdef HIPPO
 KERNEL void recordInducedFieldDipoles(GLOBAL const real* RESTRICT phidp, GLOBAL mm_long* RESTRICT inducedField,
         GLOBAL const real* RESTRICT inducedDipole, real4 recipBoxVecX, real4 recipBoxVecY, real4 recipBoxVecZ) {
     LOCAL real fracToCart[3][3];
@@ -1007,5 +1267,87 @@ KERNEL void calculateSelfEnergyAndTorque(GLOBAL mm_long* RESTRICT torqueBuffers,
     }
     real term = 2*EWALD_ALPHA*EWALD_ALPHA;
     real fterm = -EPSILON_FACTOR*EWALD_ALPHA/SQRT_PI;
+    // InteraxMultipoleForce has no dispersion, so there is no dispersion self energy.
     energyBuffer[GLOBAL_ID] += fterm*(cii + term*(dii/3+2*term*qii/5));
 }
+#else
+KERNEL void recordInducedFieldDipoles(GLOBAL const real* RESTRICT phid, GLOBAL real* const RESTRICT phip, GLOBAL mm_long* RESTRICT inducedField,
+        GLOBAL mm_long* RESTRICT inducedFieldPolar, GLOBAL const real* RESTRICT inducedDipole, GLOBAL const real* RESTRICT inducedDipolePolar,
+        real4 recipBoxVecX, real4 recipBoxVecY, real4 recipBoxVecZ
+#ifdef EXTRAPOLATED_POLARIZATION
+        , GLOBAL mm_ulong* RESTRICT fieldGradient, GLOBAL mm_ulong* RESTRICT fieldGradientPolar
+#endif
+        ) {
+    LOCAL real fracToCart[3][3];
+    if (LOCAL_ID == 0) {
+        fracToCart[0][0] = GRID_SIZE_X*recipBoxVecX.x;
+        fracToCart[1][0] = GRID_SIZE_X*recipBoxVecY.x;
+        fracToCart[2][0] = GRID_SIZE_X*recipBoxVecZ.x;
+        fracToCart[0][1] = GRID_SIZE_Y*recipBoxVecX.y;
+        fracToCart[1][1] = GRID_SIZE_Y*recipBoxVecY.y;
+        fracToCart[2][1] = GRID_SIZE_Y*recipBoxVecZ.y;
+        fracToCart[0][2] = GRID_SIZE_Z*recipBoxVecX.z;
+        fracToCart[1][2] = GRID_SIZE_Z*recipBoxVecY.z;
+        fracToCart[2][2] = GRID_SIZE_Z*recipBoxVecZ.z;
+    }
+    SYNC_THREADS;
+    real selfDipoleScale = (4/(real) 3)*(EWALD_ALPHA*EWALD_ALPHA*EWALD_ALPHA)/SQRT_PI;
+    for (int i = GLOBAL_ID; i < NUM_ATOMS; i += GLOBAL_SIZE) {
+        inducedField[i] -= realToFixedPoint(phid[i+NUM_ATOMS]*fracToCart[0][0] + phid[i+NUM_ATOMS*2]*fracToCart[0][1] + phid[i+NUM_ATOMS*3]*fracToCart[0][2] - selfDipoleScale*inducedDipole[3*i]);
+        inducedField[i+PADDED_NUM_ATOMS] -= realToFixedPoint(phid[i+NUM_ATOMS]*fracToCart[1][0] + phid[i+NUM_ATOMS*2]*fracToCart[1][1] + phid[i+NUM_ATOMS*3]*fracToCart[1][2] - selfDipoleScale*inducedDipole[3*i+1]);
+        inducedField[i+PADDED_NUM_ATOMS*2] -= realToFixedPoint(phid[i+NUM_ATOMS]*fracToCart[2][0] + phid[i+NUM_ATOMS*2]*fracToCart[2][1] + phid[i+NUM_ATOMS*3]*fracToCart[2][2] - selfDipoleScale*inducedDipole[3*i+2]);
+        inducedFieldPolar[i] -= realToFixedPoint(phip[i+NUM_ATOMS]*fracToCart[0][0] + phip[i+NUM_ATOMS*2]*fracToCart[0][1] + phip[i+NUM_ATOMS*3]*fracToCart[0][2] - selfDipoleScale*inducedDipolePolar[3*i]);
+        inducedFieldPolar[i+PADDED_NUM_ATOMS] -= realToFixedPoint(phip[i+NUM_ATOMS]*fracToCart[1][0] + phip[i+NUM_ATOMS*2]*fracToCart[1][1] + phip[i+NUM_ATOMS*3]*fracToCart[1][2] - selfDipoleScale*inducedDipolePolar[3*i+1]);
+        inducedFieldPolar[i+PADDED_NUM_ATOMS*2] -= realToFixedPoint(phip[i+NUM_ATOMS]*fracToCart[2][0] + phip[i+NUM_ATOMS*2]*fracToCart[2][1] + phip[i+NUM_ATOMS*3]*fracToCart[2][2] - selfDipoleScale*inducedDipolePolar[3*i+2]);
+#ifdef EXTRAPOLATED_POLARIZATION
+        // Compute and store the field gradients for later use.
+
+        real EmatD[3][3] = {
+            {phid[i+NUM_ATOMS*4], phid[i+NUM_ATOMS*7], phid[i+NUM_ATOMS*8]},
+            {phid[i+NUM_ATOMS*7], phid[i+NUM_ATOMS*5], phid[i+NUM_ATOMS*9]},
+            {phid[i+NUM_ATOMS*8], phid[i+NUM_ATOMS*9], phid[i+NUM_ATOMS*6]}
+        };
+        real Exx = 0, Eyy = 0, Ezz = 0, Exy = 0, Exz = 0, Eyz = 0;
+        for (int k = 0; k < 3; ++k) {
+            for (int l = 0; l < 3; ++l) {
+                Exx += fracToCart[0][k] * EmatD[k][l] * fracToCart[0][l];
+                Eyy += fracToCart[1][k] * EmatD[k][l] * fracToCart[1][l];
+                Ezz += fracToCart[2][k] * EmatD[k][l] * fracToCart[2][l];
+                Exy += fracToCart[0][k] * EmatD[k][l] * fracToCart[1][l];
+                Exz += fracToCart[0][k] * EmatD[k][l] * fracToCart[2][l];
+                Eyz += fracToCart[1][k] * EmatD[k][l] * fracToCart[2][l];
+            }
+        }
+        ATOMIC_ADD(&fieldGradient[6*i+0], (mm_ulong) realToFixedPoint(-Exx));
+        ATOMIC_ADD(&fieldGradient[6*i+1], (mm_ulong) realToFixedPoint(-Eyy));
+        ATOMIC_ADD(&fieldGradient[6*i+2], (mm_ulong) realToFixedPoint(-Ezz));
+        ATOMIC_ADD(&fieldGradient[6*i+3], (mm_ulong) realToFixedPoint(-Exy));
+        ATOMIC_ADD(&fieldGradient[6*i+4], (mm_ulong) realToFixedPoint(-Exz));
+        ATOMIC_ADD(&fieldGradient[6*i+5], (mm_ulong) realToFixedPoint(-Eyz));
+
+        real EmatP[3][3] = {
+            {phip[i+NUM_ATOMS*4], phip[i+NUM_ATOMS*7], phip[i+NUM_ATOMS*8]},
+            {phip[i+NUM_ATOMS*7], phip[i+NUM_ATOMS*5], phip[i+NUM_ATOMS*9]},
+            {phip[i+NUM_ATOMS*8], phip[i+NUM_ATOMS*9], phip[i+NUM_ATOMS*6]}
+        };
+        Exx = 0; Eyy = 0; Ezz = 0; Exy = 0; Exz = 0; Eyz = 0;
+        for (int k = 0; k < 3; ++k) {
+            for (int l = 0; l < 3; ++l) {
+                Exx += fracToCart[0][k] * EmatP[k][l] * fracToCart[0][l];
+                Eyy += fracToCart[1][k] * EmatP[k][l] * fracToCart[1][l];
+                Ezz += fracToCart[2][k] * EmatP[k][l] * fracToCart[2][l];
+                Exy += fracToCart[0][k] * EmatP[k][l] * fracToCart[1][l];
+                Exz += fracToCart[0][k] * EmatP[k][l] * fracToCart[2][l];
+                Eyz += fracToCart[1][k] * EmatP[k][l] * fracToCart[2][l];
+            }
+        }
+        ATOMIC_ADD(&fieldGradientPolar[6*i+0], (mm_ulong) realToFixedPoint(-Exx));
+        ATOMIC_ADD(&fieldGradientPolar[6*i+1], (mm_ulong) realToFixedPoint(-Eyy));
+        ATOMIC_ADD(&fieldGradientPolar[6*i+2], (mm_ulong) realToFixedPoint(-Ezz));
+        ATOMIC_ADD(&fieldGradientPolar[6*i+3], (mm_ulong) realToFixedPoint(-Exy));
+        ATOMIC_ADD(&fieldGradientPolar[6*i+4], (mm_ulong) realToFixedPoint(-Exz));
+        ATOMIC_ADD(&fieldGradientPolar[6*i+5], (mm_ulong) realToFixedPoint(-Eyz));
+#endif
+    }
+}
+#endif

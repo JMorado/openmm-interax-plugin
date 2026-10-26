@@ -46,7 +46,7 @@ using namespace InteraxPlugin;
 using namespace OpenMM;
 using namespace std;
 
-static void setMultipoleBoxArgs(ComputeContext& cc, ComputeKernel kernel, int index) {
+static void setPeriodicBoxArgs(ComputeContext& cc, ComputeKernel kernel, int index) {
     Vec3 a, b, c;
     cc.getPeriodicBoxVectors(a, b, c);
     if (cc.getUseDoublePrecision()) {
@@ -65,35 +65,66 @@ static void setMultipoleBoxArgs(ComputeContext& cc, ComputeKernel kernel, int in
     }
 }
 
+/**
+ * Write a set of defines as preprocessor directives, for kernel sources that the nonbonded utilities compile.
+ */
+static string definesToSource(const map<string, string>& defines) {
+    stringstream src;
+    for (auto& d : defines)
+        src << "#define " << d.first << " " << d.second << "\n";
+    return src.str();
+}
+
+/* -------------------------------------------------------------------------- *
+ *                          InteraxMultipoleForce                             *
+ * -------------------------------------------------------------------------- */
+
 class CommonCalcInteraxMultipoleForceKernel::ForceInfo : public ComputeForceInfo {
 public:
     ForceInfo(const InteraxMultipoleForce& force) : force(force) {
     }
     bool areParticlesIdentical(int particle1, int particle2) {
-        double charge1, coreCharge1, alpha1, polarizability1, charge2, coreCharge2, alpha2, polarizability2;
-        int axisType1, z1, x1, y1, axisType2, z2, x2, y2;
+        double charge1, coreCharge1, alpha1, polarizability1;
+        double charge2, coreCharge2, alpha2, polarizability2;
+        int axisType1, multipoleZ1, multipoleX1, multipoleY1;
+        int axisType2, multipoleZ2, multipoleX2, multipoleY2;
         bool alchemical1, alchemical2;
         vector<double> dipole1, dipole2, quadrupole1, quadrupole2;
-        force.getParticleParameters(particle1, charge1, dipole1, quadrupole1, coreCharge1, alpha1, polarizability1, axisType1, z1, x1, y1, alchemical1);
-        force.getParticleParameters(particle2, charge2, dipole2, quadrupole2, coreCharge2, alpha2, polarizability2, axisType2, z2, x2, y2, alchemical2);
-        return (charge1 == charge2 && coreCharge1 == coreCharge2 && alpha1 == alpha2 && polarizability1 == polarizability2 &&
-                axisType1 == axisType2 && alchemical1 == alchemical2 && dipole1 == dipole2 && quadrupole1 == quadrupole2);
+        force.getParticleParameters(particle1, charge1, dipole1, quadrupole1, coreCharge1, alpha1, polarizability1,
+                                    axisType1, multipoleZ1, multipoleX1, multipoleY1, alchemical1);
+        force.getParticleParameters(particle2, charge2, dipole2, quadrupole2, coreCharge2, alpha2, polarizability2,
+                                    axisType2, multipoleZ2, multipoleX2, multipoleY2, alchemical2);
+        if (charge1 != charge2 || coreCharge1 != coreCharge2 || alpha1 != alpha2 || polarizability1 != polarizability2 ||
+                axisType1 != axisType2 || alchemical1 != alchemical2) {
+            return false;
+        }
+        for (int i = 0; i < dipole1.size(); ++i)
+            if (dipole1[i] != dipole2[i])
+                return false;
+        for (int i = 0; i < quadrupole1.size(); ++i)
+            if (quadrupole1[i] != quadrupole2[i])
+                return false;
+        return true;
     }
     int getNumParticleGroups() {
         return force.getNumExceptions();
     }
     void getParticlesInGroup(int index, vector<int>& particles) {
         int particle1, particle2;
-        double mm, dm, dd;
-        force.getExceptionParameters(index, particle1, particle2, mm, dm, dd);
-        particles = {particle1, particle2};
+        double multipoleMultipoleScale, dipoleMultipoleScale, dipoleDipoleScale;
+        force.getExceptionParameters(index, particle1, particle2, multipoleMultipoleScale, dipoleMultipoleScale, dipoleDipoleScale);
+        particles.resize(2);
+        particles[0] = particle1;
+        particles[1] = particle2;
     }
     bool areGroupsIdentical(int group1, int group2) {
         int particle1, particle2;
-        double mm1, dm1, dd1, mm2, dm2, dd2;
-        force.getExceptionParameters(group1, particle1, particle2, mm1, dm1, dd1);
-        force.getExceptionParameters(group2, particle1, particle2, mm2, dm2, dd2);
-        return (mm1 == mm2 && dm1 == dm2 && dd1 == dd2);
+        double multipoleMultipoleScale1, dipoleMultipoleScale1, dipoleDipoleScale1;
+        double multipoleMultipoleScale2, dipoleMultipoleScale2, dipoleDipoleScale2;
+        force.getExceptionParameters(group1, particle1, particle2, multipoleMultipoleScale1, dipoleMultipoleScale1, dipoleDipoleScale1);
+        force.getExceptionParameters(group2, particle1, particle2, multipoleMultipoleScale2, dipoleMultipoleScale2, dipoleDipoleScale2);
+        return (multipoleMultipoleScale1 == multipoleMultipoleScale2 && dipoleMultipoleScale1 == dipoleMultipoleScale2 &&
+                dipoleDipoleScale1 == dipoleDipoleScale2);
     }
 private:
     const InteraxMultipoleForce& force;
@@ -111,41 +142,29 @@ private:
     CommonCalcInteraxMultipoleForceKernel& owner;
 };
 
-CommonCalcInteraxMultipoleForceKernel::CommonCalcInteraxMultipoleForceKernel(const string& name, const Platform& platform, ComputeContext& cc,
-        const System& system) : CalcInteraxMultipoleForceKernel(name, platform), cc(cc), system(system), hasInitializedKernels(false),
-        multipolesAreValid(false), lastLambda(-1) {
+CommonCalcInteraxMultipoleForceKernel::CommonCalcInteraxMultipoleForceKernel(const std::string& name, const Platform& platform, ComputeContext& cc, const System& system) :
+        CalcInteraxMultipoleForceKernel(name, platform), cc(cc), system(system), hasInitializedKernels(false), multipolesAreValid(false), lastLambda(-1) {
 }
 
-map<string, string> CommonCalcInteraxMultipoleForceKernel::getPhysicsDefines() const {
-    // Below these |t| (and |t| a r) the pair damping factors use their series (interaxMultipoleInteractionHeader.cc);
-    // chosen where the series error equals the cancellation error of the closed form (~1e-6 in single, ~1e-12 in
-    // double precision).
-    map<string, string> defines;
-    bool doublePrecision = cc.getUseDoublePrecision();
-    defines["PAIR_DAMPING_MAX_T"] = cc.doubleToString(doublePrecision ? 0.03 : 0.1);
-    defines["PAIR_DAMPING_MAX_T2"] = cc.doubleToString(doublePrecision ? 0.03 : 0.2);
-    defines["PAIR_DAMPING_MAX_TX"] = cc.doubleToString(1.0);
-    defines["MUTUAL_DAMPING_SCALE"] = cc.doubleToString(mutualDampingScale);
-    if (mutualDampingScale != 1.0)
-        defines["MUTUAL_DAMPING_SCALED"] = "1";
-    if (coreDamping)
-        defines["CORE_DAMPING"] = "1";
-    defines["CORE_DAMPING_SCALE"] = cc.doubleToString(coreDampingScale);
-    return defines;
-}
+void CommonCalcInteraxMultipoleForceKernel::initialize(const System& system, const InteraxMultipoleForce& force) {
+    ContextSelector selector(cc);
+    extrapolationCoefficients = force.getExtrapolationCoefficients();
+    usePME = (force.getNonbondedMethod() == InteraxMultipoleForce::PME);
+    coreDamping = force.getCoreDamping();
+    coreDampingScale = force.getCoreDampingScale();
+    mutualDampingScale = force.getMutualDampingScale();
+    alchemicalParameter = force.getAlchemicalParameterName();
 
-static string definesToSource(const map<string, string>& defines) {
-    stringstream src;
-    for (auto& d : defines)
-        src << "#define " << d.first << " " << d.second << "\n";
-    return src.str();
-}
+    // Initialize particle parameters. The parameters of alchemical particles are scaled on the device (execute()), from
+    // the unscaled values stored in the base arrays.
 
-void CommonCalcInteraxMultipoleForceKernel::setParticleParameters(const InteraxMultipoleForce& force) {
-    int paddedNumAtoms = cc.getPaddedNumAtoms();
-    vector<double> coreChargeVec, valenceChargeVec, alphaVec, polarizabilityVec, localDipolesVec, localQuadrupolesVec;
+    numParticles = force.getNumParticles();
+    vector<double> coreChargeVec, valenceChargeVec, alphaVec, polarizabilityVec;
+    vector<double> localDipolesVec, localQuadrupolesVec;
     vector<mm_int4> multipoleParticlesVec;
     vector<int> isAlchemicalVec;
+    vector<vector<int> > exclusions(numParticles);
+    hasAlchemicalParticles = false;
     for (int i = 0; i < numParticles; i++) {
         double charge, coreCharge, alpha, polarizability;
         int axisType, atomX, atomY, atomZ;
@@ -158,11 +177,17 @@ void CommonCalcInteraxMultipoleForceKernel::setParticleParameters(const InteraxM
         polarizabilityVec.push_back(polarizability);
         multipoleParticlesVec.push_back(mm_int4(atomX, atomY, atomZ, axisType));
         isAlchemicalVec.push_back(alchemical ? 1 : 0);
+        hasAlchemicalParticles |= alchemical;
         for (int j = 0; j < 3; j++)
             localDipolesVec.push_back(dipole[j]);
-        for (int j : {0, 1, 2, 4, 5})
-            localQuadrupolesVec.push_back(quadrupole[j]);
+        localQuadrupolesVec.push_back(quadrupole[0]);
+        localQuadrupolesVec.push_back(quadrupole[1]);
+        localQuadrupolesVec.push_back(quadrupole[2]);
+        localQuadrupolesVec.push_back(quadrupole[4]);
+        localQuadrupolesVec.push_back(quadrupole[5]);
+        exclusions[i].push_back(i);
     }
+    int paddedNumAtoms = cc.getPaddedNumAtoms();
     for (int i = numParticles; i < paddedNumAtoms; i++) {
         coreChargeVec.push_back(0);
         valenceChargeVec.push_back(0);
@@ -175,30 +200,6 @@ void CommonCalcInteraxMultipoleForceKernel::setParticleParameters(const InteraxM
         for (int j = 0; j < 5; j++)
             localQuadrupolesVec.push_back(0);
     }
-    baseCoreCharge.upload(coreChargeVec, true);
-    baseValenceCharge.upload(valenceChargeVec, true);
-    basePolarizability.upload(polarizabilityVec, true);
-    baseLocalDipoles.upload(localDipolesVec, true);
-    baseLocalQuadrupoles.upload(localQuadrupolesVec, true);
-    alpha.upload(alphaVec, true);
-    multipoleParticles.upload(multipoleParticlesVec);
-    isAlchemical.upload(isAlchemicalVec);
-    lastLambda = -1;  // the scaled parameters must be recomputed
-}
-
-void CommonCalcInteraxMultipoleForceKernel::initialize(const System& system, const InteraxMultipoleForce& force) {
-    ContextSelector selector(cc);
-    extrapolationCoefficients = force.getExtrapolationCoefficients();
-    usePME = (force.getNonbondedMethod() == InteraxMultipoleForce::PME);
-    coreDamping = force.getCoreDamping();
-    mutualDampingScale = force.getMutualDampingScale();
-    coreDampingScale = force.getCoreDampingScale();
-    alchemicalParameter = force.getAlchemicalParameterName();
-
-    // Initialize particle parameters.
-
-    numParticles = force.getNumParticles();
-    int paddedNumAtoms = cc.getPaddedNumAtoms();
     int elementSize = (cc.getUseDoublePrecision() ? sizeof(double) : sizeof(float));
     baseCoreCharge.initialize(cc, paddedNumAtoms, elementSize, "baseCoreCharge");
     baseValenceCharge.initialize(cc, paddedNumAtoms, elementSize, "baseValenceCharge");
@@ -214,22 +215,17 @@ void CommonCalcInteraxMultipoleForceKernel::initialize(const System& system, con
     localDipoles.initialize(cc, 3*paddedNumAtoms, elementSize, "localDipoles");
     localQuadrupoles.initialize(cc, 5*paddedNumAtoms, elementSize, "localQuadrupoles");
     lastPositions.initialize(cc, cc.getPosq().getSize(), cc.getPosq().getElementSize(), "lastPositions");
-    setParticleParameters(force);
-    hasAlchemicalParticles = false;
-    for (int i = 0; i < numParticles; i++) {
-        double charge, core, a, pol;
-        int axisType, atomX, atomY, atomZ;
-        bool alchemical;
-        vector<double> dipole, quadrupole;
-        force.getParticleParameters(i, charge, dipole, quadrupole, core, a, pol, axisType, atomZ, atomX, atomY, alchemical);
-        hasAlchemicalParticles |= alchemical;
-    }
-    vector<vector<int> > exclusions(numParticles);
-    for (int i = 0; i < numParticles; i++)
-        exclusions[i].push_back(i);
-
+    baseCoreCharge.upload(coreChargeVec, true);
+    baseValenceCharge.upload(valenceChargeVec, true);
+    alpha.upload(alphaVec, true);
+    basePolarizability.upload(polarizabilityVec, true);
+    multipoleParticles.upload(multipoleParticlesVec);
+    isAlchemical.upload(isAlchemicalVec);
+    baseLocalDipoles.upload(localDipolesVec, true);
+    baseLocalQuadrupoles.upload(localQuadrupolesVec, true);
+    
     // Create workspace arrays.
-
+    
     labDipoles.initialize(cc, 3*paddedNumAtoms, elementSize, "dipole");
     labQuadrupoles[0].initialize(cc, paddedNumAtoms, elementSize, "qXX");
     labQuadrupoles[1].initialize(cc, paddedNumAtoms, elementSize, "qXY");
@@ -247,9 +243,9 @@ void CommonCalcInteraxMultipoleForceKernel::initialize(const System& system, con
     extrapolatedPhi.initialize(cc, 10*numParticles*numOrders, elementSize, "extrapolatedPhi");
     cc.addAutoclearBuffer(field);
     cc.addAutoclearBuffer(torque);
-
+    
     // Record exceptions and exclusions.
-
+    
     vector<double> exceptionScaleVec[3];
     vector<mm_int2> exceptionAtomsVec;
     for (int i = 0; i < force.getNumExceptions(); i++) {
@@ -273,7 +269,7 @@ void CommonCalcInteraxMultipoleForceKernel::initialize(const System& system, con
             exceptionScales[i].upload(exceptionScaleVec[i], true);
         }
     }
-
+    
     // Create the kernels.
 
     map<string, string> defines = getPhysicsDefines();
@@ -338,8 +334,11 @@ void CommonCalcInteraxMultipoleForceKernel::initialize(const System& system, con
     computeMomentsKernel->addArg(localDipoles);
     computeMomentsKernel->addArg(localQuadrupoles);
     computeMomentsKernel->addArg(labDipoles);
-    for (int i = 0; i < 5; i++)
-        computeMomentsKernel->addArg(labQuadrupoles[i]);
+    computeMomentsKernel->addArg(labQuadrupoles[0]);
+    computeMomentsKernel->addArg(labQuadrupoles[1]);
+    computeMomentsKernel->addArg(labQuadrupoles[2]);
+    computeMomentsKernel->addArg(labQuadrupoles[3]);
+    computeMomentsKernel->addArg(labQuadrupoles[4]);
     recordInducedDipolesKernel = program->createKernel("recordInducedDipoles");
     recordInducedDipolesKernel->addArg(field);
     recordInducedDipolesKernel->addArg(inducedDipole);
@@ -368,8 +367,11 @@ void CommonCalcInteraxMultipoleForceKernel::initialize(const System& system, con
     polarizationEnergyKernel->addArg(field);
 
     // Set up PME.
-
+    
     if (usePME) {
+
+        // Create required data structures.
+
         int roundedZSize = PmeOrder*(int) ceil(gridSizeZ/(double) PmeOrder);
         int gridElements = gridSizeX*gridSizeY*roundedZSize;
         pmeGrid1.initialize(cc, gridElements, elementSize, "pmeGrid1");
@@ -386,6 +388,9 @@ void CommonCalcInteraxMultipoleForceKernel::initialize(const System& system, con
         pmePhi.initialize(cc, 20*numParticles, elementSize, "pmePhi");
         pmePhidp.initialize(cc, 20*numParticles, elementSize, "pmePhidp");
         pmeCphi.initialize(cc, 10*numParticles, elementSize, "pmeCphi");
+
+        // Create the PME kernels.
+
         map<string, string> pmeDefines;
         pmeDefines["HIPPO"] = "1";
         pmeDefines["EWALD_ALPHA"] = cc.doubleToString(pmeAlpha);
@@ -405,8 +410,11 @@ void CommonCalcInteraxMultipoleForceKernel::initialize(const System& system, con
         program = cc.compileProgram(CommonInteraxKernelSources::interaxMultipolePme, pmeDefines);
         pmeTransformMultipolesKernel = program->createKernel("transformMultipolesToFractionalCoordinates");
         pmeTransformMultipolesKernel->addArg(labDipoles);
-        for (int i = 0; i < 5; i++)
-            pmeTransformMultipolesKernel->addArg(labQuadrupoles[i]);
+        pmeTransformMultipolesKernel->addArg(labQuadrupoles[0]);
+        pmeTransformMultipolesKernel->addArg(labQuadrupoles[1]);
+        pmeTransformMultipolesKernel->addArg(labQuadrupoles[2]);
+        pmeTransformMultipolesKernel->addArg(labQuadrupoles[3]);
+        pmeTransformMultipolesKernel->addArg(labQuadrupoles[4]);
         pmeTransformMultipolesKernel->addArg(fracDipoles);
         pmeTransformMultipolesKernel->addArg(fracQuadrupoles);
         for (int i = 0; i < 3; i++)
@@ -446,7 +454,7 @@ void CommonCalcInteraxMultipoleForceKernel::initialize(const System& system, con
         pmeConvolutionKernel->addArg(pmeGrid2);
         pmeConvolutionKernel->addArg(pmeBsplineModuliX);
         pmeConvolutionKernel->addArg(pmeBsplineModuliY);
-        pmeConvolutionKernel->addArg(pmeBsplineModuliZ);  // HippoNonbondedForce passes the x moduli here
+        pmeConvolutionKernel->addArg(pmeBsplineModuliZ); // HippoNonbondedForce passes the X moduli here
         for (int i = 0; i < 4; i++)
             pmeConvolutionKernel->addArg();
         pmeFixedPotentialKernel = program->createKernel("computeFixedPotentialFromGrid");
@@ -473,8 +481,11 @@ void CommonCalcInteraxMultipoleForceKernel::initialize(const System& system, con
         pmeFixedForceKernel->addArg(labDipoles);
         pmeFixedForceKernel->addArg(coreCharge);
         pmeFixedForceKernel->addArg(valenceCharge);
-        for (int i = 0; i < 5; i++)
-            pmeFixedForceKernel->addArg(labQuadrupoles[i]);
+        pmeFixedForceKernel->addArg(labQuadrupoles[0]);
+        pmeFixedForceKernel->addArg(labQuadrupoles[1]);
+        pmeFixedForceKernel->addArg(labQuadrupoles[2]);
+        pmeFixedForceKernel->addArg(labQuadrupoles[3]);
+        pmeFixedForceKernel->addArg(labQuadrupoles[4]);
         pmeFixedForceKernel->addArg(fracDipoles);
         pmeFixedForceKernel->addArg(fracQuadrupoles);
         pmeFixedForceKernel->addArg(pmePhi);
@@ -491,8 +502,11 @@ void CommonCalcInteraxMultipoleForceKernel::initialize(const System& system, con
         pmeInducedForceKernel->addArg(valenceCharge);
         pmeInducedForceKernel->addArg(extrapolatedDipole);
         pmeInducedForceKernel->addArg(extrapolatedPhi);
-        for (int i = 0; i < 5; i++)
-            pmeInducedForceKernel->addArg(labQuadrupoles[i]);
+        pmeInducedForceKernel->addArg(labQuadrupoles[0]);
+        pmeInducedForceKernel->addArg(labQuadrupoles[1]);
+        pmeInducedForceKernel->addArg(labQuadrupoles[2]);
+        pmeInducedForceKernel->addArg(labQuadrupoles[3]);
+        pmeInducedForceKernel->addArg(labQuadrupoles[4]);
         pmeInducedForceKernel->addArg(fracDipoles);
         pmeInducedForceKernel->addArg(fracQuadrupoles);
         pmeInducedForceKernel->addArg(inducedDipole);
@@ -514,8 +528,11 @@ void CommonCalcInteraxMultipoleForceKernel::initialize(const System& system, con
         pmeSelfEnergyKernel->addArg(coreCharge);
         pmeSelfEnergyKernel->addArg(valenceCharge);
         pmeSelfEnergyKernel->addArg(inducedDipole);
-        for (int i = 0; i < 5; i++)
-            pmeSelfEnergyKernel->addArg(labQuadrupoles[i]);
+        pmeSelfEnergyKernel->addArg(labQuadrupoles[0]);
+        pmeSelfEnergyKernel->addArg(labQuadrupoles[1]);
+        pmeSelfEnergyKernel->addArg(labQuadrupoles[2]);
+        pmeSelfEnergyKernel->addArg(labQuadrupoles[3]);
+        pmeSelfEnergyKernel->addArg(labQuadrupoles[4]);
 
         // Initialize the B-spline moduli.
 
@@ -591,17 +608,32 @@ void CommonCalcInteraxMultipoleForceKernel::initialize(const System& system, con
                 }
                 moduli[i-1] = moduli[i-1]*zeta*zeta;
             }
-            ComputeArray& moduliArray = (dim == 0 ? pmeBsplineModuliX : dim == 1 ? pmeBsplineModuliY : pmeBsplineModuliZ);
-            moduliArray.upload(moduli, true);
+            if (cc.getUseDoublePrecision()) {
+                if (dim == 0)
+                    pmeBsplineModuliX.upload(moduli);
+                else if (dim == 1)
+                    pmeBsplineModuliY.upload(moduli);
+                else
+                    pmeBsplineModuliZ.upload(moduli);
+            }
+            else {
+                vector<float> modulif(ndata);
+                for (int i = 0; i < ndata; i++)
+                    modulif[i] = (float) moduli[i];
+                if (dim == 0)
+                    pmeBsplineModuliX.upload(modulif);
+                else if (dim == 1)
+                    pmeBsplineModuliY.upload(modulif);
+                else
+                    pmeBsplineModuliZ.upload(modulif);
+            }
         }
     }
 
-    // Add the real-space interaction. By default (as HippoNonbondedForce) it replaces the source of the default nonbonded
-    // kernel, which then cannot evaluate other interactions. With useOwnKernel the force only registers its cutoff and
-    // exclusions with the nonbonded utilities (as AMOEBA does), so they build the neighbor list it needs, and evaluates
-    // the interaction with a kernel of its own (computeElectrostatics()), built from the same source.
-
-    string physicsDefines = definesToSource(getPhysicsDefines());
+    // Add the interaction to the default nonbonded kernel. With useOwnKernel, the force instead only registers its
+    // cutoff and exclusions with the nonbonded utilities (so that they build the neighbor list it uses), and evaluates
+    // the interaction with a kernel of its own, built from the same source (computeElectrostatics()).
+    
     NonbondedUtilities& nb = cc.getNonbondedUtilities();
     useOwnKernel = force.getUseOwnKernel();
     electrostaticsArgs = {{&torque, "torqueBuffers", "mm_ulong", 1, false}, {&extrapolatedDipole, "extrapolatedDipole", "real", 1, true}};
@@ -610,7 +642,7 @@ void CommonCalcInteraxMultipoleForceKernel::initialize(const System& system, con
             {&labQuadrupoles[0], "qXX", "real", 1, true}, {&labQuadrupoles[1], "qXY", "real", 1, true}, {&labQuadrupoles[2], "qXZ", "real", 1, true},
             {&labQuadrupoles[3], "qYY", "real", 1, true}, {&labQuadrupoles[4], "qYZ", "real", 1, true}};
     if (!useOwnKernel) {
-        nb.setKernelSource(physicsDefines+CommonInteraxKernelSources::interaxMultipoleInteractionHeader+CommonInteraxKernelSources::interaxMultipoleNonbonded);
+        nb.setKernelSource(definesToSource(getPhysicsDefines())+CommonInteraxKernelSources::interaxMultipoleInteractionHeader+CommonInteraxKernelSources::interaxMultipoleNonbonded);
         for (auto& a : electrostaticsArgs)
             nb.addArgument(ComputeParameterInfo(*a.array, a.name, a.componentType, a.numComponents, a.constant));
         for (auto& p : electrostaticsParams)
@@ -632,9 +664,9 @@ void CommonCalcInteraxMultipoleForceKernel::initialize(const System& system, con
     else
         nb.addInteraction(usePME, usePME, true, force.getCutoffDistance(), exclusions, interactionSource, force.getForceGroup());
     nb.setUsePadding(false);
-
+    
     // Create the kernel for computing exceptions.
-
+    
     if (exceptionAtoms.isInitialized()) {
         replacements["COMPUTE_INTERACTION"] = interactionSource;
         string exceptionsSrc = CommonInteraxKernelSources::interaxMultipoleInteractionHeader+CommonInteraxKernelSources::interaxMultipoleNonbondedExceptions;
@@ -647,15 +679,19 @@ void CommonCalcInteraxMultipoleForceKernel::initialize(const System& system, con
         computeExceptionsKernel->addArg(torque);
         computeExceptionsKernel->addArg(cc.getPosq());
         computeExceptionsKernel->addArg(exceptionAtoms);
-        for (int i = 0; i < 3; i++)
-            computeExceptionsKernel->addArg(exceptionScales[i]);
+        computeExceptionsKernel->addArg(exceptionScales[0]);
+        computeExceptionsKernel->addArg(exceptionScales[1]);
+        computeExceptionsKernel->addArg(exceptionScales[2]);
         computeExceptionsKernel->addArg(coreCharge);
         computeExceptionsKernel->addArg(valenceCharge);
         computeExceptionsKernel->addArg(alpha);
         computeExceptionsKernel->addArg(labDipoles);
         computeExceptionsKernel->addArg(inducedDipole);
-        for (int i = 0; i < 5; i++)
-            computeExceptionsKernel->addArg(labQuadrupoles[i]);
+        computeExceptionsKernel->addArg(labQuadrupoles[0]);
+        computeExceptionsKernel->addArg(labQuadrupoles[1]);
+        computeExceptionsKernel->addArg(labQuadrupoles[2]);
+        computeExceptionsKernel->addArg(labQuadrupoles[3]);
+        computeExceptionsKernel->addArg(labQuadrupoles[4]);
         computeExceptionsKernel->addArg(extrapolatedDipole);
         if (nb.getUseCutoff())
             for (int i = 0; i < 5; i++)
@@ -747,9 +783,9 @@ void CommonCalcInteraxMultipoleForceKernel::createFieldKernel(const string& inte
         kernel->addArg(maxTiles);
     for (auto param : params)
         kernel->addArg(*param);
-
+    
     // If there are any exceptions, build the kernel and arguments to compute them.
-
+    
     if (exceptionAtoms.isInitialized()) {
         exceptionKernel = program->createKernel("computeFieldExceptions");
         exceptionKernel->addArg(cc.getPosq());
@@ -761,6 +797,406 @@ void CommonCalcInteraxMultipoleForceKernel::createFieldKernel(const string& inte
                 exceptionKernel->addArg();
         for (auto param : params)
             exceptionKernel->addArg(*param);
+    }
+}
+
+double CommonCalcInteraxMultipoleForceKernel::execute(ContextImpl& context, bool includeForces, bool includeEnergy) {
+    ContextSelector selector(cc);
+    NonbondedUtilities& nb = cc.getNonbondedUtilities();
+    if (!hasInitializedKernels) {
+        hasInitializedKernels = true;
+        
+        // These kernels can't be compiled in initialize(), because the nonbonded utilities object
+        // has not yet been initialized then.
+
+        maxTiles = (nb.getUseCutoff() ? nb.getInteractingTiles().getSize() : cc.getNumAtomBlocks()*(cc.getNumAtomBlocks()+1)/2);
+        createFieldKernel(CommonInteraxKernelSources::interaxMultipoleFixedField, {&coreCharge, &valenceCharge, &alpha, &labDipoles, &labQuadrupoles[0],
+                &labQuadrupoles[1], &labQuadrupoles[2], &labQuadrupoles[3], &labQuadrupoles[4]}, field, fixedFieldKernel,
+                fixedFieldExceptionKernel, exceptionScales[1]);
+        createFieldKernel(CommonInteraxKernelSources::interaxMultipoleMutualField, {&alpha, &inducedDipole}, inducedField, mutualFieldKernel,
+                mutualFieldExceptionKernel, exceptionScales[2]);
+    }
+
+    // Scale the parameters of the alchemical particles, if the alchemical parameter has changed.
+
+    double lambda = (hasAlchemicalParticles ? context.getParameter(alchemicalParameter) : 1.0);
+    if (lambda != lastLambda) {
+        if (cc.getUseDoublePrecision())
+            alchemicalKernel->setArg(0, lambda);
+        else
+            alchemicalKernel->setArg(0, (float) lambda);
+        alchemicalKernel->execute(cc.getNumAtoms());
+        lastLambda = lambda;
+    }
+
+    // Compute the lab frame moments.
+
+    computeMomentsKernel->execute(cc.getNumAtoms());
+
+    if (usePME) {
+        // Compute reciprocal box vectors.
+        
+        Vec3 a, b, c;
+        cc.getPeriodicBoxVectors(a, b, c);
+        double determinant = a[0]*b[1]*c[2];
+        double scale = 1.0/determinant;
+        mm_double4 recipBoxVectors[3];
+        recipBoxVectors[0] = mm_double4(b[1]*c[2]*scale, 0, 0, 0);
+        recipBoxVectors[1] = mm_double4(-b[0]*c[2]*scale, a[0]*c[2]*scale, 0, 0);
+        recipBoxVectors[2] = mm_double4((b[0]*c[1]-b[1]*c[0])*scale, -a[0]*c[1]*scale, a[0]*b[1]*scale, 0);
+        if (cc.getUseDoublePrecision()) {
+            mm_double4 boxVectors[] = {mm_double4(a[0], a[1], a[2], 0), mm_double4(b[0], b[1], b[2], 0), mm_double4(c[0], c[1], c[2], 0)};
+            pmeConvolutionKernel->setArg(4, mm_double4(a[0], b[1], c[2], 0));
+            for (int i = 0; i < 3; i++) {
+                pmeTransformMultipolesKernel->setArg(8+i, recipBoxVectors[i]);
+                pmeTransformPotentialKernel->setArg(2+i, recipBoxVectors[i]);
+                pmeSpreadFixedMultipolesKernel->setArg(6+i, boxVectors[i]);
+                pmeSpreadFixedMultipolesKernel->setArg(9+i, recipBoxVectors[i]);
+                pmeSpreadInducedDipolesKernel->setArg(3+i, boxVectors[i]);
+                pmeSpreadInducedDipolesKernel->setArg(6+i, recipBoxVectors[i]);
+                pmeConvolutionKernel->setArg(5+i, recipBoxVectors[i]);
+                pmeFixedPotentialKernel->setArg(5+i, boxVectors[i]);
+                pmeFixedPotentialKernel->setArg(8+i, recipBoxVectors[i]);
+                pmeInducedPotentialKernel->setArg(5+i, boxVectors[i]);
+                pmeInducedPotentialKernel->setArg(8+i, recipBoxVectors[i]);
+                pmeFixedForceKernel->setArg(16+i, recipBoxVectors[i]);
+                pmeInducedForceKernel->setArg(20+i, recipBoxVectors[i]);
+                pmeRecordInducedFieldDipolesKernel->setArg(3+i, recipBoxVectors[i]);
+            }
+        }
+        else {
+            mm_float4 boxVectors[] = {mm_float4(a[0], a[1], a[2], 0), mm_float4(b[0], b[1], b[2], 0), mm_float4(c[0], c[1], c[2], 0)};
+            pmeConvolutionKernel->setArg(4, mm_float4(a[0], b[1], c[2], 0));
+            mm_float4 recipBoxVectorsFloat[3];
+            recipBoxVectorsFloat[0] = mm_float4((float) recipBoxVectors[0].x, 0, 0, 0);
+            recipBoxVectorsFloat[1] = mm_float4((float) recipBoxVectors[1].x, (float) recipBoxVectors[1].y, 0, 0);
+            recipBoxVectorsFloat[2] = mm_float4((float) recipBoxVectors[2].x, (float) recipBoxVectors[2].y, (float) recipBoxVectors[2].z, 0);
+            for (int i = 0; i < 3; i++) {
+                pmeTransformMultipolesKernel->setArg(8+i, recipBoxVectorsFloat[i]);
+                pmeTransformPotentialKernel->setArg(2+i, recipBoxVectorsFloat[i]);
+                pmeSpreadFixedMultipolesKernel->setArg(6+i, boxVectors[i]);
+                pmeSpreadFixedMultipolesKernel->setArg(9+i, recipBoxVectorsFloat[i]);
+                pmeSpreadInducedDipolesKernel->setArg(3+i, boxVectors[i]);
+                pmeSpreadInducedDipolesKernel->setArg(6+i, recipBoxVectorsFloat[i]);
+                pmeConvolutionKernel->setArg(5+i, recipBoxVectorsFloat[i]);
+                pmeFixedPotentialKernel->setArg(5+i, boxVectors[i]);
+                pmeFixedPotentialKernel->setArg(8+i, recipBoxVectorsFloat[i]);
+                pmeInducedPotentialKernel->setArg(5+i, boxVectors[i]);
+                pmeInducedPotentialKernel->setArg(8+i, recipBoxVectorsFloat[i]);
+                pmeFixedForceKernel->setArg(16+i, recipBoxVectorsFloat[i]);
+                pmeInducedForceKernel->setArg(20+i, recipBoxVectorsFloat[i]);
+                pmeRecordInducedFieldDipolesKernel->setArg(3+i, recipBoxVectorsFloat[i]);
+            }
+        }
+
+        // Reciprocal space calculation for electrostatics.
+        
+        pmeTransformMultipolesKernel->execute(cc.getNumAtoms());
+        pmeSpreadFixedMultipolesKernel->execute(cc.getNumAtoms());
+        if (useFixedPointChargeSpreading())
+            pmeFinishSpreadChargeKernel->execute(pmeGrid1.getSize());
+        computeFFT(true);
+        pmeConvolutionKernel->execute(gridSizeX*gridSizeY*gridSizeZ, 256);
+        computeFFT(false);
+        pmeFixedPotentialKernel->execute(cc.getNumAtoms());
+        pmeTransformPotentialKernel->setArg(0, pmePhi);
+        pmeTransformPotentialKernel->execute(cc.getNumAtoms());
+        pmeFixedForceKernel->execute(cc.getNumAtoms());
+    }
+
+    // Compute the field from fixed multipoles.
+
+    updateFieldKernelMaxTiles();
+    if (nb.getUseCutoff())
+        setPeriodicBoxArgs(cc, fixedFieldKernel, 6);
+    fixedFieldKernel->execute(nb.getNumForceThreadBlocks()*fieldThreadBlockSize, fieldThreadBlockSize);
+    if (exceptionAtoms.isInitialized()) {
+        if (nb.getUseCutoff())
+            setPeriodicBoxArgs(cc, fixedFieldExceptionKernel, 4);
+        fixedFieldExceptionKernel->execute(exceptionAtoms.getSize());
+    }
+
+    // Iterate the induced dipoles.
+
+    computeExtrapolatedDipoles();
+
+    // Add the polarization energy.
+
+    if (includeEnergy)
+        polarizationEnergyKernel->execute(cc.getNumAtoms());
+
+    // Compute the forces due to the reciprocal space PME calculation for induced dipoles.
+
+    if (usePME) {
+        pmeTransformPotentialKernel->setArg(0, pmePhidp);
+        pmeTransformPotentialKernel->execute(cc.getNumAtoms());
+        pmeInducedForceKernel->execute(cc.getNumAtoms());
+        pmeSelfEnergyKernel->execute(cc.getNumAtoms());
+    }
+
+    // Compute nonbonded exceptions.
+
+    if (exceptionAtoms.isInitialized()) {
+        if (nb.getUseCutoff())
+            setPeriodicBoxArgs(cc, computeExceptionsKernel, 19);
+        computeExceptionsKernel->execute(exceptionAtoms.getSize());
+    }
+
+    // Compute the real-space interactions, if this force has a kernel of its own for them (otherwise the default
+    // nonbonded kernel computes them after this).
+
+    if (useOwnKernel && (includeForces || includeEnergy))
+        computeElectrostatics(includeForces, includeEnergy);
+
+    // Record the current atom positions so we can tell later if they have changed.
+    
+    cc.getPosq().copyTo(lastPositions);
+    multipolesAreValid = true;
+    return 0.0;
+}
+
+void CommonCalcInteraxMultipoleForceKernel::computeInducedField(int optOrder) {
+    NonbondedUtilities& nb = cc.getNonbondedUtilities();
+    cc.clearBuffer(inducedField);
+    updateFieldKernelMaxTiles();
+    if (nb.getUseCutoff())
+        setPeriodicBoxArgs(cc, mutualFieldKernel, 6);
+    mutualFieldKernel->execute(nb.getNumForceThreadBlocks()*fieldThreadBlockSize, fieldThreadBlockSize);
+    if (exceptionAtoms.isInitialized()) {
+        if (nb.getUseCutoff())
+            setPeriodicBoxArgs(cc, mutualFieldExceptionKernel, 4);
+        mutualFieldExceptionKernel->execute(exceptionAtoms.getSize());
+    }
+    if (usePME) {
+        if (useFixedPointChargeSpreading())
+            cc.clearBuffer(pmeGridLong);
+        else
+            cc.clearBuffer(pmeGrid1);
+        pmeSpreadInducedDipolesKernel->execute(cc.getNumAtoms());
+        if (useFixedPointChargeSpreading())
+            pmeFinishSpreadChargeKernel->execute(pmeGrid1.getSize());
+        computeFFT(true);
+        pmeConvolutionKernel->execute(gridSizeX*gridSizeY*gridSizeZ, 256);
+        computeFFT(false);
+        pmeInducedPotentialKernel->setArg(2, optOrder);
+        pmeInducedPotentialKernel->execute(cc.getNumAtoms());
+        pmeRecordInducedFieldDipolesKernel->execute(cc.getNumAtoms());
+    }
+}
+
+void CommonCalcInteraxMultipoleForceKernel::computeExtrapolatedDipoles() {
+    // Start by storing the direct dipoles as PT0
+
+    recordInducedDipolesKernel->execute(cc.getNumAtoms());
+    initExtrapolatedKernel->execute(extrapolatedDipole.getSize());
+
+    // Recursively apply alpha.Tau to the µ_(n) components to generate µ_(n+1), and store the result
+
+    for (int order = 1; order < maxExtrapolationOrder; ++order) {
+        computeInducedField(order-1);
+        iterateExtrapolatedKernel->setArg(0, order);
+        iterateExtrapolatedKernel->execute(extrapolatedDipole.getSize());
+    }
+    
+    // Take a linear combination of the µ_(n) components to form the total dipole
+
+    computeExtrapolatedKernel->execute(extrapolatedDipole.getSize());
+    computeInducedField(maxExtrapolationOrder-1);
+}
+
+void CommonCalcInteraxMultipoleForceKernel::addTorquesToForces() {
+    mapTorqueKernel->execute(cc.getNumAtoms());
+}
+
+void CommonCalcInteraxMultipoleForceKernel::getInducedDipoles(ContextImpl& context, vector<Vec3>& dipoles) {
+    ContextSelector selector(cc);
+    ensureMultipolesValid(context);
+    int numParticles = cc.getNumAtoms();
+    dipoles.resize(numParticles);
+    const vector<int>& order = cc.getAtomIndex();
+    if (cc.getUseDoublePrecision()) {
+        vector<double> d;
+        inducedDipole.download(d);
+        for (int i = 0; i < numParticles; i++)
+            dipoles[order[i]] = Vec3(d[3*i], d[3*i+1], d[3*i+2]);
+    }
+    else {
+        vector<float> d;
+        inducedDipole.download(d);
+        for (int i = 0; i < numParticles; i++)
+            dipoles[order[i]] = Vec3(d[3*i], d[3*i+1], d[3*i+2]);
+    }
+}
+
+void CommonCalcInteraxMultipoleForceKernel::ensureMultipolesValid(ContextImpl& context) {
+    if (multipolesAreValid) {
+        int numParticles = cc.getNumAtoms();
+        if (cc.getUseDoublePrecision()) {
+            vector<mm_double4> pos1, pos2;
+            cc.getPosq().download(pos1);
+            lastPositions.download(pos2);
+            for (int i = 0; i < numParticles; i++)
+                if (pos1[i].x != pos2[i].x || pos1[i].y != pos2[i].y || pos1[i].z != pos2[i].z) {
+                    multipolesAreValid = false;
+                    break;
+                }
+        }
+        else {
+            vector<mm_float4> pos1, pos2;
+            cc.getPosq().download(pos1);
+            lastPositions.download(pos2);
+            for (int i = 0; i < numParticles; i++)
+                if (pos1[i].x != pos2[i].x || pos1[i].y != pos2[i].y || pos1[i].z != pos2[i].z) {
+                    multipolesAreValid = false;
+                    break;
+                }
+        }
+    }
+    double lambda = (hasAlchemicalParticles ? context.getParameter(alchemicalParameter) : 1.0);
+    if (!multipolesAreValid || lambda != lastLambda)
+        context.calcForcesAndEnergy(false, false, context.getIntegrator().getIntegrationForceGroups());
+}
+
+void CommonCalcInteraxMultipoleForceKernel::getLabFramePermanentDipoles(ContextImpl& context, vector<Vec3>& dipoles) {
+    ContextSelector selector(cc);
+    ensureMultipolesValid(context);
+    int numParticles = cc.getNumAtoms();
+    dipoles.resize(numParticles);
+    const vector<int>& order = cc.getAtomIndex();
+    if (cc.getUseDoublePrecision()) {
+        vector<double> labDipoleVec;
+        labDipoles.download(labDipoleVec);
+        for (int i = 0; i < numParticles; i++)
+            dipoles[order[i]] = Vec3(labDipoleVec[3*i], labDipoleVec[3*i+1], labDipoleVec[3*i+2]);
+    }
+    else {
+        vector<float> labDipoleVec;
+        labDipoles.download(labDipoleVec);
+        for (int i = 0; i < numParticles; i++)
+            dipoles[order[i]] = Vec3(labDipoleVec[3*i], labDipoleVec[3*i+1], labDipoleVec[3*i+2]);
+    }
+}
+
+void CommonCalcInteraxMultipoleForceKernel::copyParametersToContext(ContextImpl& context, const InteraxMultipoleForce& force) {
+    // Make sure the new parameters are acceptable.
+    
+    ContextSelector selector(cc);
+    if (force.getNumParticles() != cc.getNumAtoms())
+        throw OpenMMException("updateParametersInContext: The number of particles has changed");
+    
+    // Record the per-particle parameters.
+    
+    vector<double> coreChargeVec, valenceChargeVec, alphaVec, polarizabilityVec;
+    vector<double> localDipolesVec, localQuadrupolesVec;
+    vector<mm_int4> multipoleParticlesVec;
+    vector<int> isAlchemicalVec;
+    for (int i = 0; i < numParticles; i++) {
+        double charge, coreCharge, alpha, polarizability;
+        int axisType, atomX, atomY, atomZ;
+        bool alchemical;
+        vector<double> dipole, quadrupole;
+        force.getParticleParameters(i, charge, dipole, quadrupole, coreCharge, alpha, polarizability, axisType, atomZ, atomX, atomY, alchemical);
+        coreChargeVec.push_back(coreCharge);
+        valenceChargeVec.push_back(charge-coreCharge);
+        alphaVec.push_back(alpha);
+        polarizabilityVec.push_back(polarizability);
+        multipoleParticlesVec.push_back(mm_int4(atomX, atomY, atomZ, axisType));
+        isAlchemicalVec.push_back(alchemical ? 1 : 0);
+        for (int j = 0; j < 3; j++)
+            localDipolesVec.push_back(dipole[j]);
+        localQuadrupolesVec.push_back(quadrupole[0]);
+        localQuadrupolesVec.push_back(quadrupole[1]);
+        localQuadrupolesVec.push_back(quadrupole[2]);
+        localQuadrupolesVec.push_back(quadrupole[4]);
+        localQuadrupolesVec.push_back(quadrupole[5]);
+    }
+    int paddedNumAtoms = cc.getPaddedNumAtoms();
+    for (int i = numParticles; i < paddedNumAtoms; i++) {
+        coreChargeVec.push_back(0);
+        valenceChargeVec.push_back(0);
+        alphaVec.push_back(0);
+        polarizabilityVec.push_back(0);
+        multipoleParticlesVec.push_back(mm_int4(0, 0, 0, 0));
+        isAlchemicalVec.push_back(0);
+        for (int j = 0; j < 3; j++)
+            localDipolesVec.push_back(0);
+        for (int j = 0; j < 5; j++)
+            localQuadrupolesVec.push_back(0);
+    }
+    baseCoreCharge.upload(coreChargeVec, true);
+    baseValenceCharge.upload(valenceChargeVec, true);
+    alpha.upload(alphaVec, true);
+    basePolarizability.upload(polarizabilityVec, true);
+    multipoleParticles.upload(multipoleParticlesVec);
+    isAlchemical.upload(isAlchemicalVec);
+    baseLocalDipoles.upload(localDipolesVec, true);
+    baseLocalQuadrupoles.upload(localQuadrupolesVec, true);
+    lastLambda = -1; // The scaled parameters must be recomputed.
+    
+    // Record the per-exception parameters. The particles of the exceptions cannot change, since they are the exclusions
+    // of the neighbor list.
+
+    if (exceptionAtoms.isInitialized()) {
+        vector<double> exceptionScaleVec[3];
+        for (int i = 0; i < force.getNumExceptions(); i++) {
+            int particle1, particle2;
+            double multipoleMultipoleScale, dipoleMultipoleScale, dipoleDipoleScale;
+            force.getExceptionParameters(i, particle1, particle2, multipoleMultipoleScale, dipoleMultipoleScale, dipoleDipoleScale);
+            if (usePME || multipoleMultipoleScale != 0 || dipoleMultipoleScale != 0 || dipoleDipoleScale != 0) {
+                exceptionScaleVec[0].push_back(multipoleMultipoleScale);
+                exceptionScaleVec[1].push_back(dipoleMultipoleScale);
+                exceptionScaleVec[2].push_back(dipoleDipoleScale);
+            }
+        }
+        if (exceptionScaleVec[0].size() != exceptionAtoms.getSize())
+            throw OpenMMException("updateParametersInContext: The number of exceptions has changed");
+        for (int i = 0; i < 3; i++)
+            exceptionScales[i].upload(exceptionScaleVec[i], true);
+    }
+    cc.invalidateMolecules();
+    multipolesAreValid = false;
+}
+
+void CommonCalcInteraxMultipoleForceKernel::getPMEParameters(double& alpha, int& nx, int& ny, int& nz) const {
+    if (!usePME)
+        throw OpenMMException("getPMEParametersInContext: This Context is not using PME");
+    alpha = pmeAlpha;
+    nx = gridSizeX;
+    ny = gridSizeY;
+    nz = gridSizeZ;
+}
+
+map<string, string> CommonCalcInteraxMultipoleForceKernel::getPhysicsDefines() const {
+    // Below these |t| (and |t| a r) the pair damping factors use their series (interaxMultipoleInteractionHeader.cc);
+    // chosen where the series error equals the cancellation error of the closed form (~1e-6 in single, ~1e-12 in
+    // double precision).
+    map<string, string> defines;
+    bool doublePrecision = cc.getUseDoublePrecision();
+    defines["PAIR_DAMPING_MAX_T"] = cc.doubleToString(doublePrecision ? 0.03 : 0.1);
+    defines["PAIR_DAMPING_MAX_T2"] = cc.doubleToString(doublePrecision ? 0.03 : 0.2);
+    defines["PAIR_DAMPING_MAX_TX"] = cc.doubleToString(1.0);
+    defines["MUTUAL_DAMPING_SCALE"] = cc.doubleToString(mutualDampingScale);
+    if (mutualDampingScale != 1.0)
+        defines["MUTUAL_DAMPING_SCALED"] = "1";
+    if (coreDamping)
+        defines["CORE_DAMPING"] = "1";
+    defines["CORE_DAMPING_SCALE"] = cc.doubleToString(coreDampingScale);
+    return defines;
+}
+
+void CommonCalcInteraxMultipoleForceKernel::updateFieldKernelMaxTiles() {
+    // The neighbor list grows (and its arrays are reallocated) whenever the number of interacting tiles exceeds its
+    // capacity. The field kernels skip every tile without exclusions when the tile count exceeds maxTiles, so maxTiles
+    // must follow the current capacity, as in OpenMM's AMOEBA kernels. Argument 11 is maxTiles (see createFieldKernel).
+
+    NonbondedUtilities& nb = cc.getNonbondedUtilities();
+    if (!nb.getUseCutoff())
+        return;
+    int size = nb.getInteractingTiles().getSize();
+    if (size != maxTiles) {
+        maxTiles = size;
+        fixedFieldKernel->setArg(11, (unsigned int) maxTiles);
+        mutualFieldKernel->setArg(11, (unsigned int) maxTiles);
     }
 }
 
@@ -895,329 +1331,8 @@ void CommonCalcInteraxMultipoleForceKernel::computeElectrostatics(bool includeFo
     NonbondedUtilities& nb = cc.getNonbondedUtilities();
     ComputeKernel& kernel = getElectrostaticsKernel(includeForces, includeEnergy);
     if (nb.getUseCutoff()) {
-        setMultipoleBoxArgs(cc, kernel, 9);
+        setPeriodicBoxArgs(cc, kernel, 9);
         kernel->setArg(14, (unsigned int) maxTiles); // Arrays are bound by reference; maxTiles follows the capacity
     }
     kernel->execute(nb.getNumForceThreadBlocks()*forceThreadBlockSize, forceThreadBlockSize);
-}
-
-double CommonCalcInteraxMultipoleForceKernel::execute(ContextImpl& context, bool includeForces, bool includeEnergy) {
-    ContextSelector selector(cc);
-    NonbondedUtilities& nb = cc.getNonbondedUtilities();
-    if (!hasInitializedKernels) {
-        hasInitializedKernels = true;
-
-        // These kernels can't be compiled in initialize(), because the nonbonded utilities object
-        // has not yet been initialized then.
-
-        maxTiles = (nb.getUseCutoff() ? nb.getInteractingTiles().getSize() : cc.getNumAtomBlocks()*(cc.getNumAtomBlocks()+1)/2);
-        createFieldKernel(CommonInteraxKernelSources::interaxMultipoleFixedField, {&coreCharge, &valenceCharge, &alpha, &labDipoles, &labQuadrupoles[0],
-                &labQuadrupoles[1], &labQuadrupoles[2], &labQuadrupoles[3], &labQuadrupoles[4]}, field, fixedFieldKernel,
-                fixedFieldExceptionKernel, exceptionScales[1]);
-        createFieldKernel(CommonInteraxKernelSources::interaxMultipoleMutualField, {&alpha, &inducedDipole}, inducedField, mutualFieldKernel,
-                mutualFieldExceptionKernel, exceptionScales[2]);
-    }
-
-    // Scale the parameters of the alchemical particles, if the alchemical parameter changed.
-
-    double lambda = (hasAlchemicalParticles ? context.getParameter(alchemicalParameter) : 1.0);
-    if (lambda != lastLambda) {
-        if (cc.getUseDoublePrecision())
-            alchemicalKernel->setArg(0, lambda);
-        else
-            alchemicalKernel->setArg(0, (float) lambda);
-        alchemicalKernel->execute(cc.getNumAtoms());
-        lastLambda = lambda;
-    }
-
-    // Compute the lab frame moments.
-
-    computeMomentsKernel->execute(cc.getNumAtoms());
-
-    if (usePME) {
-        // Compute reciprocal box vectors.
-
-        Vec3 a, b, c;
-        cc.getPeriodicBoxVectors(a, b, c);
-        double determinant = a[0]*b[1]*c[2];
-        double scale = 1.0/determinant;
-        mm_double4 recipBoxVectors[3];
-        recipBoxVectors[0] = mm_double4(b[1]*c[2]*scale, 0, 0, 0);
-        recipBoxVectors[1] = mm_double4(-b[0]*c[2]*scale, a[0]*c[2]*scale, 0, 0);
-        recipBoxVectors[2] = mm_double4((b[0]*c[1]-b[1]*c[0])*scale, -a[0]*c[1]*scale, a[0]*b[1]*scale, 0);
-        if (cc.getUseDoublePrecision()) {
-            mm_double4 boxVectors[] = {mm_double4(a[0], a[1], a[2], 0), mm_double4(b[0], b[1], b[2], 0), mm_double4(c[0], c[1], c[2], 0)};
-            pmeConvolutionKernel->setArg(4, mm_double4(a[0], b[1], c[2], 0));
-            for (int i = 0; i < 3; i++) {
-                pmeTransformMultipolesKernel->setArg(8+i, recipBoxVectors[i]);
-                pmeTransformPotentialKernel->setArg(2+i, recipBoxVectors[i]);
-                pmeSpreadFixedMultipolesKernel->setArg(6+i, boxVectors[i]);
-                pmeSpreadFixedMultipolesKernel->setArg(9+i, recipBoxVectors[i]);
-                pmeSpreadInducedDipolesKernel->setArg(3+i, boxVectors[i]);
-                pmeSpreadInducedDipolesKernel->setArg(6+i, recipBoxVectors[i]);
-                pmeConvolutionKernel->setArg(5+i, recipBoxVectors[i]);
-                pmeFixedPotentialKernel->setArg(5+i, boxVectors[i]);
-                pmeFixedPotentialKernel->setArg(8+i, recipBoxVectors[i]);
-                pmeInducedPotentialKernel->setArg(5+i, boxVectors[i]);
-                pmeInducedPotentialKernel->setArg(8+i, recipBoxVectors[i]);
-                pmeFixedForceKernel->setArg(16+i, recipBoxVectors[i]);
-                pmeInducedForceKernel->setArg(20+i, recipBoxVectors[i]);
-                pmeRecordInducedFieldDipolesKernel->setArg(3+i, recipBoxVectors[i]);
-            }
-        }
-        else {
-            mm_float4 boxVectors[] = {mm_float4(a[0], a[1], a[2], 0), mm_float4(b[0], b[1], b[2], 0), mm_float4(c[0], c[1], c[2], 0)};
-            pmeConvolutionKernel->setArg(4, mm_float4(a[0], b[1], c[2], 0));
-            mm_float4 recipBoxVectorsFloat[3];
-            recipBoxVectorsFloat[0] = mm_float4((float) recipBoxVectors[0].x, 0, 0, 0);
-            recipBoxVectorsFloat[1] = mm_float4((float) recipBoxVectors[1].x, (float) recipBoxVectors[1].y, 0, 0);
-            recipBoxVectorsFloat[2] = mm_float4((float) recipBoxVectors[2].x, (float) recipBoxVectors[2].y, (float) recipBoxVectors[2].z, 0);
-            for (int i = 0; i < 3; i++) {
-                pmeTransformMultipolesKernel->setArg(8+i, recipBoxVectorsFloat[i]);
-                pmeTransformPotentialKernel->setArg(2+i, recipBoxVectorsFloat[i]);
-                pmeSpreadFixedMultipolesKernel->setArg(6+i, boxVectors[i]);
-                pmeSpreadFixedMultipolesKernel->setArg(9+i, recipBoxVectorsFloat[i]);
-                pmeSpreadInducedDipolesKernel->setArg(3+i, boxVectors[i]);
-                pmeSpreadInducedDipolesKernel->setArg(6+i, recipBoxVectorsFloat[i]);
-                pmeConvolutionKernel->setArg(5+i, recipBoxVectorsFloat[i]);
-                pmeFixedPotentialKernel->setArg(5+i, boxVectors[i]);
-                pmeFixedPotentialKernel->setArg(8+i, recipBoxVectorsFloat[i]);
-                pmeInducedPotentialKernel->setArg(5+i, boxVectors[i]);
-                pmeInducedPotentialKernel->setArg(8+i, recipBoxVectorsFloat[i]);
-                pmeFixedForceKernel->setArg(16+i, recipBoxVectorsFloat[i]);
-                pmeInducedForceKernel->setArg(20+i, recipBoxVectorsFloat[i]);
-                pmeRecordInducedFieldDipolesKernel->setArg(3+i, recipBoxVectorsFloat[i]);
-            }
-        }
-
-        // Reciprocal space calculation for electrostatics.
-
-        pmeTransformMultipolesKernel->execute(cc.getNumAtoms());
-        pmeSpreadFixedMultipolesKernel->execute(cc.getNumAtoms());
-        if (useFixedPointChargeSpreading())
-            pmeFinishSpreadChargeKernel->execute(pmeGrid1.getSize());
-        computeFFT(true);
-        pmeConvolutionKernel->execute(gridSizeX*gridSizeY*gridSizeZ, 256);
-        computeFFT(false);
-        pmeFixedPotentialKernel->execute(cc.getNumAtoms());
-        pmeTransformPotentialKernel->setArg(0, pmePhi);
-        pmeTransformPotentialKernel->execute(cc.getNumAtoms());
-        pmeFixedForceKernel->execute(cc.getNumAtoms());
-    }
-
-    // Compute the field from fixed multipoles.
-
-    updateFieldKernelMaxTiles();
-    if (nb.getUseCutoff())
-        setMultipoleBoxArgs(cc, fixedFieldKernel, 6);
-    fixedFieldKernel->execute(nb.getNumForceThreadBlocks()*fieldThreadBlockSize, fieldThreadBlockSize);
-    if (exceptionAtoms.isInitialized()) {
-        if (nb.getUseCutoff())
-            setMultipoleBoxArgs(cc, fixedFieldExceptionKernel, 4);
-        fixedFieldExceptionKernel->execute(exceptionAtoms.getSize());
-    }
-
-    // Iterate the induced dipoles.
-
-    computeExtrapolatedDipoles();
-
-    // Add the polarization energy.
-
-    if (includeEnergy)
-        polarizationEnergyKernel->execute(cc.getNumAtoms());
-
-    // Compute the forces due to the reciprocal space PME calculation for induced dipoles.
-
-    if (usePME) {
-        pmeTransformPotentialKernel->setArg(0, pmePhidp);
-        pmeTransformPotentialKernel->execute(cc.getNumAtoms());
-        pmeInducedForceKernel->execute(cc.getNumAtoms());
-        pmeSelfEnergyKernel->execute(cc.getNumAtoms());
-    }
-
-    // Compute nonbonded exceptions.
-
-    if (exceptionAtoms.isInitialized()) {
-        if (nb.getUseCutoff())
-            setMultipoleBoxArgs(cc, computeExceptionsKernel, 19);
-        computeExceptionsKernel->execute(exceptionAtoms.getSize());
-    }
-
-    // Compute the real-space interactions, if this force has its own kernel for them (otherwise the default nonbonded
-    // kernel computes them after this).
-
-    if (useOwnKernel && (includeForces || includeEnergy))
-        computeElectrostatics(includeForces, includeEnergy);
-
-    // Record the current atom positions so we can tell later if they have changed.
-
-    cc.getPosq().copyTo(lastPositions);
-    multipolesAreValid = true;
-    return 0.0;
-}
-
-void CommonCalcInteraxMultipoleForceKernel::updateFieldKernelMaxTiles() {
-    // The neighbor list grows (and its arrays are reallocated) whenever the number of interacting tiles exceeds its
-    // capacity. The field kernels skip every tile without exclusions when the tile count exceeds maxTiles, so maxTiles
-    // must follow the current capacity, as in OpenMM's AMOEBA kernels. Argument 11 is maxTiles (see createFieldKernel).
-
-    NonbondedUtilities& nb = cc.getNonbondedUtilities();
-    if (!nb.getUseCutoff())
-        return;
-    int size = nb.getInteractingTiles().getSize();
-    if (size != maxTiles) {
-        maxTiles = size;
-        fixedFieldKernel->setArg(11, (unsigned int) maxTiles);
-        mutualFieldKernel->setArg(11, (unsigned int) maxTiles);
-    }
-}
-
-void CommonCalcInteraxMultipoleForceKernel::computeInducedField(int optOrder) {
-    NonbondedUtilities& nb = cc.getNonbondedUtilities();
-    cc.clearBuffer(inducedField);
-    updateFieldKernelMaxTiles();
-    if (nb.getUseCutoff())
-        setMultipoleBoxArgs(cc, mutualFieldKernel, 6);
-    mutualFieldKernel->execute(nb.getNumForceThreadBlocks()*fieldThreadBlockSize, fieldThreadBlockSize);
-    if (exceptionAtoms.isInitialized()) {
-        if (nb.getUseCutoff())
-            setMultipoleBoxArgs(cc, mutualFieldExceptionKernel, 4);
-        mutualFieldExceptionKernel->execute(exceptionAtoms.getSize());
-    }
-    if (usePME) {
-        if (useFixedPointChargeSpreading())
-            cc.clearBuffer(pmeGridLong);
-        else
-            cc.clearBuffer(pmeGrid1);
-        pmeSpreadInducedDipolesKernel->execute(cc.getNumAtoms());
-        if (useFixedPointChargeSpreading())
-            pmeFinishSpreadChargeKernel->execute(pmeGrid1.getSize());
-        computeFFT(true);
-        pmeConvolutionKernel->execute(gridSizeX*gridSizeY*gridSizeZ, 256);
-        computeFFT(false);
-        pmeInducedPotentialKernel->setArg(2, optOrder);
-        pmeInducedPotentialKernel->execute(cc.getNumAtoms());
-        pmeRecordInducedFieldDipolesKernel->execute(cc.getNumAtoms());
-    }
-}
-
-void CommonCalcInteraxMultipoleForceKernel::computeExtrapolatedDipoles() {
-    // Start by storing the direct dipoles as PT0
-
-    recordInducedDipolesKernel->execute(cc.getNumAtoms());
-    initExtrapolatedKernel->execute(extrapolatedDipole.getSize());
-
-    // Recursively apply alpha.Tau to the mu_(n) components to generate mu_(n+1), and store the result
-
-    for (int order = 1; order < maxExtrapolationOrder; ++order) {
-        computeInducedField(order-1);
-        iterateExtrapolatedKernel->setArg(0, order);
-        iterateExtrapolatedKernel->execute(extrapolatedDipole.getSize());
-    }
-
-    // Take a linear combination of the mu_(n) components to form the total dipole
-
-    computeExtrapolatedKernel->execute(extrapolatedDipole.getSize());
-    computeInducedField(maxExtrapolationOrder-1);
-}
-
-void CommonCalcInteraxMultipoleForceKernel::addTorquesToForces() {
-    mapTorqueKernel->execute(cc.getNumAtoms());
-}
-
-static void downloadVec3(ComputeContext& cc, ComputeArray& array, vector<Vec3>& out) {
-    int numParticles = cc.getNumAtoms();
-    out.resize(numParticles);
-    const vector<int>& order = cc.getAtomIndex();
-    if (cc.getUseDoublePrecision()) {
-        vector<double> d;
-        array.download(d);
-        for (int i = 0; i < numParticles; i++)
-            out[order[i]] = Vec3(d[3*i], d[3*i+1], d[3*i+2]);
-    }
-    else {
-        vector<float> d;
-        array.download(d);
-        for (int i = 0; i < numParticles; i++)
-            out[order[i]] = Vec3(d[3*i], d[3*i+1], d[3*i+2]);
-    }
-}
-
-void CommonCalcInteraxMultipoleForceKernel::getInducedDipoles(ContextImpl& context, vector<Vec3>& dipoles) {
-    ContextSelector selector(cc);
-    ensureMultipolesValid(context);
-    downloadVec3(cc, inducedDipole, dipoles);
-}
-
-void CommonCalcInteraxMultipoleForceKernel::getLabFramePermanentDipoles(ContextImpl& context, vector<Vec3>& dipoles) {
-    ContextSelector selector(cc);
-    ensureMultipolesValid(context);
-    downloadVec3(cc, labDipoles, dipoles);
-}
-
-void CommonCalcInteraxMultipoleForceKernel::ensureMultipolesValid(ContextImpl& context) {
-    if (multipolesAreValid) {
-        int numParticles = cc.getNumAtoms();
-        if (cc.getUseDoublePrecision()) {
-            vector<mm_double4> pos1, pos2;
-            cc.getPosq().download(pos1);
-            lastPositions.download(pos2);
-            for (int i = 0; i < numParticles; i++)
-                if (pos1[i].x != pos2[i].x || pos1[i].y != pos2[i].y || pos1[i].z != pos2[i].z) {
-                    multipolesAreValid = false;
-                    break;
-                }
-        }
-        else {
-            vector<mm_float4> pos1, pos2;
-            cc.getPosq().download(pos1);
-            lastPositions.download(pos2);
-            for (int i = 0; i < numParticles; i++)
-                if (pos1[i].x != pos2[i].x || pos1[i].y != pos2[i].y || pos1[i].z != pos2[i].z) {
-                    multipolesAreValid = false;
-                    break;
-                }
-        }
-    }
-    double lambda = (hasAlchemicalParticles ? context.getParameter(alchemicalParameter) : 1.0);
-    if (!multipolesAreValid || lambda != lastLambda)
-        context.calcForcesAndEnergy(false, false, context.getIntegrator().getIntegrationForceGroups());
-}
-
-void CommonCalcInteraxMultipoleForceKernel::copyParametersToContext(ContextImpl& context, const InteraxMultipoleForce& force) {
-    ContextSelector selector(cc);
-    if (force.getNumParticles() != cc.getNumAtoms())
-        throw OpenMMException("updateParametersInContext: The number of particles has changed");
-    setParticleParameters(force);
-
-    // Record the exceptions.
-
-    if (exceptionAtoms.isInitialized()) {
-        vector<double> exceptionScaleVec[3];
-        for (int i = 0; i < force.getNumExceptions(); i++) {
-            int particle1, particle2;
-            double multipoleMultipoleScale, dipoleMultipoleScale, dipoleDipoleScale;
-            force.getExceptionParameters(i, particle1, particle2, multipoleMultipoleScale, dipoleMultipoleScale, dipoleDipoleScale);
-            if (usePME || multipoleMultipoleScale != 0 || dipoleMultipoleScale != 0 || dipoleDipoleScale != 0) {
-                exceptionScaleVec[0].push_back(multipoleMultipoleScale);
-                exceptionScaleVec[1].push_back(dipoleMultipoleScale);
-                exceptionScaleVec[2].push_back(dipoleDipoleScale);
-            }
-        }
-        if (exceptionScaleVec[0].size() != exceptionAtoms.getSize())
-            throw OpenMMException("updateParametersInContext: The set of non-excluded exceptions has changed");
-        for (int i = 0; i < 3; i++)
-            exceptionScales[i].upload(exceptionScaleVec[i], true);
-    }
-    cc.invalidateMolecules();
-    multipolesAreValid = false;
-}
-
-void CommonCalcInteraxMultipoleForceKernel::getPMEParameters(double& alpha, int& nx, int& ny, int& nz) const {
-    if (!usePME)
-        throw OpenMMException("getPMEParametersInContext: This Context is not using PME");
-    alpha = pmeAlpha;
-    nx = gridSizeX;
-    ny = gridSizeY;
-    nz = gridSizeZ;
 }
