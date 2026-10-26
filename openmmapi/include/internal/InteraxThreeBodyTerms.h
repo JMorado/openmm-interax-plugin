@@ -32,7 +32,7 @@
 
 /**
  * The energy of one Axilrod-Teller-Muto triple of InteraxThreeBodyForce and its gradients, shared by the Reference
- * and CPU platforms. See docs/SPEC.md.
+ * and CPU platforms.  See docs/SPEC.md.
  *
  * @private
  */
@@ -85,8 +85,13 @@ inline void centroidDamping(double r, double invRadius, double& damping, double&
  *
  * With a centroid damping radius R0 > 0, E is also multiplied by g(|a|) g(|b|) g(|c|), g(r) = 1 - exp(-(r/R0)^6).
  *
- * @param dampingRates   the rates (dx/dr) of the pairs AB, AC and BC, or NULL for no Tang-Toennies damping
- * @param dampingRadius  the centroid damping radius R0, or 0 for no centroid damping
+ * @param a, b, c          the minimum image vectors AB, AC and BC
+ * @param c9               the C9 coefficient of the triple, including the scale factor and the alchemical scaling
+ * @param dampingRates     the rates (dx/dr) of the pairs AB, AC and BC, or NULL for no Tang-Toennies damping
+ * @param[in,out] forceA   the force on site A, to which the force of this triple is added
+ * @param[in,out] forceB   the force on site B, to which the force of this triple is added
+ * @param[in,out] forceC   the force on site C, to which the force of this triple is added
+ * @param dampingRadius    the centroid damping radius R0, or 0 for no centroid damping
  * @return the energy of the triple
  */
 inline double computeTriple(const OpenMM::Vec3& a, const OpenMM::Vec3& b, const OpenMM::Vec3& c, double c9, const double* dampingRates,

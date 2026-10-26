@@ -59,7 +59,12 @@ public:
     std::vector<std::string> getKernelNames();
     void updateParametersInContext(OpenMM::ContextImpl& context);
     /**
-     * Compute the C9 coefficient of a triple of sites from their polarizabilities and frequencies.
+     * Compute the C9 coefficient of a triple of sites from their polarizabilities and frequencies,
+     * C9 = 3/2 a1 a2 a3 w1 w2 w3 (w1 + w2 + w3) / ((w1 + w2)(w2 + w3)(w3 + w1)).
+     *
+     * @param alpha1, alpha2, alpha3             the polarizabilities of the three sites, in nm^3
+     * @param frequency1, frequency2, frequency3 the single-pole frequencies of the three sites, in kJ/mol
+     * @return the C9 coefficient, in kJ/mol*nm^9
      */
     static double computeC9(double alpha1, double frequency1, double alpha2, double frequency2, double alpha3, double frequency3) {
         return 1.5*alpha1*alpha2*alpha3*frequency1*frequency2*frequency3*(frequency1+frequency2+frequency3)/

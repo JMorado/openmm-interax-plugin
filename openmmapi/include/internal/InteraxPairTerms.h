@@ -32,11 +32,12 @@
 
 /**
  * The pair energies of the InteraxFF dispersion, exchange and short-range forces and their radial derivatives,
- * shared by the Reference and CPU platforms and by the long range correction. See docs/SPEC.md for the formulas.
+ * shared by the Reference and CPU platforms and by the long range correction.  See docs/SPEC.md for the formulas.
  *
  * Every function is a template over the value type: double (Reference), float, or the OpenMM SIMD vectors fvec4
- * and fvec8 (CPU, one lane per pair), which live in the global namespace. Branches are written with blendIf(), which picks between two values for a
- * scalar condition and blends the lanes for a vector mask; the vector versions evaluate both alternatives.
+ * and fvec8 (CPU, one lane per pair), which live in the global namespace.  Branches are written with blendIf(),
+ * which picks between two values for a scalar condition and blends the lanes for a vector mask; the vector versions
+ * evaluate both alternatives.
  *
  * @private
  */
@@ -53,7 +54,7 @@ namespace InteraxPlugin {
 template <class T> struct ScalarOf { typedef float type; };
 template <> struct ScalarOf<double> { typedef double type; };
 
-/** Choose a where the condition holds and b elsewhere. */
+/** Select a where the condition holds and b elsewhere. */
 inline double blendIf(bool condition, double a, double b) {
     return condition ? a : b;
 }
@@ -290,6 +291,13 @@ inline void dispersionPair(T r, T m1i, T m2i, T m3i, T alphai, T widthi, T m1j, 
 
 /**
  * Compute the exchange repulsion energy A_i A_j S(r; s_i, s_j) of a pair and its derivative with respect to r.
+ *
+ * @param r                      the distance
+ * @param amplitudei, widthi     the amplitude and Slater width of the first particle
+ * @param amplitudej, widthj     the amplitude and Slater width of the second particle
+ * @param scheme                 where and how to use the Taylor expansion of the overlap integral
+ * @param[out] energy            the energy of the pair
+ * @param[out] dEdR              the derivative of the energy with respect to r
  */
 template <class T>
 inline void exchangePair(T r, T amplitudei, T widthi, T amplitudej, T widthj, const SlaterTaylorScheme& scheme, T& energy, T& dEdR) {
@@ -303,6 +311,13 @@ inline void exchangePair(T r, T amplitudei, T widthi, T amplitudej, T widthj, co
 /**
  * Compute the short-range correction energy (K_i + K_j)/2 St + (L_i + L_j)/2 St^2 of a pair, with
  * St = 8 pi (s_i + s_j)^3 S(r; s_i, s_j), and its derivative with respect to r.
+ *
+ * @param r                  the distance
+ * @param ki, li, widthi     the amplitudes K and L and the Slater width of the first particle
+ * @param kj, lj, widthj     the amplitudes K and L and the Slater width of the second particle
+ * @param scheme             where and how to use the Taylor expansion of the overlap integral
+ * @param[out] energy        the energy of the pair
+ * @param[out] dEdR          the derivative of the energy with respect to r
  */
 template <class T>
 inline void shortRangePair(T r, T ki, T li, T widthi, T kj, T lj, T widthj, const SlaterTaylorScheme& scheme, T& energy, T& dEdR) {

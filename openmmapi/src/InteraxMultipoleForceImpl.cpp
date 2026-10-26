@@ -48,6 +48,9 @@ void InteraxMultipoleForceImpl::initialize(ContextImpl& context) {
     int numParticles = system.getNumParticles();
     if (owner.getNumParticles() != numParticles)
         throw OpenMMException("InteraxMultipoleForce must have exactly as many particles as the System it belongs to.");
+
+    // check cutoff < 0.5*boxSize
+
     if (owner.getNonbondedMethod() == InteraxMultipoleForce::PME) {
         Vec3 boxVectors[3];
         system.getDefaultPeriodicBoxVectors(boxVectors[0], boxVectors[1], boxVectors[2]);
@@ -55,6 +58,7 @@ void InteraxMultipoleForceImpl::initialize(ContextImpl& context) {
         if (cutoff > 0.5*boxVectors[0][0] || cutoff > 0.5*boxVectors[1][1] || cutoff > 0.5*boxVectors[2][2])
             throw OpenMMException("InteraxMultipoleForce: "+Messages::cutoffTooLarge);
     }
+
     const double tol = 1e-5;
     for (int i = 0; i < numParticles; i++) {
         int axisType, atomZ, atomX, atomY;
@@ -64,12 +68,18 @@ void InteraxMultipoleForceImpl::initialize(ContextImpl& context) {
         owner.getParticleParameters(i, charge, dipole, quadrupole, coreCharge, alpha, polarizability, axisType, atomZ, atomX, atomY, isAlchemical);
         stringstream msg;
         msg << "InteraxMultipoleForce: particle " << i << ": ";
+
+        // check the sizes of the multipoles, and that the quadrupole is traceless and symmetric
+
         if (dipole.size() != 3 || quadrupole.size() != 9)
-            throw OpenMMException(msg.str()+"the dipole needs 3 and the quadrupole 9 components");
+            throw OpenMMException(msg.str()+"the dipole must have 3 and the quadrupole 9 components");
         if (fabs(quadrupole[0]+quadrupole[4]+quadrupole[8]) > tol)
             throw OpenMMException(msg.str()+"the quadrupole must be traceless");
         if (fabs(quadrupole[1]-quadrupole[3]) > tol || fabs(quadrupole[2]-quadrupole[6]) > tol || fabs(quadrupole[5]-quadrupole[7]) > tol)
             throw OpenMMException(msg.str()+"the quadrupole must be symmetric");
+
+        // check the density exponent, the polarizability and the local frame
+
         if (alpha <= 0)
             throw OpenMMException(msg.str()+"alpha must be positive");
         if (polarizability < 0)

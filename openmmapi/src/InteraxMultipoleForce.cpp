@@ -40,7 +40,8 @@ using namespace OpenMM;
 using namespace std;
 
 InteraxMultipoleForce::InteraxMultipoleForce() : nonbondedMethod(NoCutoff), cutoffDistance(1.0), ewaldErrorTol(1e-4), alpha(0.0),
-        nx(0), ny(0), nz(0), coreDamping(false), useOwnKernel(false), coreDampingScale(1.0), mutualDampingScale(1.0), alchemicalParameterName("lambda_electrostatics") {
+        nx(0), ny(0), nz(0), coreDamping(false), useOwnKernel(false), coreDampingScale(1.0), mutualDampingScale(1.0),
+        alchemicalParameterName("lambda_electrostatics") {
     extrapolationCoefficients = {0.042, 0.635, 0.414};
 }
 
@@ -68,7 +69,7 @@ const vector<double>& InteraxMultipoleForce::getExtrapolationCoefficients() cons
 
 void InteraxMultipoleForce::setExtrapolationCoefficients(const vector<double>& coefficients) {
     if (coefficients.empty())
-        throw OpenMMException("InteraxMultipoleForce: at least one extrapolation coefficient is required");
+        throw OpenMMException("InteraxMultipoleForce: At least one extrapolation coefficient is required");
     extrapolationCoefficients = coefficients;
 }
 
@@ -98,14 +99,6 @@ void InteraxMultipoleForce::setEwaldErrorTolerance(double tol) {
     ewaldErrorTol = tol;
 }
 
-bool InteraxMultipoleForce::getUseOwnKernel() const {
-    return useOwnKernel;
-}
-
-void InteraxMultipoleForce::setUseOwnKernel(bool enabled) {
-    useOwnKernel = enabled;
-}
-
 bool InteraxMultipoleForce::getCoreDamping() const {
     return coreDamping;
 }
@@ -120,7 +113,7 @@ double InteraxMultipoleForce::getCoreDampingScale() const {
 
 void InteraxMultipoleForce::setCoreDampingScale(double eta) {
     if (eta <= 0)
-        throw OpenMMException("InteraxMultipoleForce: the core damping scale must be positive");
+        throw OpenMMException("InteraxMultipoleForce: The core damping scale must be positive");
     coreDampingScale = eta;
 }
 
@@ -130,8 +123,16 @@ double InteraxMultipoleForce::getMutualDampingScale() const {
 
 void InteraxMultipoleForce::setMutualDampingScale(double kappa) {
     if (kappa <= 0)
-        throw OpenMMException("InteraxMultipoleForce: the mutual damping scale must be positive");
+        throw OpenMMException("InteraxMultipoleForce: The mutual damping scale must be positive");
     mutualDampingScale = kappa;
+}
+
+bool InteraxMultipoleForce::getUseOwnKernel() const {
+    return useOwnKernel;
+}
+
+void InteraxMultipoleForce::setUseOwnKernel(bool enabled) {
+    useOwnKernel = enabled;
 }
 
 const string& InteraxMultipoleForce::getAlchemicalParameterName() const {

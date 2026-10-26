@@ -3,6 +3,11 @@
 %import(module="openmm") "swig/OpenMMSwigHeaders.i"
 %include "swig/typemaps.i"
 %include "std_string.i"
+
+/*
+ * The following lines are needed to handle std::vector.
+ */
+
 %include "std_vector.i"
 namespace std {
   %template(vectori) vector<int>;
@@ -17,7 +22,10 @@ namespace std {
 #include "openmm/RPMDMonteCarloBarostat.h"
 %}
 
-/* std::vector<double> arguments from any Python sequence (OpenMM's own typemaps need its numpy helpers). */
+/*
+ * Accept any Python sequence for a std::vector<double> argument, and return std::vector<double> values as lists.
+ * (OpenMM's own typemaps for these need its numpy helpers.)
+ */
 %typemap(in) const std::vector<double>& (std::vector<double> temp) {
     if (!PySequence_Check($input)) {
         PyErr_SetString(PyExc_TypeError, "expected a sequence of numbers");
@@ -66,12 +74,15 @@ import openmm.unit as unit
 }
 
 /*
- * Output arguments are returned as tuples.
+ * The reference parameters of the get...Parameters() methods are output values.  Marking them as such
+ * will cause swig to return a tuple.
  */
 %apply double& OUTPUT {double& m1, double& m2, double& m3, double& alpha, double& width, double& amplitude, double& k, double& l, double& frequency};
 %apply bool& OUTPUT {bool& isAlchemical};
 %apply int& OUTPUT {int& particle1, int& particle2, int& molecule};
-/* getSiteParameters returns the particles of the site as a tuple. */
+/*
+ * getSiteParameters() returns the particles of the site as a tuple.
+ */
 %typemap(in, numinputs=0) std::vector<int>& particles (std::vector<int> temp) {
     $1 = &temp;
 }
@@ -234,8 +245,11 @@ public:
     bool usesPeriodicBoundaryConditions() const;
 };
 
-/* Particle parameters as a list [charge, dipole (3), quadrupole (9), coreCharge, alpha, polarizability, axisType, z, x, y,
- * isAlchemical], dipoles as flat lists [x0, y0, z0, x1, ...] (e nm), PME parameters as [alpha, nx, ny, nz]. */
+/*
+ * Methods with vector or multiple output arguments are wrapped as methods that return flat lists: the particle
+ * parameters as [charge, dipole (3), quadrupole (9), coreCharge, alpha, polarizability, axisType, z, x, y,
+ * isAlchemical], the dipoles as [x0, y0, z0, x1, ...] (e nm), and the PME parameters as [alpha, nx, ny, nz].
+ */
 %extend InteraxMultipoleForce {
     std::vector<double> getParticleParametersList(int index) const {
         double charge, coreCharge, alpha, polarizability;
@@ -280,10 +294,11 @@ public:
     }
 }
 
-}
+} // namespace InteraxPlugin
 
 /*
- * System.getForce() returns a plain Force: cast() recovers the InteraxFF class, isinstance() tests for it.
+ * Add methods for casting a Force to one of the InteraxFF forces.  System.getForce() returns a plain Force:
+ * cast() recovers the InteraxFF class, and isinstance() tests whether a Force is an instance of it.
  */
 %define CAST_HELPERS(CLASS)
 %extend InteraxPlugin::CLASS {

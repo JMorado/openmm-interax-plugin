@@ -44,27 +44,36 @@
 namespace InteraxPlugin {
 
 /**
- * This class implements the electrostatics and polarization of the InteraxFF force field: the permanent multipoles
- * (charge split into a point core charge and a Slater valence density, dipole and quadrupole in a local frame) and
- * induced dipoles, with the charge penetration of HIPPO (Rackers et al.). It is OpenMM's HippoNonbondedForce
- * without the repulsion, dispersion and charge transfer terms, with these additions:
+ * This class implements the electrostatics and polarization of the InteraxFF force field.  It is derived from
+ * OpenMM's HippoNonbondedForce, and computes the same electrostatics and induction as HIPPO (Rackers et al.):
+ * each particle carries a permanent charge, dipole and quadrupole defined in a local coordinate frame, with the
+ * charge split into a point core charge and a Slater valence density of exponent alpha (the charge penetration of
+ * HIPPO), and an atomic polarizability that gives it an induced dipole.  The repulsion, dispersion and charge
+ * transfer terms of HIPPO are not included.  InteraxMultipoleForce adds the following features:
  *
  * <ul>
- * <li>Core damping (setCoreDamping()). The permanent field that polarizes an atom is multiplied by
- * f(r) = 1 - (1 + a r + (a r)^2/2) exp(-a r), the fraction of the Slater density of the polarized atom (exponent a,
- * the particle's alpha) within r. HIPPO's bare core fields make the polarization energy diverge as
- * -polarizability*q_core^2/(2 r^4) when atoms overlap; with core damping it stays finite.</li>
- * <li>Mutual damping scale (setMutualDampingScale()): the induced dipole couplings use the exponents kappa*alpha
- * (HIPPO: kappa = 1).</li>
- * <li>Alchemical particles. The multipoles and polarizabilities of the particles flagged as alchemical are multiplied
- * by the context parameter named by getAlchemicalParameterName() ("lambda_electrostatics" by default), so that 0
- * removes their electrostatics and polarization from the System.</li>
+ * <li>Core damping (setCoreDamping()).  The permanent field that polarizes an atom is multiplied by
+ * f(r) = 1 - (1 + a r + (a r)^2/2) exp(-a r), the fraction of the Slater density of the polarized atom (exponent
+ * a = eta alpha, see setCoreDampingScale()) within r.  With HIPPO's bare core fields the polarization energy diverges
+ * as -polarizability*q_core^2/(2 r^4) when atoms overlap; with core damping it stays finite.</li>
+ * <li>A mutual damping scale (setMutualDampingScale()): the couplings between induced dipoles are damped with the
+ * exponents kappa*alpha (kappa = 1 in HIPPO).</li>
+ * <li>Alchemical particles.  The multipoles and polarizabilities of the particles flagged as alchemical are multiplied
+ * by the context parameter named by getAlchemicalParameterName() ("lambda_electrostatics" by default), so that setting
+ * it to 0 removes their electrostatics and polarization from the System.</li>
  * <li>Exponents that are nearly but not exactly equal are handled without the cancellation of HIPPO's
  * unequal-exponent damping formulas, and zero polarizabilities are allowed.</li>
  * </ul>
  *
- * Induced dipoles are computed with HIPPO's extrapolated perturbation series (setExtrapolationCoefficients()); a single
- * coefficient of 1 gives direct polarization.
+ * Induced dipoles are computed with HIPPO's extrapolated perturbation series (see setExtrapolationCoefficients()).  A
+ * single coefficient of 1 gives direct polarization.
+ *
+ * To use it, create an InteraxMultipoleForce object, then call addParticle() once for each particle.  After
+ * an entry has been added, you can modify its force field parameters by calling setParticleParameters().
+ * This will have no effect on Contexts that already exist unless you call updateParametersInContext().
+ *
+ * You also can specify "exceptions", particular pairs of particles whose interactions should be
+ * reduced or completely omitted.  Call addException() to define exceptions.
  */
 
 class OPENMM_EXPORT_INTERAX InteraxMultipoleForce : public OpenMM::Force {
@@ -74,18 +83,18 @@ public:
      */
     enum NonbondedMethod {
         /**
-         * No cutoff is applied to nonbonded interactions. The full set of N^2 interactions is computed exactly.
-         * This necessarily means that periodic boundary conditions cannot be used. This is the default.
+         * No cutoff is applied to nonbonded interactions.  The full set of N^2 interactions is computed exactly.
+         * This necessarily means that periodic boundary conditions cannot be used.  This is the default.
          */
         NoCutoff = 0,
         /**
-         * Periodic boundary conditions are used, and Particle-Mesh Ewald (PME) summation is used to compute the
-         * interaction of each particle with all periodic copies of every other particle.
+         * Periodic boundary conditions are used, and Particle-Mesh Ewald (PME) summation is used to compute the interaction of each particle
+         * with all periodic copies of every other particle.
          */
         PME = 1
     };
     /**
-     * The local frame types (same values as HippoNonbondedForce).
+     * This is an enumeration of the types of local coordinate frame, with the same values as in HippoNonbondedForce.
      */
     enum ParticleAxisTypes { ZThenX = 0, Bisector = 1, ZBisect = 2, ThreeFold = 3, ZOnly = 4, NoAxisType = 5 };
     /**
@@ -93,7 +102,7 @@ public:
      */
     InteraxMultipoleForce();
     /**
-     * Get the number of particles.
+     * Get the number of particles in the potential function.
      */
     int getNumParticles() const {
         return particles.size();
@@ -113,137 +122,233 @@ public:
      */
     void setNonbondedMethod(NonbondedMethod method);
     /**
-     * Get the cutoff distance (in nm) for the real space part of PME.
+     * Get the cutoff distance (in nm) being used for nonbonded interactions.  If the NonbondedMethod in use
+     * is NoCutoff, this value will have no effect.
+     *
+     * @return the cutoff distance, measured in nm
      */
     double getCutoffDistance() const;
     /**
-     * Set the cutoff distance (in nm) for the real space part of PME.
+     * Set the cutoff distance (in nm) being used for nonbonded interactions.  If the NonbondedMethod in use
+     * is NoCutoff, this value will have no effect.
+     *
+     * @param distance    the cutoff distance, measured in nm
      */
     void setCutoffDistance(double distance);
     /**
-     * Get the coefficients of the mu_0, mu_1, mu_2, ..., mu_n terms of the extrapolated perturbation series for the
-     * induced dipoles.
+     * Get the coefficients for the mu_0, mu_1, mu_2, ..., mu_n terms in the extrapolation
+     * algorithm for induced dipoles.
      */
     const std::vector<double>& getExtrapolationCoefficients() const;
     /**
-     * Set the coefficients of the mu_0, mu_1, mu_2, ..., mu_n terms of the extrapolated perturbation series for the
-     * induced dipoles. A single coefficient of 1 gives direct polarization.
+     * Set the coefficients for the mu_0, mu_1, mu_2, ..., mu_n terms in the extrapolation
+     * algorithm for induced dipoles.  A single coefficient of 1 gives direct polarization.
+     *
+     * @param coefficients      a vector whose mth entry specifies the coefficient for mu_m.  The length of this
+     *                          vector determines how many iterations are performed.  It must not be empty.
      */
     void setExtrapolationCoefficients(const std::vector<double>& coefficients);
     /**
-     * Get the parameters to use for PME calculations. If alpha is 0 (the default), these parameters are ignored and
-     * instead their values are chosen based on the Ewald error tolerance.
+     * Get the parameters to use for PME calculations.  If alpha is 0 (the default), these parameters are
+     * ignored and instead their values are chosen based on the Ewald error tolerance.
+     *
+     * @param[out] alpha   the separation parameter
+     * @param[out] nx      the number of grid points along the X axis
+     * @param[out] ny      the number of grid points along the Y axis
+     * @param[out] nz      the number of grid points along the Z axis
      */
     void getPMEParameters(double& alpha, int& nx, int& ny, int& nz) const;
     /**
-     * Set the parameters to use for PME calculations. If alpha is 0 (the default), these parameters are ignored and
-     * instead their values are chosen based on the Ewald error tolerance.
+     * Set the parameters to use for PME calculations.  If alpha is 0 (the default), these parameters are
+     * ignored and instead their values are chosen based on the Ewald error tolerance.
+     *
+     * @param alpha   the separation parameter
+     * @param nx      the number of grid points along the X axis
+     * @param ny      the number of grid points along the Y axis
+     * @param nz      the number of grid points along the Z axis
      */
     void setPMEParameters(double alpha, int nx, int ny, int nz);
     /**
-     * Get the parameters being used for PME in a particular Context.
+     * Get the parameters being used for PME in a particular Context.  Because some platforms have restrictions
+     * on the allowed grid sizes, the values that are actually used may be slightly different from those
+     * specified with setPMEParameters(), or the standard values calculated based on the Ewald error tolerance.
+     * See the manual for details.
+     *
+     * @param context      the Context for which to get the parameters
+     * @param[out] alpha   the separation parameter
+     * @param[out] nx      the number of grid points along the X axis
+     * @param[out] ny      the number of grid points along the Y axis
+     * @param[out] nz      the number of grid points along the Z axis
      */
     void getPMEParametersInContext(const OpenMM::Context& context, double& alpha, int& nx, int& ny, int& nz) const;
     /**
-     * Add the parameters for a particle. This should be called once for each particle in the System. When it is called
-     * for the i'th time, it specifies the parameters for the i'th particle.
+     * Add the nonbonded force parameters for a particle.  This should be called once for each particle
+     * in the System.  When it is called for the i'th time, it specifies the parameters for the i'th particle.
      *
-     * @param charge          the total charge (e)
-     * @param dipole          the permanent dipole in the local frame (e nm)
-     * @param quadrupole      the permanent quadrupole in the local frame (e nm^2), 9 components of a traceless symmetric
-     *                        tensor, in HIPPO's convention
-     * @param coreCharge      the point core charge (e); the valence charge is charge - coreCharge
-     * @param alpha           the exponent of the Slater valence density (1/nm)
-     * @param polarizability  the atomic polarizability (nm^3), zero or positive
-     * @param axisType        the local frame type (ParticleAxisTypes)
-     * @param multipoleAtomZ  the particle defining the z axis of the local frame
-     * @param multipoleAtomX  the particle defining the x axis of the local frame
-     * @param multipoleAtomY  the particle defining the y axis of the local frame
-     * @param isAlchemical    whether the multipoles and polarizability are scaled by the alchemical parameter
+     * @param charge            the particle's total charge, measured in units of the proton charge
+     * @param dipole            the particle's molecular dipole (vector of size 3), measured in e*nm
+     * @param quadrupole        the particle's molecular quadrupole (vector of size 9), measured in e*nm^2.  It must be
+     *                          traceless and symmetric, in the same convention as HippoNonbondedForce.
+     * @param coreCharge        the charge of the atomic core.  The valence charge is charge - coreCharge.
+     * @param alpha             controls the width of the particle's electron density: the exponent of the Slater
+     *                          valence density, measured in 1/nm.  It must be positive.
+     * @param polarizability    atomic polarizability, measured in nm^3.  It must not be negative.
+     * @param axisType          the particle's axis type
+     * @param multipoleAtomZ    index of first atom used in defining the local coordinate system for multipoles
+     * @param multipoleAtomX    index of second atom used in defining the local coordinate system for multipoles
+     * @param multipoleAtomY    index of third atom used in defining the local coordinate system for multipoles
+     * @param isAlchemical      whether the multipoles and polarizability are scaled by the alchemical parameter
+     *
      * @return the index of the particle that was added
      */
     int addParticle(double charge, const std::vector<double>& dipole, const std::vector<double>& quadrupole, double coreCharge,
                     double alpha, double polarizability, int axisType, int multipoleAtomZ, int multipoleAtomX, int multipoleAtomY,
                     bool isAlchemical=false);
     /**
-     * Get the parameters for a particle (see addParticle()).
+     * Get the nonbonded force parameters for a particle.
+     *
+     * @param index                 the index of the particle for which to get parameters
+     * @param[out] charge           the particle's total charge, measured in units of the proton charge
+     * @param[out] dipole           the particle's molecular dipole (vector of size 3), measured in e*nm
+     * @param[out] quadrupole       the particle's molecular quadrupole (vector of size 9), measured in e*nm^2
+     * @param[out] coreCharge       the charge of the atomic core
+     * @param[out] alpha            the exponent of the Slater valence density, measured in 1/nm
+     * @param[out] polarizability   atomic polarizability, measured in nm^3
+     * @param[out] axisType         the particle's axis type
+     * @param[out] multipoleAtomZ   index of first atom used in defining the local coordinate system for multipoles
+     * @param[out] multipoleAtomX   index of second atom used in defining the local coordinate system for multipoles
+     * @param[out] multipoleAtomY   index of third atom used in defining the local coordinate system for multipoles
+     * @param[out] isAlchemical     whether the multipoles and polarizability are scaled by the alchemical parameter
      */
     void getParticleParameters(int index, double& charge, std::vector<double>& dipole, std::vector<double>& quadrupole, double& coreCharge,
                                double& alpha, double& polarizability, int& axisType, int& multipoleAtomZ, int& multipoleAtomX,
                                int& multipoleAtomY, bool& isAlchemical) const;
     /**
-     * Set the parameters for a particle (see addParticle()).
+     * Set the nonbonded force parameters for a particle.
+     *
+     * @param index             the index of the particle for which to set parameters
+     * @param charge            the particle's total charge, measured in units of the proton charge
+     * @param dipole            the particle's molecular dipole (vector of size 3), measured in e*nm
+     * @param quadrupole        the particle's molecular quadrupole (vector of size 9), measured in e*nm^2
+     * @param coreCharge        the charge of the atomic core
+     * @param alpha             the exponent of the Slater valence density, measured in 1/nm
+     * @param polarizability    atomic polarizability, measured in nm^3
+     * @param axisType          the particle's axis type
+     * @param multipoleAtomZ    index of first atom used in defining the local coordinate system for multipoles
+     * @param multipoleAtomX    index of second atom used in defining the local coordinate system for multipoles
+     * @param multipoleAtomY    index of third atom used in defining the local coordinate system for multipoles
+     * @param isAlchemical      whether the multipoles and polarizability are scaled by the alchemical parameter
      */
     void setParticleParameters(int index, double charge, const std::vector<double>& dipole, const std::vector<double>& quadrupole, double coreCharge,
                                double alpha, double polarizability, int axisType, int multipoleAtomZ, int multipoleAtomX, int multipoleAtomY,
                                bool isAlchemical=false);
     /**
-     * Add scale factors for the interactions of a pair of particles.
+     * Add an interaction to the list of exceptions that should be calculated differently from other interactions.
+     * If all scale factors are set to 0, this will cause the interaction to be completely omitted from
+     * force and energy calculations.
      *
-     * @param particle1                the first particle
-     * @param particle2                the second particle
-     * @param multipoleMultipoleScale  the scale of the permanent multipole-multipole interaction
-     * @param dipoleMultipoleScale     the scale of the permanent field on the induced dipoles (and of the polarization
-     *                                 energy and forces it gives)
-     * @param dipoleDipoleScale        the scale of the coupling of the induced dipoles
-     * @param replace                  whether to replace an exception that already exists for this pair
+     * @param particle1                  the index of the first particle involved in the interaction
+     * @param particle2                  the index of the second particle involved in the interaction
+     * @param multipoleMultipoleScale    the factor by which to scale the Coulomb interaction between fixed multipoles
+     * @param dipoleMultipoleScale       the factor by which to scale the Coulomb interaction between an induced dipole and a fixed multipole
+     *                                   (the permanent field on the induced dipoles, and the polarization energy and forces it gives)
+     * @param dipoleDipoleScale          the factor by which to scale the Coulomb interaction between induced dipoles
+     * @param replace                    determines the behavior if there is already an exception for the same two particles.  If true, the existing one is replaced.
+     *                                   If false, an exception is thrown.
      * @return the index of the exception that was added
      */
     int addException(int particle1, int particle2, double multipoleMultipoleScale, double dipoleMultipoleScale, double dipoleDipoleScale,
                      bool replace=false);
     /**
-     * Get the scale factors for an exception.
+     * Get the scale factors for an interaction that should be calculated differently from others.
+     *
+     * @param index                           the index of the interaction for which to get parameters
+     * @param[out] particle1                  the index of the first particle involved in the interaction
+     * @param[out] particle2                  the index of the second particle involved in the interaction
+     * @param[out] multipoleMultipoleScale    the factor by which to scale the Coulomb interaction between fixed multipoles
+     * @param[out] dipoleMultipoleScale       the factor by which to scale the Coulomb interaction between an induced dipole and a fixed multipole
+     * @param[out] dipoleDipoleScale          the factor by which to scale the Coulomb interaction between induced dipoles
      */
     void getExceptionParameters(int index, int& particle1, int& particle2, double& multipoleMultipoleScale, double& dipoleMultipoleScale,
                                 double& dipoleDipoleScale) const;
     /**
-     * Set the scale factors for an exception.
+     * Set the scale factors for an interaction that should be calculated differently from others.
+     * If all scale factors are set to 0, this will cause the interaction to be completely omitted from
+     * force and energy calculations.
+     *
+     * @param index                      the index of the interaction for which to set parameters
+     * @param particle1                  the index of the first particle involved in the interaction
+     * @param particle2                  the index of the second particle involved in the interaction
+     * @param multipoleMultipoleScale    the factor by which to scale the Coulomb interaction between fixed multipoles
+     * @param dipoleMultipoleScale       the factor by which to scale the Coulomb interaction between an induced dipole and a fixed multipole
+     * @param dipoleDipoleScale          the factor by which to scale the Coulomb interaction between induced dipoles
      */
     void setExceptionParameters(int index, int particle1, int particle2, double multipoleMultipoleScale, double dipoleMultipoleScale,
                                 double dipoleDipoleScale);
     /**
-     * Get the error tolerance for Ewald summation.
+     * Get the error tolerance for Ewald summation.  This corresponds to the fractional error in the forces
+     * which is acceptable.  This value is used to select the grid dimensions and separation (alpha)
+     * parameter so that the average error level will be less than the tolerance.  There is not a
+     * rigorous guarantee that all forces on all atoms will be less than the tolerance, however.
+     *
+     * This can be overridden by explicitly setting an alpha parameter and grid dimensions to use.
      */
     double getEwaldErrorTolerance() const;
     /**
-     * Set the error tolerance for Ewald summation.
+     * Set the error tolerance for Ewald summation.  This corresponds to the fractional error in the forces
+     * which is acceptable.  This value is used to select the grid dimensions and separation (alpha)
+     * parameter so that the average error level will be less than the tolerance.  There is not a
+     * rigorous guarantee that all forces on all atoms will be less than the tolerance, however.
+     *
+     * This can be overridden by explicitly setting an alpha parameter and grid dimensions to use.
      */
     void setEwaldErrorTolerance(double tol);
     /**
-     * Get whether the permanent fields on the induced dipoles are damped by the density of the polarized atom.
+     * Get whether core damping is used: the permanent field that polarizes an atom is multiplied by the fraction
+     * f(r) = 1 - (1 + a r + (a r)^2/2) exp(-a r) of the atom's own Slater density within r.
      */
     bool getCoreDamping() const;
     /**
-     * Set whether the permanent fields on the induced dipoles are damped by the density of the polarized atom.
+     * Set whether core damping is used: the permanent field that polarizes an atom is multiplied by the fraction
+     * f(r) = 1 - (1 + a r + (a r)^2/2) exp(-a r) of the atom's own Slater density within r.  This is off by default,
+     * as in HIPPO.
      */
     void setCoreDamping(bool enabled);
     /**
-     * Get the scale eta of the exponents in the core damping (default 1): the field on an atom is multiplied by f(r)
-     * computed with the exponent eta*alpha, so eta < 1 damps over a larger distance.
+     * Get the scale eta of the exponents used in the core damping: the field on an atom is damped with the exponent
+     * a = eta*alpha, so eta < 1 damps over a larger distance.  The default value is 1.
      */
     double getCoreDampingScale() const;
     /**
-     * Set the scale eta of the exponents in the core damping.
+     * Set the scale eta of the exponents used in the core damping: the field on an atom is damped with the exponent
+     * a = eta*alpha, so eta < 1 damps over a larger distance.  The default value is 1.
+     *
+     * @param eta    the core damping scale.  It must be positive.
      */
     void setCoreDampingScale(double eta);
     /**
-     * Get the scale kappa of the exponents in the damping of the induced dipole couplings.
+     * Get the scale kappa of the exponents used in the damping of the couplings between induced dipoles, which use
+     * the exponents kappa*alpha.  The default value is 1, as in HIPPO.
      */
     double getMutualDampingScale() const;
     /**
-     * Set the scale kappa of the exponents in the damping of the induced dipole couplings (default 1, as HIPPO).
+     * Set the scale kappa of the exponents used in the damping of the couplings between induced dipoles, which use
+     * the exponents kappa*alpha.  The default value is 1, as in HIPPO.
+     *
+     * @param kappa    the mutual damping scale.  It must be positive.
      */
     void setMutualDampingScale(double kappa);
     /**
      * Get whether the GPU platforms evaluate the real-space multipole interactions with a kernel of this force's own
-     * (true) instead of replacing the source of the context's default nonbonded kernel, as HippoNonbondedForce does
-     * (false, the default). With true the force can share a Context with other forces that use the default nonbonded
-     * kernel (NonbondedForce, CustomNonbondedForce, the InteraxFF pair forces); their exclusions must then be the same
-     * as the exceptions of this force, and forces in the same force group must use the same cutoff.
+     * (true), instead of replacing the source of the context's default nonbonded kernel as HippoNonbondedForce does
+     * (false, the default).  With true the force can share a Context with other forces that use the default nonbonded
+     * kernel (NonbondedForce, CustomNonbondedForce, the InteraxFF pair forces).  Their exclusions must then be the
+     * same as the exceptions of this force, and forces in the same force group must use the same cutoff.
      */
     bool getUseOwnKernel() const;
     /**
      * Set whether the GPU platforms evaluate the real-space multipole interactions with a kernel of this force's own.
+     * See getUseOwnKernel() for details.
      */
     void setUseOwnKernel(bool enabled);
     /**
@@ -252,23 +357,44 @@ public:
     const std::string& getAlchemicalParameterName() const;
     /**
      * Set the name of the context parameter that scales the multipoles and polarizabilities of alchemical particles.
+     * If any particle is alchemical, the force defines this parameter with a default value of 1.
+     *
+     * @param name    the name of the context parameter
      */
     void setAlchemicalParameterName(const std::string& name);
     /**
-     * Get the permanent dipoles of all particles in the lab frame (e nm).
+     * Get the fixed dipole moments of all particles in the global reference frame.
+     *
+     * @param context         the Context for which to get the fixed dipoles
+     * @param[out] dipoles    the fixed dipole moment of particle i is stored into the i'th element
      */
     void getLabFramePermanentDipoles(OpenMM::Context& context, std::vector<OpenMM::Vec3>& dipoles);
     /**
-     * Get the induced dipoles of all particles (e nm).
+     * Get the induced dipole moments of all particles.
+     *
+     * @param context         the Context for which to get the induced dipoles
+     * @param[out] dipoles    the induced dipole moment of particle i is stored into the i'th element
      */
     void getInducedDipoles(OpenMM::Context& context, std::vector<OpenMM::Vec3>& dipoles);
     /**
-     * Update the particle and exception parameters in a Context to match those stored in this Force object. The
-     * exceptions, frames and set of alchemical particles cannot be changed.
+     * Update the particle and exception parameters in a Context to match those stored in this Force object.  This method
+     * provides an efficient method to update certain parameters in an existing Context without needing to reinitialize it.
+     * Simply call setParticleParameters() to modify this object's parameters, then call updateParametersInContext() to
+     * copy them over to the Context.
+     *
+     * This method has several limitations.  The only information it updates is the parameters of particles and exceptions.
+     * All other aspects of the Force (the nonbonded method, the cutoff distance, etc.) are unaffected and can only be
+     * changed by reinitializing the Context.  Furthermore, only the scale factors for an exception  can be changed; the
+     * pair of particles involved in the exception cannot change.  The local frames and the set of alchemical particles
+     * cannot change either.  Finally, this method cannot be used to add new particles or exceptions, only to change the
+     * parameters of existing ones.
      */
     void updateParametersInContext(OpenMM::Context& context);
     /**
-     * Returns whether or not this force makes use of periodic boundary conditions.
+     * Returns whether or not this force makes use of periodic boundary
+     * conditions.
+     *
+     * @returns true if nonbondedMethod uses PBC and false otherwise
      */
     bool usesPeriodicBoundaryConditions() const {
         return nonbondedMethod == InteraxMultipoleForce::PME;

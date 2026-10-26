@@ -1,9 +1,13 @@
 """
 Convert an OpenMM System built by the InteraxFF export (interax.openmm.create_system_from_topology) to the plugin
-forces: the CustomNonbondedForces of the dispersion, exchange repulsion and short-range correction become
-InteraxDispersionForce, InteraxExchangeForce and InteraxShortRangeForce, and the molecular three-body
-CustomCentroidBondForce becomes InteraxThreeBodyForce. Every other force (valence terms, HIPPO electrostatics and
-polarization, intramolecular nonbonded terms) is kept as it is.
+forces.
+
+convert_system() replaces the CustomNonbondedForces of the dispersion, exchange repulsion and short-range correction
+by InteraxDispersionForce, InteraxExchangeForce and InteraxShortRangeForce, and the molecular three-body
+CustomCentroidBondForce by InteraxThreeBodyForce.  Every other force (valence terms, electrostatics and polarization,
+intramolecular nonbonded terms) is kept, except that an InteraxMultipoleForce that a CustomCVForce merely wraps is
+unwrapped (see unwrap_multipoles()).  convert_multipoles() builds an InteraxMultipoleForce from an exported
+HippoNonbondedForce, and atomic_three_body() an atomic Axilrod-Teller-Muto force from an exported dispersion force.
 
 The converted forces reproduce the export to rounding (docs/SPEC.md).
 """
@@ -14,7 +18,7 @@ import openmm
 
 import interaxplugin as ip
 
-# InteraxFF unit conversions (interax/openmm.py)
+# The unit conversions of the InteraxFF export (interax/openmm.py).
 HARTREE_TO_KJ_MOL = 2625.4996394799
 BOHR_TO_NM = 0.0529177210903
 K_A = HARTREE_TO_KJ_MOL * BOHR_TO_NM**3
@@ -83,6 +87,11 @@ def _is_active(values):
 
 
 def convert_dispersion(force):
+    """
+    Create an InteraxDispersionForce from the Tang-Toennies damped C6/C8/C10 dispersion CustomNonbondedForce of an
+    exported InteraxFF System, with the same parameters, cutoff, switching function, long range correction,
+    exclusions and force group.  Lone-pair sites get a zero polarizability, so that they do not interact.
+    """
     globals_ = _global_parameters(force)
     if "tt_scale" not in globals_:
         raise ValueError("Only the Tang-Toennies dispersion can be converted (the force has no tt_scale).")
@@ -100,6 +109,11 @@ def convert_dispersion(force):
 
 
 def convert_exchange(force, overlap="exact"):
+    """
+    Create an InteraxExchangeForce from the exchange repulsion CustomNonbondedForce of an exported InteraxFF System.
+    The amplitudes are scaled by sqrt(K_A) to kJ/mol and nm, and lone-pair sites get a zero width.  With
+    overlap="export" the Slater overlap uses the Taylor scheme of the export, with overlap="exact" the Exact method.
+    """
     globals_ = _global_parameters(force)
     if "p_ex" in globals_ and globals_["p_ex"] != 1.0:
         raise ValueError("Only the exchange repulsion with exponent 1 can be converted.")
@@ -115,6 +129,11 @@ def convert_exchange(force, overlap="exact"):
 
 
 def convert_short_range(force, overlap="exact"):
+    """
+    Create an InteraxShortRangeForce from the short-range correction CustomNonbondedForce of an exported InteraxFF
+    System.  Its mid-range term M and element-pair amplitudes must be zero, and lone-pair sites get a zero width.  With
+    overlap="export" the Slater overlap uses the Taylor scheme of the export, with overlap="exact" the Exact method.
+    """
     for i in range(force.getNumParticles()):
         v = _particle_values(force, i)
         if v.get("M", 0.0) != 0.0:
@@ -155,7 +174,7 @@ def _molecules_from_exclusions(force, num_particles):
 def _atomic_oscillators(dispersion):
     """
     The atomic single-pole oscillators of an exported dispersion force: alpha_disp and w = 4 C6 / (3 alpha^2), with
-    the homoatomic XDM C6 = alpha m1 / 2. Particles without polarizability (lone-pair sites) have alpha = w = 0.
+    the homoatomic XDM C6 = alpha m1 / 2.  Particles without polarizability (lone-pair sites) have alpha = w = 0.
     """
     num_particles = dispersion.getNumParticles()
     alpha, frequency = [0.0] * num_particles, [0.0] * num_particles
@@ -171,9 +190,10 @@ def _atomic_oscillators(dispersion):
 def atomic_three_body(dispersion, cutoff=0.8, damping_scale=1.0, scale=1.0, periodic=None):
     """
     Create an atomic Axilrod-Teller-Muto force (InteraxThreeBodyForce with one site per atom and Tang-Toennies damping)
-    from the dispersion CustomNonbondedForce of an exported InteraxFF System. Each atom with a dispersion polarizability is a site with the atomic alpha and
-    frequency of the molecular ATM's oscillators and the dispersion Slater width; triples within one molecule (a
-    connected component of the exclusions) are excluded.
+    from the dispersion CustomNonbondedForce of an exported InteraxFF System.  Each atom with a dispersion
+    polarizability is a site with the atomic alpha and frequency of the molecular ATM's oscillators and the dispersion
+    Slater width; triples within one molecule (a connected component of the exclusions) are excluded.  By default the
+    force is periodic if the dispersion force is.
 
     This is not a term of the trained InteraxFF models: it is provided to evaluate the cost and the effect of an
     atomic ATM, whose scale and damping would have to be fitted.
@@ -197,10 +217,11 @@ def atomic_three_body(dispersion, cutoff=0.8, damping_scale=1.0, scale=1.0, peri
 
 def convert_three_body(force, dispersion):
     """
-    Convert the molecular ATM CustomCentroidBondForce. The export stores only the C9 of every triple, so the
-    molecular polarizabilities and frequencies are recomputed from the atomic dispersion parameters, exactly as the
-    export computes them, and checked against the stored C9 values. The centroid damping radius of the export (global
-    parameter atm_damping_r0, if present) becomes the plugin's centroid damping radius.
+    Create an InteraxThreeBodyForce from the molecular ATM CustomCentroidBondForce of an exported InteraxFF System.
+    The export stores only the C9 of every triple, so the molecular polarizabilities and frequencies are recomputed
+    from the atomic dispersion parameters (the dispersion CustomNonbondedForce of the same System), exactly as the
+    export computes them, and checked against the stored C9 values.  The centroid damping radius of the export
+    (global parameter atm_damping_r0, if present) becomes the plugin's centroid damping radius.
     """
     expression = force.getEnergyFunction()
     if force.getNumGroupsPerBond() != 3 or "C9" not in expression:
@@ -243,8 +264,9 @@ def convert_three_body(force, dispersion):
         if abs(ratio - scale) > 1e-6 * abs(scale):
             raise ValueError(f"The stored C9 of triple {tuple(groups)} does not match the molecular parameters.")
     plugin.setScaleFactor(1.0 if scale is None else scale)
-    # Centroid damping g(r) = 1 - exp(-(r/R0)^6) of every pair of a triple (interax.openmm.add_molecular_atm_dispersion_force
-    # with damping_r0 > 0 stores R0 in nm as the global parameter atm_damping_r0); absent means undamped.
+    # Centroid damping g(r) = 1 - exp(-(r/R0)^6) of every pair of a triple.  The export
+    # (interax.openmm.add_molecular_atm_dispersion_force with damping_r0 > 0) stores R0 in nm as the global
+    # parameter atm_damping_r0; without it the force is undamped.
     r0 = _global_parameters(force).get("atm_damping_r0", 0.0)
     if r0 > 0:
         plugin.setCentroidDampingRadius(r0)
@@ -268,12 +290,12 @@ def wrapped_hippo(force):
 def convert_multipoles(hippo, core_damping=False, mutual_damping_scale=1.0, alchemical_particles=(), alchemical_parameter="lambda_electrostatics",
                        core_damping_scale=1.0):
     """
-    An InteraxMultipoleForce with the electrostatics and polarization of an exported HippoNonbondedForce (its
+    Create an InteraxMultipoleForce with the electrostatics and polarization of an exported HippoNonbondedForce (its
     repulsion, dispersion and charge transfer must be off, as in the export): same particles, frames, exceptions,
-    extrapolation coefficients and PME settings. core_damping (with its range core_damping_scale) and mutual_damping_scale select the InteraxFF options
-    that HIPPO lacks; the multipoles and polarizabilities of alchemical_particles are scaled by alchemical_parameter.
-    The polarizabilities of 1e-14 nm^3 or less that the export gives to non-polarizable atoms (HIPPO needs them
-    positive) become zero.
+    extrapolation coefficients, PME settings and force group.  core_damping (with its range core_damping_scale) and
+    mutual_damping_scale select the InteraxFF options that HIPPO lacks; the multipoles and polarizabilities of
+    alchemical_particles are scaled by alchemical_parameter.  The polarizabilities of 1e-14 nm^3 or less that the
+    export gives to non-polarizable atoms (HIPPO needs them positive) become zero.
     """
     plugin = ip.InteraxMultipoleForce()
     method = hippo.getNonbondedMethod()
@@ -309,8 +331,8 @@ def unwrap_multipoles(system):
     """
     Replace, in place, each CustomCVForce that only wraps an InteraxMultipoleForce (its energy is the collective
     variable itself, with no global parameters) by a copy of that force with its own GPU kernel (setUseOwnKernel), in
-    the wrapper's force group, at the end of the force list. The force can then share the context with the other
-    nonbonded forces, which saves the inner context of the wrapper. Returns the number of forces unwrapped.
+    the wrapper's force group, at the end of the force list.  The force can then share the context with the other
+    nonbonded forces, which saves the inner context of the wrapper.  Returns the number of forces unwrapped.
     """
     found = []
     for index in range(system.getNumForces()):
@@ -337,9 +359,10 @@ _unwrap_multipoles = unwrap_multipoles
 def convert_system(system, copy=True, overlap="exact", unwrap_multipoles=True):
     """
     Return a copy of an exported InteraxFF System in which the dispersion, exchange repulsion, short-range correction
-    and molecular three-body dispersion use the plugin forces, named after their classes. Forces keep their group;
-    exchange-type forces whose amplitudes are all zero (the inactive exchange-induction term) are removed. With copy=False the System is
-    converted in place, which avoids serializing the millions of triples of the exported three-body force.
+    and molecular three-body dispersion use the plugin forces, named after their classes.  Forces keep their group;
+    exchange-type forces whose amplitudes are all zero (the inactive exchange-induction term) are removed.  With
+    copy=False the System is converted in place, which avoids serializing the millions of triples of the exported
+    three-body force.
 
     The Slater overlap of the exchange repulsion and the short-range correction uses, with overlap="export", the
     InteraxFF Taylor scheme of the export, evaluated as the export does (the converted forces reproduce it to
@@ -347,9 +370,9 @@ def convert_system(system, copy=True, overlap="exact", unwrap_multipoles=True):
     approximates to ~1e-6 relative).
 
     By default (unwrap_multipoles=True) an InteraxMultipoleForce wrapped in a CustomCVForce whose energy is that force
-    alone is put directly into the System with its own GPU kernel (see unwrap_multipoles()): identical energies, 14-36 %
-    faster liquids. CustomCVForces that combine or scale it (alchemical E_on / E_off copies) are left wrapped.
-    unwrap_multipoles=False keeps every wrapper.
+    alone is put directly into the System with its own GPU kernel (see unwrap_multipoles()), which gives the same
+    energies at a lower cost.  CustomCVForces that combine or scale it (alchemical E_on / E_off copies) are left
+    wrapped.  unwrap_multipoles=False keeps every wrapper.
     """
     if overlap not in ("export", "exact"):
         raise ValueError(f"overlap must be 'export' or 'exact', got {overlap!r}")

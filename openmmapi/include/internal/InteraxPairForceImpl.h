@@ -45,16 +45,23 @@ namespace InteraxPlugin {
 /**
  * Check that a pair force is consistent with the System it belongs to (number of particles, exclusions, cutoff,
  * switching distance and periodic box), and throw an OpenMMException if it is not.
+ *
+ * @param force      the force to check
+ * @param system     the System the force belongs to
+ * @param forceName  the name of the force class, used in the error messages
  */
 OPENMM_EXPORT_INTERAX void checkPairForce(const InteraxPairForce& force, const OpenMM::System& system, const std::string& forceName);
 
 /**
- * The context parameters a pair force defines: its alchemical parameter (default 1) if any particle is alchemical.
+ * Get the context parameters a pair force defines: its alchemical parameter, with a default value of 1, if any
+ * particle is alchemical, and none otherwise.
+ *
+ * @param force    the force whose parameters to get
  */
 OPENMM_EXPORT_INTERAX std::map<std::string, double> getPairForceDefaultParameters(const InteraxPairForce& force);
 
 /**
- * This is the internal implementation shared by the InteraxFF pair forces. ForceType is the Force class and
+ * This is the internal implementation shared by the InteraxFF pair forces.  ForceType is the Force class and
  * KernelType the kernel that computes it.
  */
 
@@ -107,10 +114,14 @@ public:
             InteraxPairForceImpl<InteraxDispersionForce, CalcInteraxDispersionForceKernel>(owner, "InteraxDispersionForce") {
     }
     /**
-     * Compute the coefficients of the long range correction: its energy is (coefficient + lambda*alchemicalCoefficient)/V,
-     * with V the volume of the periodic box and lambda the alchemical parameter. alchemicalCoefficient collects the
-     * pairs with exactly one alchemical particle. Both are zero unless the force uses periodic boundary conditions
+     * Compute the coefficients of the long range correction.  Its energy is (coefficient + lambda*alchemicalCoefficient)/V,
+     * with V the volume of the periodic box and lambda the alchemical parameter.  alchemicalCoefficient collects the
+     * pairs that involve an alchemical particle.  Both are zero unless the force uses periodic boundary conditions
      * and the long range correction is enabled.
+     *
+     * @param force                       the force for which to compute the correction
+     * @param[out] coefficient            the coefficient of the pairs without alchemical particles, in kJ/mol*nm^3
+     * @param[out] alchemicalCoefficient  the coefficient of the pairs with alchemical particles, in kJ/mol*nm^3
      */
     static void calcLongRangeCorrection(const InteraxDispersionForce& force, double& coefficient, double& alchemicalCoefficient);
 };

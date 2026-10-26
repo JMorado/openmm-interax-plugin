@@ -38,7 +38,9 @@
 #include "openmm/KernelImpl.h"
 #include "openmm/Platform.h"
 #include "openmm/System.h"
+#include "openmm/Vec3.h"
 #include <string>
+#include <vector>
 
 namespace InteraxPlugin {
 
@@ -186,6 +188,10 @@ public:
     virtual void copyParametersToContext(OpenMM::ContextImpl& context, const InteraxThreeBodyForce& force) = 0;
 };
 
+/**
+ * This kernel is invoked by InteraxMultipoleForce to calculate the forces acting on the system and the energy of
+ * the system.
+ */
 class CalcInteraxMultipoleForceKernel : public OpenMM::KernelImpl {
 public:
     static std::string Name() {
@@ -193,11 +199,51 @@ public:
     }
     CalcInteraxMultipoleForceKernel(std::string name, const OpenMM::Platform& platform) : OpenMM::KernelImpl(name, platform) {
     }
+    /**
+     * Initialize the kernel.
+     *
+     * @param system     the System this kernel will be applied to
+     * @param force      the InteraxMultipoleForce this kernel will be used for
+     */
     virtual void initialize(const OpenMM::System& system, const InteraxMultipoleForce& force) = 0;
+    /**
+     * Execute the kernel to calculate the forces and/or energy.
+     *
+     * @param context        the context in which to execute this kernel
+     * @param includeForces  true if forces should be calculated
+     * @param includeEnergy  true if the energy should be calculated
+     * @return the potential energy due to the force
+     */
     virtual double execute(OpenMM::ContextImpl& context, bool includeForces, bool includeEnergy) = 0;
+    /**
+     * Get the fixed dipole moments of all particles in the global reference frame.
+     *
+     * @param context         the context for which to get the fixed dipoles
+     * @param[out] dipoles    the fixed dipole moment of particle i is stored into the i'th element
+     */
     virtual void getLabFramePermanentDipoles(OpenMM::ContextImpl& context, std::vector<OpenMM::Vec3>& dipoles) = 0;
+    /**
+     * Get the induced dipole moments of all particles.
+     *
+     * @param context         the context for which to get the induced dipoles
+     * @param[out] dipoles    the induced dipole moment of particle i is stored into the i'th element
+     */
     virtual void getInducedDipoles(OpenMM::ContextImpl& context, std::vector<OpenMM::Vec3>& dipoles) = 0;
+    /**
+     * Copy changed parameters over to a context.
+     *
+     * @param context    the context to copy parameters to
+     * @param force      the InteraxMultipoleForce to copy the parameters from
+     */
     virtual void copyParametersToContext(OpenMM::ContextImpl& context, const InteraxMultipoleForce& force) = 0;
+    /**
+     * Get the parameters being used for PME.
+     *
+     * @param alpha   the separation parameter
+     * @param nx      the number of grid points along the X axis
+     * @param ny      the number of grid points along the Y axis
+     * @param nz      the number of grid points along the Z axis
+     */
     virtual void getPMEParameters(double& alpha, int& nx, int& ny, int& nz) const = 0;
 };
 

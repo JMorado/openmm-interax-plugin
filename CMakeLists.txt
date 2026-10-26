@@ -1,8 +1,5 @@
 #---------------------------------------------------
 # OpenMM InteraxFF Plugin
-#
-# Dispersion, exchange repulsion, short-range correction and three-body dispersion of the InteraxFF force field
-# (electrostatics and polarization use OpenMM's HippoNonbondedForce). See docs/SPEC.md.
 #----------------------------------------------------
 
 CMAKE_MINIMUM_REQUIRED(VERSION 3.17)

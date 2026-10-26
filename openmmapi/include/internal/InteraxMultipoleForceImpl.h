@@ -36,6 +36,7 @@
 #include "InteraxMultipoleForce.h"
 #include "openmm/internal/ForceImpl.h"
 #include "openmm/Kernel.h"
+#include "openmm/Vec3.h"
 #include <map>
 #include <string>
 #include <vector>

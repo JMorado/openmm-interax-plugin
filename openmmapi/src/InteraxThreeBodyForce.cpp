@@ -36,8 +36,8 @@ using namespace InteraxPlugin;
 using namespace OpenMM;
 using namespace std;
 
-InteraxThreeBodyForce::InteraxThreeBodyForce() : cutoffDistance(1.2), scaleFactor(1.0), dampingScale(1.0), centroidDampingRadius(0.0), dampingMethod(NoDamping),
-        usePeriodic(false), alchemicalParameterName("lambda_sterics") {
+InteraxThreeBodyForce::InteraxThreeBodyForce() : cutoffDistance(1.2), scaleFactor(1.0), dampingScale(1.0), centroidDampingRadius(0.0),
+        dampingMethod(NoDamping), usePeriodic(false), alchemicalParameterName("lambda_sterics") {
 }
 
 int InteraxThreeBodyForce::addSite(const vector<int>& particles, double alpha, double frequency, double width, int molecule, bool isAlchemical) {
