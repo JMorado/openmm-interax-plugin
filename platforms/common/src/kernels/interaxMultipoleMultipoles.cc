@@ -327,22 +327,24 @@ KERNEL void mapTorqueToForce(GLOBAL mm_ulong* RESTRICT forceBuffers, GLOBAL cons
                 forces[I] = -(forces[X] + forces[Y] + forces[Z]);
             }
             else if (axisType == 3) {
-                // 3-fold
-        
-                forces[Z] = (vector[UW]*dphi[W]/(norms[U]*angles[UW][1]) +
-                            vector[UV]*dphi[V]/(norms[U]*angles[UV][1]) -
-                            vector[UW]*dphi[U]/(norms[U]*angles[UW][1]) -
-                            vector[UV]*dphi[U]/(norms[U]*angles[UV][1]))/3;
+                // 3-fold: exact chain rule for the frame of computeLabFrameMoments() (see
+                // ReferenceInteraxMultipole::mapTorqueToForceForParticle). a, b, c are the unit vectors from this
+                // atom to the z, x and y axis atoms; vector[U] = -a, vector[V] = -b, vector[W] = c.
 
-                forces[X] = (vector[VW]*dphi[W]/(norms[V]*angles[VW][1]) -
-                            vector[UV]*dphi[U]/(norms[V]*angles[UV][1]) -
-                            vector[VW]*dphi[V]/(norms[V]*angles[VW][1]) +
-                            vector[UV]*dphi[V]/(norms[V]*angles[UV][1]))/3;
-
-                forces[Y] = (-vector[UW]*dphi[U]/(norms[W]*angles[UW][1]) -
-                            vector[VW]*dphi[V]/(norms[W]*angles[VW][1]) +
-                            vector[UW]*dphi[W]/(norms[W]*angles[UW][1]) +
-                            vector[VW]*dphi[W]/(norms[W]*angles[VW][1]))/3;
+                real3 a = -vector[U], b = -vector[V], c = vector[W];
+                real3 s = a + b + c;
+                real ns = SQRT(dot(s, s));
+                real3 z = s/ns;
+                real bz = dot(b, z);
+                real3 xp = b - bz*z;
+                real nxp = SQRT(dot(xp, xp));
+                real3 y = cross(z, xp/nxp);
+                real tz = dot(torque, z);
+                real3 h = (cross(torque, z) - (tz*bz/nxp)*y)/ns;
+                real3 hb = h + (tz/nxp)*y;
+                forces[Z] = (h - dot(a, h)*a)/norms[U];
+                forces[X] = (hb - dot(b, hb)*b)/norms[V];
+                forces[Y] = (h - dot(c, h)*c)/norms[W];
                 forces[I] = -(forces[X] + forces[Y] + forces[Z]);
             }
             else if (axisType == 4) {

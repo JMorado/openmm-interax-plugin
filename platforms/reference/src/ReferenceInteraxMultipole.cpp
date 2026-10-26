@@ -1229,31 +1229,35 @@ void ReferenceInteraxMultipole::mapTorqueToForceForParticle(const MultipoleParti
         forces[particleI.index] -= (forceU + forceV + forceW);
 
     }
-    else if (axisType == InteraxMultipoleForce::ThreeFold) {
-        Vec3 du =  vectorUW*dphi[W]/(norms[U]*angles[UW][1]) +
-                   vectorUV*dphi[V]/(norms[U]*angles[UV][1]) -
-                   vectorUW*dphi[U]/(norms[U]*angles[UW][1]) -
-                   vectorUV*dphi[U]/(norms[U]*angles[UV][1]);
-
-        Vec3 dv =  vectorVW*dphi[W]/(norms[V]*angles[VW][1]) -
-                   vectorUV*dphi[U]/(norms[V]*angles[UV][1]) -
-                   vectorVW*dphi[V]/(norms[V]*angles[VW][1]) +
-                   vectorUV*dphi[V]/(norms[V]*angles[UV][1]);
-
-        Vec3 dw = -vectorUW*dphi[U]/(norms[W]*angles[UW][1]) -
-                   vectorVW*dphi[V]/(norms[W]*angles[VW][1]) +
-                   vectorUW*dphi[W]/(norms[W]*angles[UW][1]) +
-                   vectorVW*dphi[W]/(norms[W]*angles[VW][1]);
-
-        du /= 3.0;
-        dv /= 3.0;
-        dw /= 3.0;
-
-        forces[particleU.index] += du;
-        forces[particleV.index] += dv;
-        if (particleW)
-            forces[particleW->index] += dw;
-        forces[particleI.index] -= (du + dv + dw);
+    else if (axisType == InteraxMultipoleForce::ThreeFold && particleW) {
+        // Exact chain rule for the frame of applyRotationMatrixToParticle() (Tinker's 3-fold torque mapping is not
+        // the gradient of the energy). With a, b, c the unit vectors from this particle to the z, x and y axis
+        // particles, s = a+b+c, z = s/|s|, x' = b-(b.z)z, x = x'/|x'| and y = z cross x, an infinitesimal change of
+        // the frame is a rotation dtheta = z cross dz + (y.dx) z, dE = -torque.dtheta, and
+        // y.dx = (y.db - (b.z) y.dz)/|x'|, dz = P_z ds/|s|, da = P_a dr_a/|r_a| (P_n = 1 - n n^T).
+        Vec3 ra = particleU.position - particleI.position;
+        Vec3 rb = particleV.position - particleI.position;
+        Vec3 rc = particleW->position - particleI.position;
+        double na = sqrt(ra.dot(ra)), nb = sqrt(rb.dot(rb)), nc = sqrt(rc.dot(rc));
+        Vec3 a = ra/na, b = rb/nb, c = rc/nc;
+        Vec3 sum = a + b + c;
+        double ns = sqrt(sum.dot(sum));
+        Vec3 z = sum/ns;
+        double bz = b.dot(z);
+        Vec3 xp = b - z*bz;
+        double nxp = sqrt(xp.dot(xp));
+        Vec3 y = z.cross(xp/nxp);
+        double tz = torque.dot(z);
+        Vec3 gb = y*(tz/nxp);
+        Vec3 h = (torque.cross(z) - y*(tz*bz/nxp))/ns;
+        Vec3 hb = h + gb;
+        Vec3 forceU = (h - a*a.dot(h))/na;
+        Vec3 forceV = (hb - b*b.dot(hb))/nb;
+        Vec3 forceW = (h - c*c.dot(h))/nc;
+        forces[particleU.index] += forceU;
+        forces[particleV.index] += forceV;
+        forces[particleW->index] += forceW;
+        forces[particleI.index] -= (forceU + forceV + forceW);
     }
     else if (axisType == InteraxMultipoleForce::ZOnly) {
         Vec3 du = vectorUV*dphi[V]/(norms[U]*angles[UV][1]) + vectorUW*dphi[W]/norms[U];
