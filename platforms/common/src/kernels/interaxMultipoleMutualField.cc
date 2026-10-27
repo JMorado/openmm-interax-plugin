@@ -34,3 +34,9 @@ real scale5 = 3*fdamp5*invR3*invR2;
 #endif
 tempField1 = inducedDipole2*scale3 + delta*scale5*dot(inducedDipole2, delta);
 tempField2 = inducedDipole1*scale3 + delta*scale5*dot(inducedDipole1, delta);
+// InteraxFF: a particle without an induced dipole (an alchemical particle at lambda = 0) produces exactly no field,
+// even where 1/r^5 overflows in single precision.
+if (inducedDipole1.x == 0 && inducedDipole1.y == 0 && inducedDipole1.z == 0)
+    tempField2 = make_real3(0);
+if (inducedDipole2.x == 0 && inducedDipole2.y == 0 && inducedDipole2.z == 0)
+    tempField1 = make_real3(0);

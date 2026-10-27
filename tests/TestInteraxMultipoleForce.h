@@ -722,6 +722,48 @@ void testAgainstReference() {
 }
 
 /**
+ * Test an alchemical molecule at lambda = 0 overlapping another molecule, as a decoupled solute lets water through it:
+ * its pairs must stay exactly zero, although the inverse powers of r overflow in single precision below ~0.001 nm.
+ */
+void testAlchemicalOverlap() {
+    for (bool periodic : {false, true}) {
+        MultipoleSystem s = (periodic ? createWaterBox(3, 1.25, 2) : createWaterTrimer());
+        InteraxOptions options;
+        options.coreDamping = true;
+        options.coreDampingScale = 0.7;
+        options.isAlchemical.resize(s.particles.size(), false);
+        for (int i = 0; i < 3; i++)
+            options.isAlchemical[i] = true;
+        System system;
+        createSystem(system, s, createInteraxForce(s, options));
+
+        // Move the first water so that its oxygen is 0.0005 nm from the oxygen of the second.
+
+        vector<Vec3> positions = s.positions;
+        Vec3 shift = positions[3]+Vec3(5e-4, 0, 0)-positions[0];
+        for (int i = 0; i < 3; i++)
+            positions[i] += shift;
+        map<string, double> parameters = {{"lambda_electrostatics", 0.0}};
+        MultipoleResults found = evaluate(system, positions, platform, parameters);
+        for (int i = 0; i < found.forces.size(); i++)
+            for (int j = 0; j < 3; j++)
+                ASSERT(isfinite(found.forces[i][j]));
+        for (int i = 0; i < 3; i++)
+            ASSERT_EQUAL_VEC(Vec3(), found.forces[i], 0.0);
+
+        // The decoupled molecule does not interact: moving it must change nothing (compared on the same platform,
+        // as testAlchemical() does, since single precision differs from Reference by ~3e-4 for this system).
+
+        MultipoleResults apart = evaluate(system, s.positions, platform, parameters);
+        ASSERT_EQUAL_TOL(apart.energy, found.energy, energyTol);
+        for (int i = 3; i < found.forces.size(); i++)
+            ASSERT_EQUAL_VEC(apart.forces[i], found.forces[i], 10*energyTol);
+        if (platform.getName() != "Reference" && getPlatformPrecision(platform, true) == "double")
+            compareResults(evaluate(system, positions, Platform::getPlatformByName("Reference"), parameters), found, energyTol);
+    }
+}
+
+/**
  * Test that invalid parameters are rejected.
  */
 void testIllegalSettings() {
@@ -784,6 +826,7 @@ int main(int argc, char* argv[]) {
         testOwnKernel();
         testChangingParameters();
         testAgainstReference();
+        testAlchemicalOverlap();
         testIllegalSettings();
         runPlatformTests();
     }

@@ -116,6 +116,8 @@ double ReferenceInteraxThreeBodyIxn::calculateIxn(const vector<Vec3>& positions,
                 double c9 = scaleFactor*InteraxThreeBodyForceImpl::computeC9(alpha[i], frequency[i], alpha[j], frequency[j], alpha[k], frequency[k]);
                 if (isAlchemical[i] || isAlchemical[j] || isAlchemical[k])
                     c9 *= lambda;
+                if (c9 == 0)
+                    continue;  // a switched-off triple: exactly zero, and its 1/r^9 terms may overflow when sites coincide
                 double rates[3] = {2*dampingScale/(width[i]+width[j]), 2*dampingScale/(width[i]+width[k]), 2*dampingScale/(width[j]+width[k])};
                 energy += InteraxThreeBodyTerms::computeTriple(getDelta(sites[i], sites[j], boxVectors), getDelta(sites[i], sites[k], boxVectors),
                         getDelta(sites[j], sites[k], boxVectors), c9, useDamping ? rates : NULL, siteForces[i], siteForces[j], siteForces[k], dampingRadius);

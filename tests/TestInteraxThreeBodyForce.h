@@ -448,6 +448,36 @@ void testAlchemical() {
 }
 
 /**
+ * Test alchemical sites at lambda = 0 that coincide with another site, as a decoupled solute lets water through it:
+ * their triples must stay exactly zero, although 1/(u v w)^(5/2) overflows in single precision.
+ */
+void testAlchemicalOverlap() {
+    System system;
+    InteraxThreeBodyForce* force = createSingleParticleSites(system, 5);
+    for (int i : {0, 1}) {
+        vector<int> particles;
+        double alpha, frequency, width;
+        int molecule;
+        bool isAlchemical;
+        force->getSiteParameters(i, particles, alpha, frequency, width, molecule, isAlchemical);
+        force->setSiteParameters(i, particles, alpha, frequency, width, molecule, true);
+    }
+    VerletIntegrator integrator(0.001);
+    Context context(system, integrator, platform);
+    vector<Vec3> positions = {Vec3(0, 0.4, 1e-9), Vec3(0.35, 0, 0), Vec3(0, 0.4, 0), Vec3(0.3, 0.3, 0.2), Vec3(-0.2, 0.1, 0.35)};
+    context.setPositions(positions);
+    context.setParameter("lambda_sterics", 0.0);
+    State state = getEnergyAndForces(context);
+    Vec3 box[3];
+    ASSERT_EQUAL_REL((double) computeReferenceEnergy(*force, positions, box, 0), state.getPotentialEnergy(), energyTol);
+    for (int i = 0; i < 5; i++)
+        for (int j = 0; j < 3; j++)
+            ASSERT(isfinite(state.getForces()[i][j]));
+    for (int i : {0, 1})
+        ASSERT_EQUAL_VEC(Vec3(), state.getForces()[i], 0.0);
+}
+
+/**
  * Test a larger periodic system of molecular sites with damping and alchemical sites, and check the forces against
  * the energy.
  */
@@ -592,6 +622,7 @@ int main(int argc, char* argv[]) {
         testPeriodic();
         testDamping();
         testAlchemical();
+        testAlchemicalOverlap();
         testLargeSystem();
         testChangingParameters();
         testIllegalSettings();

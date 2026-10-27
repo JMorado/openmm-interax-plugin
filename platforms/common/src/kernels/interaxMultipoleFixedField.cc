@@ -98,3 +98,12 @@ tempField2 = delta*factor1 - dipole1*rr3i - qDotDelta1*2*rr5i;
     tempField2 += bareField2*(f2-1);
 }
 #endif
+
+// InteraxFF: a particle without permanent moments (an alchemical particle at lambda = 0) produces no field. Set it to
+// exactly zero: the inverse powers of r overflow in single precision when it overlaps another particle.
+if (coreCharge1 == 0 && valenceCharge1 == 0 && dipole1.x == 0 && dipole1.y == 0 && dipole1.z == 0 && qXX1 == 0 && qXY1 == 0 &&
+        qXZ1 == 0 && qYY1 == 0 && qYZ1 == 0)
+    tempField2 = make_real3(0);
+if (coreCharge2 == 0 && valenceCharge2 == 0 && dipole2.x == 0 && dipole2.y == 0 && dipole2.z == 0 && qXX2 == 0 && qXY2 == 0 &&
+        qXZ2 == 0 && qYY2 == 0 && qYZ2 == 0)
+    tempField1 = make_real3(0);

@@ -211,6 +211,10 @@ KERNEL void computeTriples(int numSites, int maxNeighbors, GLOBAL const real4* R
                     real c9 = scaleFactor*1.5f*paramsA.x*paramsB.x*paramsC.x*wA*wB*wC*(wA+wB+wC)/((wA+wB)*(wB+wC)*(wC+wA));
                     if (alchemicalA || paramsB.w != 0 || paramsC.w != 0)
                         c9 *= lambda;
+                    // A switched-off triple is exactly zero; skip it, as 1/(u v w)^(5/2) overflows in single precision
+                    // when two of its sites nearly coincide (a decoupled solute lets water through).
+                    if (c9 == 0)
+                        continue;
                     const real u = dot(a, a), v = dot(b, b);
                     const real p = dot(a, b), q = dot(a, c), s = dot(b, c);
                     const real invP = 1/(u*v*w);

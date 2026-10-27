@@ -1,5 +1,15 @@
 // Functions called by the InteraxMultipoleForce interaction kernels (from OpenMM's HIPPO kernels, hippoInteractionHeader.cc).
 
+// InteraxFF: whether a particle has no charge, multipole or induced dipole (an alchemical particle at lambda = 0).
+// Every pair term contains a moment of each particle, so the pairs of such a particle are skipped: they are exactly
+// zero, but the inverse powers of r overflow in single precision when it overlaps another particle (rr11 below
+// ~0.001 nm, which a decoupled solute allows), and zero times infinity is not zero.
+DEVICE bool isInertParticle(real coreCharge, real valenceCharge, real3 dipole, real qXX, real qXY, real qXZ, real qYY, real qYZ,
+                            real3 inducedDipole) {
+    return coreCharge == 0 && valenceCharge == 0 && dipole.x == 0 && dipole.y == 0 && dipole.z == 0 && qXX == 0 && qXY == 0 &&
+           qXZ == 0 && qYY == 0 && qYZ == 0 && inducedDipole.x == 0 && inducedDipole.y == 0 && inducedDipole.z == 0;
+}
+
 DEVICE void formQIRotationMatrix(real3 deltaR, real rInv, real rotationMatrix[3][3]) {
     real3 vectorZ = deltaR*rInv;
     real3 vectorX = make_real3(0);

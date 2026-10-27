@@ -3,6 +3,9 @@ unsigned int includeInteraction = (!isExcluded && r2 < CUTOFF_SQUARED);
 #else
 unsigned int includeInteraction = (!isExcluded);
 #endif
+// InteraxFF: skip the pairs of a particle without moments (see isInertParticle()).
+includeInteraction = includeInteraction && !isInertParticle(coreCharge1, valenceCharge1, dipole1, qXX1, qXY1, qXZ1, qYY1, qYZ1, inducedDipole1)
+                     && !isInertParticle(coreCharge2, valenceCharge2, dipole2, qXX2, qXY2, qXZ2, qYY2, qYZ2, inducedDipole2);
 
 // Convert to quasi-internal coordinates.
 

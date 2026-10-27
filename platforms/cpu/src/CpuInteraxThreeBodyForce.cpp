@@ -177,6 +177,8 @@ void CpuInteraxThreeBodyForce::threadComputeForce(ThreadPool& threads, int threa
                 double c9 = scaleFactor*InteraxThreeBodyForceImpl::computeC9(alpha[a], frequency[a], alpha[b], frequency[b], alpha[c], frequency[c]);
                 if (isAlchemical[a] || isAlchemical[b] || isAlchemical[c])
                     c9 *= lambda;
+                if (c9 == 0)
+                    continue;  // a switched-off triple: exactly zero, as on the other platforms
                 double rates[3] = {2*dampingScale/(width[a]+width[b]), 2*dampingScale/(width[a]+width[c]), 2*dampingScale/(width[b]+width[c])};
                 energy += InteraxThreeBodyTerms::computeTriple(computeDelta(sites[a], sites[b], boxVectors), computeDelta(sites[a], sites[c], boxVectors),
                         computeDelta(sites[b], sites[c], boxVectors), c9, useDamping ? rates : NULL, siteForces[a], siteForces[b], siteForces[c], dampingRadius);
