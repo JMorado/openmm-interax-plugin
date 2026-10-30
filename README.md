@@ -79,20 +79,151 @@ error is `CUDA_ERROR_UNSUPPORTED_PTX_VERSION`), preload an NVRTC that matches th
 Using The Plugin
 ================
 
-**From a force field file.** Importing `interaxplugin_forcefield` registers OpenMM `ForceField` generators for the
+Load the plugin and make its Python modules importable (when it is installed in its own prefix):
+
+```python
+import sys
+import openmm
+
+PREFIX = "/shared/joaomorado/opt/openmm-interax-v9"
+sys.path.insert(0, f"{PREFIX}/python")
+openmm.Platform.loadPluginsFromDirectory(f"{PREFIX}/lib/plugins")
+
+import interaxplugin             # the forces
+import interaxplugin_forcefield  # their ForceField (ffxml) generators
+import interaxplugin_convert     # conversion of exported InteraxFF Systems
+
+print(interaxplugin_convert.build_info())  # version and git commit of the build
+```
+
+Creating Systems
+----------------
+
+**From force field files.** Importing `interaxplugin_forcefield` registers OpenMM `ForceField` generators for the
 ffxml tags `<InteraxMultipoleForce>`, `<InteraxDispersionForce>`, `<InteraxExchangeForce>`, `<InteraxShortRangeForce>`
-and `<InteraxThreeBodyForce>`, so that `openmm.app.ForceField(...).createSystem(topology)` builds the plugin forces
-from scratch, as for any OpenMM force field. Parameters are per atom type (the attributes of each force's
-`addParticle()`); multipole frames are given by the atom types of the z, x and y atoms, as in OpenMM's AMOEBA and
-HIPPO files; every intramolecular pair is excluded. The module docstring lists the tags and their settings. InteraxFF
-writes these files per molecule with a residue template generator (`interax.openmm_forcefield`), in the way
-openmmforcefields parameterizes small molecules.
+and `<InteraxThreeBodyForce>`, so that `ForceField.createSystem()` builds the plugin forces from scratch, as for any
+OpenMM force field. Parameters are per atom type (the arguments of each force's `addParticle()`, in OpenMM units);
+multipole frames are given by the atom types of the z, x and y atoms, as in OpenMM's AMOEBA and HIPPO files; every
+intramolecular pair is excluded. The module docstring lists the tags and their settings. A water model, for example:
+
+```python
+import io
+import numpy as np
+from openmm import app, unit
+
+WATER = """<ForceField>
+ <AtomTypes>
+  <Type name="w-O" class="w-O" element="O" mass="15.999"/>
+  <Type name="w-H" class="w-H" element="H" mass="1.008"/>
+ </AtomTypes>
+ <Residues>
+  <Residue name="HOH">
+   <Atom name="O" type="w-O"/><Atom name="H1" type="w-H"/><Atom name="H2" type="w-H"/>
+   <Bond atomName1="O" atomName2="H1"/><Bond atomName1="O" atomName2="H2"/>
+  </Residue>
+ </Residues>
+ <HarmonicBondForce>
+  <Bond type1="w-O" type2="w-H" length="0.09572" k="462750.4"/>
+ </HarmonicBondForce>
+ <HarmonicAngleForce>
+  <Angle type1="w-H" type2="w-O" type3="w-H" angle="1.82421813418" k="836.8"/>
+ </HarmonicAngleForce>
+ <InteraxMultipoleForce extrapolationCoefficients="1.0">
+  <Atom type="w-O" charge="-0.8" coreCharge="6.0" alpha="40.0" polarizability="0.0009" axisType="1"
+        d0="0" d1="0" d2="0.003" q11="1e-4" q12="0" q13="0" q21="0" q22="-6e-5" q23="0" q31="0" q32="0" q33="-4e-5"
+        zAtomType="w-H" xAtomType="w-H"/>
+  <Atom type="w-H" charge="0.4" coreCharge="1.0" alpha="45.0" polarizability="0.0003" axisType="0"
+        d0="0" d1="0" d2="-0.002" q11="0" q12="0" q13="0" q21="0" q22="0" q23="0" q31="0" q32="0" q33="0"
+        zAtomType="w-O" xAtomType="w-H"/>
+ </InteraxMultipoleForce>
+ <InteraxDispersionForce dampingScale="1.0">
+  <Atom type="w-O" m1="0.12" m2="0.02" m3="0.005" alpha="0.0012" width="0.03"/>
+  <Atom type="w-H" m1="0.03" m2="0.004" m3="0.001" alpha="0.0003" width="0.025"/>
+ </InteraxDispersionForce>
+ <InteraxExchangeForce>
+  <Atom type="w-O" amplitude="3.0" width="0.03"/>
+  <Atom type="w-H" amplitude="1.2" width="0.025"/>
+ </InteraxExchangeForce>
+</ForceField>"""
+
+forcefield = app.ForceField(io.StringIO(WATER))
+topology = app.Topology()
+chain = topology.addChain()
+positions = []
+for k in range(2):
+    residue = topology.addResidue("HOH", chain)
+    o = topology.addAtom("O", app.element.oxygen, residue)
+    h1 = topology.addAtom("H1", app.element.hydrogen, residue)
+    h2 = topology.addAtom("H2", app.element.hydrogen, residue)
+    topology.addBond(o, h1)
+    topology.addBond(o, h2)
+    positions += [[0.3 * k, 0, 0], [0.3 * k + 0.0957, 0, 0], [0.3 * k - 0.024, 0.0927, 0]]
+system = forcefield.createSystem(topology, nonbondedMethod=app.NoCutoff)  # app.PME with a periodic box
+# an H-bonded dimer: about -18 kJ/mol
+```
+
+The parameters of this water are illustrative. InteraxFF writes such files itself, one per molecule, from its
+predicted parameters, with a residue template generator (`interax.openmm_forcefield`, in the way openmmforcefields
+parameterizes small molecules):
+
+```python
+import torch
+from openff.toolkit import Molecule, Topology
+from openff.units import unit as off_unit
+from interax.force_field import ForceField
+from interax.models import NAGLModel, PerAtomicNumberModel
+from interax.openmm_forcefield import create_system
+
+MODEL = "/shared/joaomorado/repos/InteraxFF/examples/models_v3R4bfdE1MQsce07fFIA"
+nagl = NAGLModel.load(f"{MODEL}/nagl_model.pt")
+ff = ForceField(nagl, PerAtomicNumberModel.load(f"{MODEL}/per_atomic_number_model.pt", device="cpu"))
+ff.load_state_dict(torch.load(f"{MODEL}/force_field_state.pt", map_location="cpu"), strict=False)
+
+water, methanol = Molecule.from_smiles("O"), Molecule.from_smiles("CO")
+for molecule in (water, methanol):
+    molecule.generate_conformers(n_conformers=1)
+topology = Topology.from_molecules([water, methanol])  # periodic: set topology.box_vectors (PME)
+xyz = topology.get_positions().m_as("nanometer")
+xyz[water.n_atoms:] += [0.35, 0.0, 0.0]               # both molecules start at the origin
+topology.set_positions(xyz * off_unit.nanometer)
+
+system, omm_topology, positions = create_system(topology, ff, nagl, components=[
+    "E_static", "E_ind", "E_disp", "E_exrep", "E_src", "E_exind", "E_ct", "E_atm"])
+```
+
+`create_system` returns the OpenMM Topology and positions with the virtual sites (lone pairs, bond multipoles) added.
+For a Topology from elsewhere (a PDB file), use the template generator with OpenMM's own tools:
+
+```python
+from openmm import app
+from interax.openmm_forcefield import interax_forcefield
+
+forcefield = interax_forcefield(ff, nagl, molecules=[water, methanol])  # an openmm.app.ForceField
+modeller = app.Modeller(omm_topology, positions)                        # e.g. app.PDBFile(...).topology, .positions
+modeller.addExtraParticles(forcefield)                                  # adds the virtual sites the templates define
+system = forcefield.createSystem(modeller.topology, nonbondedMethod=app.NoCutoff)  # app.PME for a periodic box
+```
+
+The valence terms, constraints and intramolecular nonbonded interactions come from the base force field (OpenFF Sage
+by default, `base_force_field=`), as in the InteraxFF export; pass `constraints=None` to `createSystem`. Models with
+terms the plugin does not implement raise `NotImplementedError` (see `interax/openmm_forcefield.py`).
 
 **From an exported System.** `interaxplugin_convert.convert_system(system)` takes a System built by the InteraxFF export and replaces its
 dispersion, exchange repulsion, short-range correction and three-body forces by the plugin forces, keeping every other
 force. With `overlap="exact"` (the default) the Slater overlaps are evaluated exactly; with `overlap="export"` they use
 the export's Taylor scheme and the converted forces reproduce the export to rounding. With `copy=False` the System is
-converted in place, which avoids copying the millions of triples of the exported three-body force.
+converted in place, which avoids copying the millions of triples of the exported three-body force. This is the route
+`examples/simulate_liquid.py` of InteraxFF takes; it gives the same System as the force field route above, with the
+virtual sites after all atoms:
+
+```python
+from interax.openmm import create_system_from_topology, extend_positions_for_sites
+
+exported = create_system_from_topology(topology, ff, nagl, electrostatics="interax", components=[
+    "E_static", "E_ind", "E_disp", "E_exrep", "E_src", "E_exind", "E_ct", "E_atm"])
+system = interaxplugin_convert.convert_system(exported, copy=False)
+positions = extend_positions_for_sites(topology.get_positions().to_openmm(), system)
+```
 
 `interaxplugin_convert.atomic_three_body(dispersion)` builds an atomic Axilrod-Teller-Muto force (one site per atom,
 Tang-Toennies damping) from the exported dispersion. It is not a term of the trained InteraxFF models.
