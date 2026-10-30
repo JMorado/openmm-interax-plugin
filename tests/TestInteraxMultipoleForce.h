@@ -768,6 +768,41 @@ void testChirality() {
 }
 
 /**
+ * Test a particle at the same position as another one, fully excluded from it (all scale factors zero), as
+ * InteraxFF's bond multipole sites sit on their host atom (non-periodic only): moving the host's multipoles onto the
+ * coincident particle must change nothing, and the force on the pair must equal the host's force.
+ */
+void testCoincidentParticles() {
+    MultipoleSystem withHost = createWaterDimer(), withSite = createWaterDimer();
+    // particle 1 (an H) carries its multipoles itself, or gives them to a new particle 6 at its position
+    MultipoleParticle site = withSite.particles[1];
+    site.charge = 0.0;
+    site.coreCharge = 0.0;
+    site.polarizability = 0.0;
+    withSite.particles[1].dipole = {0.0, 0.0, 0.0};
+    withSite.particles[1].quadrupole = vector<double>(9, 0.0);
+    site.atomY = -1;
+    withSite.particles.push_back(site);
+    withSite.positions.push_back(withSite.positions[1]);
+    for (int i = 0; i < 3; i++)
+        withSite.exceptions.push_back({i, 6, 0.0, 0.0, 0.0});
+    withHost.particles[1].atomY = -1;
+    System hostSystem, siteSystem;
+    createSystem(hostSystem, withHost, createInteraxForce(withHost));
+    createSystem(siteSystem, withSite, createInteraxForce(withSite));
+    MultipoleResults expected = evaluate(hostSystem, withHost.positions, platform);
+    MultipoleResults found = evaluate(siteSystem, withSite.positions, platform);
+    ASSERT(isfinite(found.energy));
+    ASSERT_EQUAL_TOL(expected.energy, found.energy, energyTol);
+    for (int i = 0; i < 6; i++) {
+        Vec3 f = found.forces[i];
+        if (i == 1)
+            f += found.forces[6];
+        ASSERT_EQUAL_VEC(expected.forces[i], f, 10*energyTol);
+    }
+}
+
+/**
  * Test, on a platform other than Reference, the InteraxFF options in a periodic box against the Reference platform.
  */
 void testAgainstReference() {
@@ -897,6 +932,7 @@ int main(int argc, char* argv[]) {
         testChangingParameters();
         testAgainstReference();
         testChirality();
+        testCoincidentParticles();
         testAlchemicalOverlap();
         testIllegalSettings();
         runPlatformTests();

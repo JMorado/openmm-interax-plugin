@@ -571,10 +571,18 @@ void ReferenceInteraxMultipole::calculateFixedMultipoleFieldPairIxn(const Multip
     _fixedMultipoleField[particleI.index] -= field;
 }
 
+bool ReferenceInteraxMultipole::isFullyExcluded(int i, int j) const {
+    if (_nonbondedMethod != InteraxMultipoleForce::NoCutoff)
+        return false;
+    auto exception = exceptions.find(make_pair(i, j));
+    return (exception != exceptions.end() && exception->second.multipoleMultipoleScale == 0.0 &&
+            exception->second.dipoleMultipoleScale == 0.0 && exception->second.dipoleDipoleScale == 0.0);
+}
+
 void ReferenceInteraxMultipole::calculateFixedMultipoleField() {
     for (int i = 0; i < _numParticles; i++)
         for (int j = 0; j < _numParticles; j++)
-            if (i != j)
+            if (i != j && !isFullyExcluded(i, j))
                 calculateFixedMultipoleFieldPairIxn(particleData[i], particleData[j]);
 
     // InteraxFF: core damping of the fields.
@@ -624,7 +632,8 @@ void ReferenceInteraxMultipole::calculateInducedDipoleFields(const vector<Multip
 
     for (int ii = 0; ii < _numParticles; ii++)
         for (int jj = ii; jj < _numParticles; jj++)
-            calculateInducedDipolePairIxns(particleData[ii], particleData[jj]);
+            if (!isFullyExcluded(ii, jj))
+                calculateInducedDipolePairIxns(particleData[ii], particleData[jj]);
 }
 
 void ReferenceInteraxMultipole::convergeInduceDipolesByExtrapolation(const vector<MultipoleParticleData>& particleData) {
@@ -989,7 +998,7 @@ Vec3 ReferenceInteraxMultipole::calculateDirectPairField(const MultipoleParticle
 void ReferenceInteraxMultipole::addCoreDampingFields() {
     for (int i = 0; i < _numParticles; i++)
         for (int j = 0; j < _numParticles; j++) {
-            if (i == j)
+            if (i == j || isFullyExcluded(i, j))
                 continue;
             Vec3 deltaR = particleData[j].position - particleData[i].position;
             getPeriodicDelta(deltaR);
@@ -1322,6 +1331,8 @@ double ReferenceInteraxMultipole::calculateInteractions(vector<Vec3>& torques, v
     double energy = 0.0;
     for (int i = 0; i < _numParticles; i++) {
         for (int j = i+1; j < _numParticles; j++) {
+            if (isFullyExcluded(i, j))
+                continue;
             Vec3 deltaR = particleData[j].position - particleData[i].position;
             if (_nonbondedMethod == InteraxMultipoleForce::PME)
                 getPeriodicDelta(deltaR);

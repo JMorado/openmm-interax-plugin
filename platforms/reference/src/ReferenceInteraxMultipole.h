@@ -322,6 +322,13 @@ protected:
      * Invert multipole moments (dipole[Y], quadrupole[XY] and quadrupole[YZ]) if chiral center inverted.
      */
     void checkChiral();
+
+    /**
+     * InteraxFF: whether a pair is an exception with all scale factors zero and the method is NoCutoff, so that the
+     * pair contributes nothing and is skipped. This allows particles at the same position (bond multipole sites on
+     * their host atom), whose pair terms would otherwise be evaluated at r = 0 and multiplied by zero.
+     */
+    bool isFullyExcluded(int i, int j) const;
     /**
      * Apply rotation matrix to molecular dipole/quadrupoles to get corresponding lab frame values
      * for particle I.
