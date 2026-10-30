@@ -49,6 +49,11 @@ def plugin_system(export):
 def main():
     ff, nagl = load_model()
     commit = subprocess.run(["git", "-C", INTERAX_REPO, "rev-parse", "--short", "HEAD"], capture_output=True, text=True).stdout.strip()
+    # The model files themselves identify the parameters even if the InteraxFF commit becomes unreachable
+    import hashlib
+
+    checksums = ", ".join(f"{f} sha256 {hashlib.sha256(open(os.path.join(MODEL, f), 'rb').read()).hexdigest()[:16]}"
+                          for f in sorted(os.listdir(MODEL)) if f.endswith(".pt"))
     for name, (make_topology, periodic, description) in SYSTEMS.items():
         topology, positions = make_topology()
         export = create_system_from_topology(topology, ff, nagl, electrostatics="interax", nonbonded_cutoff=0.9, components=COMPONENTS)
@@ -63,6 +68,7 @@ def main():
             file.write(f"# InteraxFF export values: {description}\n")
             file.write(f"# model {os.path.basename(MODEL)}, InteraxFF {commit}, OpenMM {openmm.__version__}, Reference platform, double "
                        f"precision, generated {datetime.date.today()} by tests/python/generate_export_values.py\n")
+            file.write(f"# model files: {checksums}\n")
             file.write("# Units: nm, kJ/mol, kJ/mol/nm. Each term is force group k of system.xml, in the order listed.\n")
             n = system.getNumParticles()
             if periodic:

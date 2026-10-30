@@ -1,11 +1,11 @@
 # InteraxFF OpenMM plugin: specification
 
-This plugin implements the non-electrostatic intermolecular terms of the InteraxFF force field as four OpenMM
-forces, each with Reference, CPU and CUDA (common compute: CUDA/OpenCL) kernels. Electrostatics and polarization
-stay in OpenMM's `HippoNonbondedForce`, as in the existing InteraxFF export (`interax/openmm.py`).
+This plugin implements the intermolecular terms of the InteraxFF force field as five OpenMM forces, each with
+Reference, CPU and CUDA (common compute: CUDA/OpenCL) kernels.
 
 | Force | Replaces (current export) | Energy |
 |---|---|---|
+| `InteraxMultipoleForce` | `HippoNonbondedForce` (electrostatics and polarization only) | HIPPO multipoles and polarization, exact exponents, core damping, mutual damping scale, chirality mode, alchemical scaling |
 | `InteraxDispersionForce` | `CustomNonbondedForce` (XDM, Tang-Toennies) | damped C6/C8/C10 pair dispersion |
 | `InteraxExchangeForce` | `CustomNonbondedForce` (`K_A * A1 * A2 * S`) | Slater-overlap exchange repulsion |
 | `InteraxShortRangeForce` | `CustomNonbondedForce` (`K St + L St^2`) | short-range correction |
@@ -14,6 +14,19 @@ stay in OpenMM's `HippoNonbondedForce`, as in the existing InteraxFF export (`in
 Units are OpenMM's: nm, kJ/mol, e. Parameters are those of the current export, so a system built by
 `interax.openmm.create_system_from_topology` can be converted force by force and must give the same energies and
 forces (the reference for every test).
+
+Systems are built in one of two ways. (1) From force field files: `interaxplugin_forcefield` registers OpenMM
+`ForceField` generators for the five forces (ffxml tags named after them; parameters per atom type, frames by the atom
+types of the z, x, y atoms, every intramolecular pair excluded), and InteraxFF writes one file per molecule with a
+residue template generator (`interax.openmm_forcefield`). (2) From an exported System: `interaxplugin_convert`
+replaces the exported forces (`convert_system`, `convert_multipoles`). Both give the same System up to the order of the
+virtual sites. Every build records its version and git commit (`getPluginVersion()`, `getPluginGitCommit()`,
+`interaxplugin_convert.build_info()`).
+
+InteraxMultipoleForce applies the chirality check of ZThenX frames with a y atom on every platform at every evaluation
+(`AmoebaChirality`, the default) or never (`NoChirality`). Particles at the same position are allowed when they are
+fully excluded from each other (all scale factors zero), with and without PME (the r = 0 limits of the excluded-pair
+Ewald terms); InteraxFF's bond-vector multipole sites sit on their host atoms this way.
 
 ## Common conventions
 
@@ -63,8 +76,8 @@ The InteraxFF schemes (`interax.geometry.SLATER_TAYLOR_SCHEMES`) are evaluated e
 the Reference platform, where particle 1 of each pair is the one with the lower index, with the signed width
 difference. They carry the export's truncation errors: up to ~1e-6 relative to the exact integral (order 6 degrades as
 (t x)^7 at large distances), and in single precision the closed form close to the order-2 switch has relative errors
-up to ~3e-2. `convert_system(overlap="export")` (the default) picks the scheme of the export, `overlap="exact"` the
-`Exact` method. The CUDA kernels compare the original particle indices, which the context may reorder.
+up to ~3e-2. `convert_system(overlap="export")` picks the scheme of the export, `overlap="exact"` (the default) the
+`Exact` method; the force field files use `Exact` unless they set `overlapMethod`. The CUDA kernels compare the original particle indices, which the context may reorder.
 
 The normalized overlap is `St(r) = 8 pi (a + b)^3 S(r; a, b)`, with `St(0) = 1`.
 
@@ -170,4 +183,9 @@ by `tests/python/generate_export_values.py`). `tests/TestInteraxExportValues.h` 
 (ctest: Reference, CPU, CUDA single/mixed/double), and `tests/python/test_export_values.py` does the same through the
 Python API: in double precision the plugin reproduces the export to rounding with its overlap scheme, and the `Exact`
 method agrees to ~1e-6. `tests/python/test_alchemical.py` checks the lambda scaling against decoupled systems, and
-`tests/python/compare_export.py` compares freshly built systems with the export.
+`tests/python/compare_export.py` compares freshly built systems with the export. The data were generated from InteraxFF
+commit `aa373b4` (branch `campaign-2026-10`) with the model `models_v3R4bfdE1`; data generated from now on also record
+the checksums of the model files. `tests/TestInteraxMultipoleForce.h` tests the multipole force against
+HippoNonbondedForce and against the definitions of its options (core damping, mutual damping scale, alchemical
+scaling, chirality modes, ThreeFold frames, coincident particles with and without PME), and
+`tests/python/test_forcefield.py` checks the force field files against forces built with the API.
