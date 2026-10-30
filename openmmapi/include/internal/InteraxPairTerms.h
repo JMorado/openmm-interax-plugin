@@ -46,6 +46,7 @@
 #ifdef __AVX__
 #include "openmm/internal/vectorizeAvx.h"
 #endif
+#include <algorithm>
 #include <cmath>
 
 namespace InteraxPlugin {
@@ -268,7 +269,10 @@ template <class T>
 inline void dispersionPair(T r, T m1i, T m2i, T m3i, T alphai, T widthi, T m1j, T m2j, T m3j, T alphaj, T widthj,
         T dampingScale, T& energy, T& dEdR) {
     typedef typename ScalarOf<T>::type Scalar;
-    T prefactor = alphai*alphaj/(alphai*m1j+alphaj*m1i);
+    using std::max;
+    // The denominator vanishes when neither particle has a polarizability and an m1 (two virtual sites); the pair
+    // then has no dispersion, and the floor keeps it from becoming 0/0
+    T prefactor = alphai*alphaj/max(alphai*m1j+alphaj*m1i, T(Scalar(1e-30)));
     T c[3];
     c[0] = prefactor*m1i*m1j;
     c[1] = Scalar(1.5)*prefactor*(m1i*m2j+m2i*m1j);

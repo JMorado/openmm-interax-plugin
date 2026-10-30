@@ -2,7 +2,8 @@
     // PARAMS = (m1, m2, m3, alpha), EXTRA = (width, isAlchemical).
     {
         const real4 p1 = PARAMS1, p2 = PARAMS2;
-        const real prefactor = p1.w*p2.w/(p1.w*p2.x+p2.w*p1.x);
+        // floor: zero dispersion (not 0/0) for a pair without polarizabilities (two virtual sites)
+        const real prefactor = p1.w*p2.w/max(p1.w*p2.x+p2.w*p1.x, (real) 1e-30f);
         const real c6 = prefactor*p1.x*p2.x;
         const real c8 = 1.5f*prefactor*(p1.x*p2.y+p1.y*p2.x);
         const real c10 = prefactor*(2*(p1.x*p2.z+p1.z*p2.x)+(real) 4.2*p1.y*p2.y);
