@@ -67,6 +67,19 @@ FOREACH(subdir ${INTERAX_PLUGIN_SOURCE_SUBDIRS})
     INCLUDE_DIRECTORIES(BEFORE ${CMAKE_CURRENT_SOURCE_DIR}/${subdir}/include)
 ENDFOREACH(subdir)
 
+# Build stamp: the plugin version and the git commit of the source at CMake time ("-dirty" with uncommitted changes),
+# returned by InteraxPlugin::getPluginVersion() and getPluginGitCommit(). Re-run CMake before a release build.
+SET(INTERAX_PLUGIN_VERSION "0.2.0")
+EXECUTE_PROCESS(COMMAND git describe --always --dirty --abbrev=12
+                WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+                OUTPUT_VARIABLE INTERAX_GIT_COMMIT OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
+IF(NOT INTERAX_GIT_COMMIT)
+    SET(INTERAX_GIT_COMMIT "unknown")
+ENDIF()
+MESSAGE(STATUS "InteraxFF plugin ${INTERAX_PLUGIN_VERSION}, commit ${INTERAX_GIT_COMMIT}")
+CONFIGURE_FILE(${CMAKE_CURRENT_SOURCE_DIR}/openmmapi/src/InteraxPluginVersion.cpp.in ${CMAKE_CURRENT_BINARY_DIR}/InteraxPluginVersion.cpp)
+SET(SOURCE_FILES ${SOURCE_FILES} ${CMAKE_CURRENT_BINARY_DIR}/InteraxPluginVersion.cpp)
+
 # Create the library.
 
 ADD_LIBRARY(${SHARED_INTERAX_TARGET} SHARED ${SOURCE_FILES} ${SOURCE_INCLUDE_FILES} ${API_INCLUDE_FILES})

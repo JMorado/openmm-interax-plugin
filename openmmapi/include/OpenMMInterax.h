@@ -34,6 +34,7 @@
 #include "InteraxExchangeForce.h"
 #include "InteraxMultipoleForce.h"
 #include "InteraxPairForce.h"
+#include "InteraxPluginVersion.h"
 #include "InteraxShortRangeForce.h"
 #include "InteraxThreeBodyForce.h"
 

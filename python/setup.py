@@ -16,7 +16,7 @@ extension = Extension(name='_interaxplugin',
                      )
 
 setup(name='interaxplugin',
-      version='0.1',
+      version='@INTERAX_PLUGIN_VERSION@',
       py_modules=['interaxplugin', 'interaxplugin_convert'],
       ext_modules=[extension],
      )

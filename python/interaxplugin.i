@@ -95,6 +95,9 @@ import openmm.unit as unit
 
 namespace InteraxPlugin {
 
+const char* getPluginVersion();
+const char* getPluginGitCommit();
+
 class InteraxPairForce : public OpenMM::Force {
 public:
     enum NonbondedMethod {

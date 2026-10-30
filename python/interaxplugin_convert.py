@@ -23,6 +23,13 @@ import interaxplugin as ip
 # multipole sites sit on their host atom and need it.
 COINCIDENT_PAIRS_WITH_PME = True
 
+
+def build_info():
+    """The plugin version and git commit, e.g. "0.2.0 (341c9aa1b2c3)"; "unstamped" for builds before the stamp."""
+    if not hasattr(ip, "getPluginVersion"):
+        return "unstamped"
+    return f"{ip.getPluginVersion()} ({ip.getPluginGitCommit()})"
+
 # The unit conversions of the InteraxFF export (interax/openmm.py).
 HARTREE_TO_KJ_MOL = 2625.4996394799
 BOHR_TO_NM = 0.0529177210903
@@ -35,6 +42,17 @@ def _per_particle_names(force):
 
 def _global_parameters(force):
     return {force.getGlobalParameterName(k): force.getGlobalParameterDefaultValue(k) for k in range(force.getNumGlobalParameters())}
+
+
+def _require_known_globals(force, known, term):
+    """
+    Refuse an exported force with global parameters this converter does not know: a newer export may have added a
+    term (as the ATM centroid damping radius once was), and converting without it would silently drop that term.
+    """
+    unknown = sorted(set(_global_parameters(force)) - set(known))
+    if unknown:
+        raise ValueError(f"The exported {term} force has global parameters {unknown} that this converter does not know; "
+                         f"use a plugin build that supports them.")
 
 
 def _classify(force):
@@ -100,6 +118,7 @@ def convert_dispersion(force):
     globals_ = _global_parameters(force)
     if "tt_scale" not in globals_:
         raise ValueError("Only the Tang-Toennies dispersion can be converted (the force has no tt_scale).")
+    _require_known_globals(force, {"tt_scale"}, "dispersion")
     if not all(f"E{n}" in force.getEnergyFunction() for n in (6, 8, 10)):
         raise ValueError("The dispersion must include the C6, C8 and C10 terms.")
     plugin = ip.InteraxDispersionForce()
@@ -120,6 +139,7 @@ def convert_exchange(force, overlap="exact"):
     overlap="export" the Slater overlap uses the Taylor scheme of the export, with overlap="exact" the Exact method.
     """
     globals_ = _global_parameters(force)
+    _require_known_globals(force, {"K_A", "K_h", "p_ex"}, "exchange")
     if "p_ex" in globals_ and globals_["p_ex"] != 1.0:
         raise ValueError("Only the exchange repulsion with exponent 1 can be converted.")
     scale = math.sqrt(globals_.get("K_A", K_A))
@@ -139,6 +159,7 @@ def convert_short_range(force, overlap="exact"):
     System.  Its mid-range term M and element-pair amplitudes must be zero, and lone-pair sites get a zero width.  With
     overlap="export" the Slater overlap uses the Taylor scheme of the export, with overlap="exact" the Exact method.
     """
+    _require_known_globals(force, {"K_h"}, "short-range correction")
     for i in range(force.getNumParticles()):
         v = _particle_values(force, i)
         if v.get("M", 0.0) != 0.0:
@@ -231,6 +252,7 @@ def convert_three_body(force, dispersion):
     expression = force.getEnergyFunction()
     if force.getNumGroupsPerBond() != 3 or "C9" not in expression:
         raise ValueError("Not a molecular three-body dispersion force.")
+    _require_known_globals(force, {"atm_damping_r0"}, "three-body dispersion")
     cutoff = float(expression.split("step(")[1].split("-")[0])
 
     num_particles = dispersion.getNumParticles()
