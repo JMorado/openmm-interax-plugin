@@ -67,18 +67,19 @@ FOREACH(subdir ${INTERAX_PLUGIN_SOURCE_SUBDIRS})
     INCLUDE_DIRECTORIES(BEFORE ${CMAKE_CURRENT_SOURCE_DIR}/${subdir}/include)
 ENDFOREACH(subdir)
 
-# Build stamp: the plugin version and the git commit of the source at CMake time ("-dirty" with uncommitted changes),
-# returned by InteraxPlugin::getPluginVersion() and getPluginGitCommit(). Re-run CMake before a release build.
+# Build stamp: the plugin version and the git commit of the source ("-dirty" with uncommitted changes), returned by
+# InteraxPlugin::getPluginVersion() and getPluginGitCommit(). Written at configure time and refreshed before every build
+# (devtools/stamp_version.cmake), so a rebuild without re-running CMake still records the current commit.
 SET(INTERAX_PLUGIN_VERSION "0.2.0")
-EXECUTE_PROCESS(COMMAND git describe --always --dirty --abbrev=12
-                WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-                OUTPUT_VARIABLE INTERAX_GIT_COMMIT OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
-IF(NOT INTERAX_GIT_COMMIT)
-    SET(INTERAX_GIT_COMMIT "unknown")
-ENDIF()
-MESSAGE(STATUS "InteraxFF plugin ${INTERAX_PLUGIN_VERSION}, commit ${INTERAX_GIT_COMMIT}")
-CONFIGURE_FILE(${CMAKE_CURRENT_SOURCE_DIR}/openmmapi/src/InteraxPluginVersion.cpp.in ${CMAKE_CURRENT_BINARY_DIR}/InteraxPluginVersion.cpp)
-SET(SOURCE_FILES ${SOURCE_FILES} ${CMAKE_CURRENT_BINARY_DIR}/InteraxPluginVersion.cpp)
+SET(INTERAX_VERSION_CPP ${CMAKE_CURRENT_BINARY_DIR}/InteraxPluginVersion.cpp)
+EXECUTE_PROCESS(COMMAND ${CMAKE_COMMAND} -DSOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR} -DOUTPUT=${INTERAX_VERSION_CPP}
+                -DVERSION=${INTERAX_PLUGIN_VERSION} -P ${CMAKE_CURRENT_SOURCE_DIR}/devtools/stamp_version.cmake)
+ADD_CUSTOM_TARGET(InteraxPluginVersionStamp
+    COMMAND ${CMAKE_COMMAND} -DSOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR} -DOUTPUT=${INTERAX_VERSION_CPP}
+            -DVERSION=${INTERAX_PLUGIN_VERSION} -P ${CMAKE_CURRENT_SOURCE_DIR}/devtools/stamp_version.cmake
+    BYPRODUCTS ${INTERAX_VERSION_CPP}
+    COMMENT "Stamping the InteraxFF plugin build")
+SET(SOURCE_FILES ${SOURCE_FILES} ${INTERAX_VERSION_CPP})
 
 # Create the library.
 
@@ -87,6 +88,7 @@ SET_TARGET_PROPERTIES(${SHARED_INTERAX_TARGET}
     PROPERTIES COMPILE_FLAGS "-DINTERAX_BUILDING_SHARED_LIBRARY ${EXTRA_COMPILE_FLAGS}"
     LINK_FLAGS "${EXTRA_COMPILE_FLAGS}")
 TARGET_LINK_LIBRARIES(${SHARED_INTERAX_TARGET} OpenMM)
+ADD_DEPENDENCIES(${SHARED_INTERAX_TARGET} InteraxPluginVersionStamp)
 INSTALL(TARGETS ${SHARED_INTERAX_TARGET} DESTINATION lib)
 
 # install headers
