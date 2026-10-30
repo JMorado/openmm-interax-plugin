@@ -14,19 +14,17 @@ import sys
 import numpy as np
 import pytest
 
-PLUGIN_PREFIX = os.environ.get("INTERAX_PLUGIN_PREFIX", "/shared/joaomorado/opt/openmm-interax")
-sys.path.insert(0, f"{PLUGIN_PREFIX}/python")
 
 import openmm  # noqa: E402
 
-openmm.Platform.loadPluginsFromDirectory(f"{PLUGIN_PREFIX}/lib/plugins")
+import plugin_path  # noqa: E402  (INTERAX_PLUGIN_PREFIX)
 import interaxplugin as ip  # noqa: E402
 
 BOX = 2.2           # nm
 CUTOFF = 1.0        # nm, more than a third of the box: triples need not close into triangles
 NUM_MOLECULES = 24  # of three particles each
 PLATFORMS = [("CPU", None), ("CUDA", "mixed"), ("CUDA", "double")]
-AVAILABLE = {openmm.Platform.getPlatform(i).getName() for i in range(openmm.Platform.getNumPlatforms())}
+AVAILABLE = plugin_path.available_platforms()
 
 
 # (atomic, centroid damping radius R0 in nm): R0 = 0.5 nm damps a large part of the triples of this box

@@ -1,12 +1,11 @@
 """InteraxMultipoleForce (exact exponents) vs torch: E_static + E_ind of a dimer, for polarization options.
-Usage: torch_parity.py SMILES MODEL MUTUAL_ORDER KAPPA CORE SHIFT"""
-import sys
-sys.path.insert(0, "/shared/joaomorado/opt/openmm-interax-v3/python")
-sys.path.insert(0, "/shared/joaomorado/repos/InteraxFF"); sys.path.insert(0, "/shared/joaomorado/repos/InteraxFF/studies/audit")
+Usage: compare_multipole_torch.py SMILES MODEL_DIR MUTUAL_ORDER KAPPA CORE SHIFT   (needs INTERAX_REPO: studies/audit/_common.py)"""
+import os, sys
 import warnings; warnings.filterwarnings("ignore")
 import torch, numpy as np, openmm
 from openmm import unit
-openmm.Platform.loadPluginsFromDirectory("/shared/joaomorado/opt/openmm-interax-v3/lib/plugins")
+from plugin_path import INTERAX_REPO
+sys.path.insert(0, os.path.join(INTERAX_REPO, "studies", "audit"))
 import interaxplugin_convert
 from openff.toolkit import Molecule, Topology
 from interax.force_field import ForceField
@@ -14,7 +13,7 @@ from interax.models import NAGLModel, PerAtomicNumberModel
 from interax.openmm import create_system_from_topology
 from _common import batch
 smiles, model, order, kappa, core, shift = sys.argv[1], sys.argv[2], int(sys.argv[3]), float(sys.argv[4]), sys.argv[5] == "1", float(sys.argv[6])
-M = "/shared/joaomorado/repos/InteraxFF/examples/" + model
+M = model
 nagl = NAGLModel.load(f"{M}/nagl_model.pt"); ff = ForceField(nagl, PerAtomicNumberModel.load(f"{M}/per_atomic_number_model.pt", device="cpu"))
 ff.load_state_dict(torch.load(f"{M}/force_field_state.pt", map_location="cpu"), strict=False); ff.eval()
 pol = ff._induction

@@ -13,14 +13,13 @@ import sys
 import numpy as np
 import pytest
 
-PLUGIN_PREFIX = os.environ.get("INTERAX_PLUGIN_PREFIX", "/shared/joaomorado/opt/openmm-interax")
-sys.path.insert(0, f"{PLUGIN_PREFIX}/python")
-sys.path.insert(1, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "python"))
 
 import openmm  # noqa: E402
 from openmm import app, unit  # noqa: E402
 
-openmm.Platform.loadPluginsFromDirectory(f"{PLUGIN_PREFIX}/lib/plugins")
+import plugin_path  # noqa: E402  (INTERAX_PLUGIN_PREFIX)
+
+sys.path.insert(1, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "python"))
 import interaxplugin as ip  # noqa: E402
 import interaxplugin_forcefield  # noqa: E402,F401
 

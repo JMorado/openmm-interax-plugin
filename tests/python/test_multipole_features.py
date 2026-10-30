@@ -16,14 +16,13 @@ Usage: python test_multipole_features.py [--platform CUDA] [--precision double],
 test_multipole_features.py (CUDA in double precision; skipped without a CUDA device).
 """
 import argparse
-import os
-
-os.environ.setdefault("INTERAX_PLUGIN_PREFIX", "/shared/joaomorado/opt/openmm-interax-v8")
-os.environ.setdefault("INTERAX_MODEL", "/shared/joaomorado/repos/InteraxFF/examples/models_v3R4bfdE1MQ")
 
 from compare_export import box_topology, cluster_topology, interaxplugin, interaxplugin_convert, load_model, np, openmm, unit  # noqa: E402
+from plugin_path import model  # noqa: E402
 
 from interax.openmm import create_system_from_topology  # noqa: E402
+
+MODEL = model("models_v3R4bfdE1MQ")
 
 
 def multipoles_of(system):
@@ -155,7 +154,7 @@ def main():
     parser.add_argument("--platform", default="CUDA")
     parser.add_argument("--precision", default="double")
     args = parser.parse_args()
-    ff, nagl = load_model()
+    ff, nagl = load_model(MODEL)
     tolerance = 1e-5 if args.precision == "double" else 2e-4
     ok = run("cluster", *cluster_topology(), args.platform, args.precision, ff, nagl, tolerance)
     ok &= run("methanol box", *box_topology(), args.platform, args.precision, ff, nagl, tolerance)
@@ -169,7 +168,7 @@ def test_multipole_features():
         openmm.Context(openmm.System(), openmm.VerletIntegrator(1.0), openmm.Platform.getPlatformByName("CUDA"))
     except Exception:
         pytest.skip("no usable CUDA platform")
-    ff, nagl = load_model()
+    ff, nagl = load_model(MODEL)
     ok = run("cluster", *cluster_topology(), "CUDA", "double", ff, nagl, 1e-5)
     ok &= run("methanol box", *box_topology(), "CUDA", "double", ff, nagl, 1e-5)
     assert ok

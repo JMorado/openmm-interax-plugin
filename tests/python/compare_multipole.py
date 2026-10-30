@@ -12,14 +12,13 @@ Usage: python compare_multipole.py [--platform Reference] [--precision double] [
 The model (INTERAX_MODEL) should have quadrupoles and mutual polarization to test everything, e.g. models_v3R4bfdE1MQ.
 """
 import argparse
-import os
-
-os.environ.setdefault("INTERAX_PLUGIN_PREFIX", "/shared/joaomorado/opt/openmm-interax-v3")
-os.environ.setdefault("INTERAX_MODEL", "/shared/joaomorado/repos/InteraxFF/examples/models_v3R4bfdE1MQ")
 
 from compare_export import box_topology, cluster_topology, interaxplugin, interaxplugin_convert, load_model, np, openmm, unit  # noqa: E402
+from plugin_path import model  # noqa: E402
 
 from interax.openmm import create_system_from_topology, extend_positions_for_sites  # noqa: E402
+
+MODEL = model("models_v3R4bfdE1MQ")
 
 
 def split(system, core_damping=False, kappa=1.0):
@@ -108,7 +107,7 @@ def main():
     parser.add_argument("--kappa", type=float, default=1.0, help="mutual damping scale")
     parser.add_argument("--no-fd", action="store_true", help="skip the finite-difference check")
     args = parser.parse_args()
-    ff, nagl = load_model()
+    ff, nagl = load_model(MODEL)
     worst = 0.0
     if "cluster" in args.systems:
         worst = max(worst, compare("cluster", *cluster_topology(), False, args.platform, args.precision, ff, nagl, args.core_damping, args.kappa))

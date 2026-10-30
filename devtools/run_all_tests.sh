@@ -8,18 +8,21 @@
 #   PREFIX     the install prefix it was configured with (CMAKE_INSTALL_PREFIX)
 #   GPU_INDEX  the CUDA device for the GPU tests (default 0)
 #
-# Environment (defaults for metro05): INTERAX_ENV (the interax conda environment), PLUGIN_ENV (the environment with
-# the compilers, CMake and the CUDA toolkit), SWIG_PYTHONPATH (the pip-installed SWIG), NVRTC_PRELOAD (an NVRTC that
-# matches the driver), INTERAX_REPO. For a scheduled run, prefer a time when no GPU jobs run on the node.
+# Run it with the build tools on PATH (CMake, the compilers, the CUDA toolkit). Optional environment:
+#   PYTHON          the Python with OpenMM and pytest for the tests (default: python on PATH); the InteraxFF suite needs
+#                   InteraxFF's dependencies in it too
+#   INTERAX_REPO    an InteraxFF checkout: its test suite runs against this build, and the plugin's comparisons with the
+#                   InteraxFF export run (skipped without it)
+#   INTERAX_MODEL   the model of those comparisons (default: INTERAX_REPO/examples, see tests/python/plugin_path.py)
+#   SWIG_PYTHONPATH a pip-installed SWIG to put on PYTHONPATH for the build (one whose runtime matches OpenMM's module)
+#   NVRTC_PRELOAD   an NVRTC library to preload for the CUDA tests (when the toolkit's is newer than the driver)
+# For a scheduled run, prefer a time when no GPU jobs run on the node.
 set -u
 BUILD_DIR=${1:?usage: run_all_tests.sh BUILD_DIR PREFIX [GPU_INDEX]}
 PREFIX=${2:?usage: run_all_tests.sh BUILD_DIR PREFIX [GPU_INDEX]}
 GPU=${3:-0}
-INTERAX_ENV=${INTERAX_ENV:-/shared/joaomorado/micromamba/envs/interax}
-PLUGIN_ENV=${PLUGIN_ENV:-/shared/joaomorado/micromamba/envs/ommplugin}
-SWIG_PYTHONPATH=${SWIG_PYTHONPATH:-/shared/joaomorado/opt/swig-4.2.1}
-NVRTC_PRELOAD=${NVRTC_PRELOAD:-/shared/joaomorado/opt/nvrtc-12.2/nvidia/cuda_nvrtc/lib/libnvrtc.so.12}
-INTERAX_REPO=${INTERAX_REPO:-/shared/joaomorado/repos/InteraxFF}
+PYTHON=${PYTHON:-python}
+INTERAX_REPO=${INTERAX_REPO:-}
 SOURCE_DIR=$(cd "$(dirname "$0")/.." && pwd)
 LOG_DIR=${LOG_DIR:-$BUILD_DIR/test-logs/$(date +%Y%m%d-%H%M%S)}
 mkdir -p "$LOG_DIR"
@@ -33,24 +36,28 @@ echo "InteraxFF plugin tests: $(git -C "$SOURCE_DIR" describe --always --dirty -
 
 # Build and install (the Python wrapper too)
 (
-    export PATH=$PLUGIN_ENV/bin:$INTERAX_ENV/bin:$PATH PYTHONPATH=$SWIG_PYTHONPATH
+    [ -n "${SWIG_PYTHONPATH:-}" ] && export PYTHONPATH=$SWIG_PYTHONPATH
     cd "$BUILD_DIR" && cmake . && make -j16 install && rm -rf python/build && make PythonInstall
 ) > "$LOG_DIR/build.log" 2>&1
 rc=$?; summary "build + install" $rc "$LOG_DIR/build.log"
 [ $status -ne 0 ] && exit 1
 
 # C++ tests
-(cd "$BUILD_DIR" && LD_PRELOAD=$NVRTC_PRELOAD CUDA_VISIBLE_DEVICES=$GPU "$PLUGIN_ENV/bin/ctest" -j6 --timeout 1500) > "$LOG_DIR/ctest.log" 2>&1
+(cd "$BUILD_DIR" && LD_PRELOAD=${NVRTC_PRELOAD:-} CUDA_VISIBLE_DEVICES=$GPU ctest -j6 --timeout 1500) > "$LOG_DIR/ctest.log" 2>&1
 rc=$?; summary "C++ (ctest): $(grep -o '[0-9]*% tests passed.*' "$LOG_DIR/ctest.log")" $rc "$LOG_DIR/ctest.log"
 
 # Plugin Python tests
-(cd "$SOURCE_DIR/tests/python" && INTERAX_PLUGIN_PREFIX=$PREFIX LD_PRELOAD=$NVRTC_PRELOAD CUDA_VISIBLE_DEVICES=$GPU \
-    "$INTERAX_ENV/bin/python" -m pytest -q -p no:cacheprovider -o addopts="" .) > "$LOG_DIR/pytest_plugin.log" 2>&1
+(cd "$SOURCE_DIR/tests/python" && INTERAX_PLUGIN_PREFIX=$PREFIX INTERAX_REPO=$INTERAX_REPO LD_PRELOAD=${NVRTC_PRELOAD:-} \
+    CUDA_VISIBLE_DEVICES=$GPU "$PYTHON" -m pytest -q -p no:cacheprovider -o addopts="" .) > "$LOG_DIR/pytest_plugin.log" 2>&1
 rc=$?; summary "plugin Python: $(tail -1 "$LOG_DIR/pytest_plugin.log")" $rc "$LOG_DIR/pytest_plugin.log"
 
 # InteraxFF tests against this build
-(cd "$INTERAX_REPO" && INTERAX_PLUGIN_PREFIX=$PREFIX LD_PRELOAD=$NVRTC_PRELOAD CUDA_VISIBLE_DEVICES=$GPU \
-    "$INTERAX_ENV/bin/python" -m pytest interax/tests -q -p no:cacheprovider -o addopts="") > "$LOG_DIR/pytest_interax.log" 2>&1
-rc=$?; summary "InteraxFF: $(tail -1 "$LOG_DIR/pytest_interax.log")" $rc "$LOG_DIR/pytest_interax.log"
+if [ -n "$INTERAX_REPO" ]; then
+    (cd "$INTERAX_REPO" && INTERAX_PLUGIN_PREFIX=$PREFIX LD_PRELOAD=${NVRTC_PRELOAD:-} CUDA_VISIBLE_DEVICES=$GPU \
+        "$PYTHON" -m pytest interax/tests -q -p no:cacheprovider -o addopts="") > "$LOG_DIR/pytest_interax.log" 2>&1
+    rc=$?; summary "InteraxFF: $(tail -1 "$LOG_DIR/pytest_interax.log")" $rc "$LOG_DIR/pytest_interax.log"
+else
+    echo "SKIP  InteraxFF (no INTERAX_REPO)"
+fi
 
 exit $status

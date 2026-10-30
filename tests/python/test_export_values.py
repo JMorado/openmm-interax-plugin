@@ -11,19 +11,17 @@ import sys
 import numpy as np
 import pytest
 
-PLUGIN_PREFIX = os.environ.get("INTERAX_PLUGIN_PREFIX", "/shared/joaomorado/opt/openmm-interax")
 DATA = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data")
-sys.path.insert(0, f"{PLUGIN_PREFIX}/python")
 
 import openmm  # noqa: E402
 
-openmm.Platform.loadPluginsFromDirectory(f"{PLUGIN_PREFIX}/lib/plugins")
+import plugin_path  # noqa: E402  (INTERAX_PLUGIN_PREFIX)
 import interaxplugin  # noqa: E402,F401  (registers the serialization proxies)
 
 SYSTEMS = ["cluster", "methanol_box"]
 # (platform, precision, whether it computes the interactions in double precision)
 PLATFORMS = [("Reference", None, True), ("CPU", None, False), ("CUDA", "mixed", False), ("CUDA", "double", True)]
-AVAILABLE = {openmm.Platform.getPlatform(i).getName() for i in range(openmm.Platform.getNumPlatforms())}
+AVAILABLE = plugin_path.available_platforms()
 
 
 def load(name):

@@ -12,17 +12,15 @@ import sys
 import numpy as np
 import pytest
 
-PLUGIN_PREFIX = os.environ.get("INTERAX_PLUGIN_PREFIX", "/shared/joaomorado/opt/openmm-interax")
-sys.path.insert(0, f"{PLUGIN_PREFIX}/python")
 
 import openmm  # noqa: E402
 
-openmm.Platform.loadPluginsFromDirectory(f"{PLUGIN_PREFIX}/lib/plugins")
+import plugin_path  # noqa: E402  (INTERAX_PLUGIN_PREFIX)
 import interaxplugin as ip  # noqa: E402
 
 RADIUS = 0.3
 PLATFORMS = [("CPU", None), ("CUDA", "mixed"), ("CUDA", "double")]
-AVAILABLE = {openmm.Platform.getPlatform(i).getName() for i in range(openmm.Platform.getNumPlatforms())}
+AVAILABLE = plugin_path.available_platforms()
 
 
 def make_forces(rng, n, softcore):

@@ -11,7 +11,7 @@ Usage: python compare_export.py [--platform Reference] [--precision double] [--o
 
 With --overlap export the plugin uses the InteraxFF Taylor scheme of the export and must reproduce it to rounding;
 with --overlap exact it uses its accurate scheme, which differs from the export by the export's truncation error.
-Run with the interax environment; the plugin is loaded from INTERAX_PLUGIN_PREFIX and the model from INTERAX_MODEL
+Run with the interax environment; the plugin, InteraxFF and the model are found as plugin_path.py describes
 (models with lone-pair virtual sites work too). The base force field's charges (intramolecular terms only) are AM1-BCC
 when AmberTools or OpenEye can compute them, else Gasteiger (INTERAX_BASE_CHARGES=am1bcc|gasteiger forces one);
 packmol is looked for on PATH, then next to the Python interpreter.
@@ -23,18 +23,14 @@ import sys
 import warnings
 
 warnings.filterwarnings("ignore")
-PLUGIN_PREFIX = os.environ.get("INTERAX_PLUGIN_PREFIX", "/shared/joaomorado/opt/openmm-interax")
-INTERAX_REPO = "/shared/joaomorado/repos/InteraxFF"
-MODEL = os.environ.get("INTERAX_MODEL", f"{INTERAX_REPO}/examples/models_v3R4bfdE1")
-sys.path.insert(0, f"{PLUGIN_PREFIX}/python")
-sys.path.insert(0, INTERAX_REPO)
-
 import numpy as np  # noqa: E402
 import torch  # noqa: E402,F401  (load the env's libstdc++ before anything else)
 import openmm  # noqa: E402
 import openmm.unit as unit  # noqa: E402
 
-openmm.Platform.loadPluginsFromDirectory(f"{PLUGIN_PREFIX}/lib/plugins")
+from plugin_path import INTERAX_REPO, model  # noqa: E402  (INTERAX_PLUGIN_PREFIX, INTERAX_REPO, INTERAX_MODEL)
+
+MODEL = model("models_v3R4bfdE1")
 import interaxplugin  # noqa: E402
 import interaxplugin_convert  # noqa: E402
 from openff.interchange.components._packmol import UNIT_CUBE, pack_box  # noqa: E402
@@ -96,10 +92,14 @@ def _nonzero_a(force):
     return any(force.getParticleParameters(i)[k] != 0 for i in range(force.getNumParticles()))
 
 
-def load_model():
-    nagl = NAGLModel.load(f"{MODEL}/nagl_model.pt")
-    ff = ForceField(nagl, PerAtomicNumberModel.load(f"{MODEL}/per_atomic_number_model.pt", device="cpu"))
-    ff.load_state_dict(torch.load(f"{MODEL}/force_field_state.pt", map_location="cpu"), strict=False)
+def load_model(model=None):
+    """The force field and NAGL model in the directory model (default MODEL)."""
+    model = model or MODEL
+    if model is None:
+        raise RuntimeError("no InteraxFF model: set INTERAX_MODEL (or INTERAX_REPO)")
+    nagl = NAGLModel.load(f"{model}/nagl_model.pt")
+    ff = ForceField(nagl, PerAtomicNumberModel.load(f"{model}/per_atomic_number_model.pt", device="cpu"))
+    ff.load_state_dict(torch.load(f"{model}/force_field_state.pt", map_location="cpu"), strict=False)
     ff.eval()
     return ff, nagl
 

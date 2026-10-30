@@ -4,19 +4,16 @@ the first molecule (ethanol, in three waters) alchemical, lambda_electrostatics 
 force without the molecule's multipoles and polarizabilities, with and without core damping, also through a
 CustomCVForce (which passes the parameter on to its inner context).
 """
-import sys
-sys.path.insert(0, "/shared/joaomorado/opt/openmm-interax-v3/python")
-sys.path.insert(0, "/shared/joaomorado/repos/InteraxFF")
 import warnings; warnings.filterwarnings("ignore")
 import torch, numpy as np, openmm
 from openmm import unit
-openmm.Platform.loadPluginsFromDirectory("/shared/joaomorado/opt/openmm-interax-v3/lib/plugins")
+from plugin_path import model
 import interaxplugin, interaxplugin_convert
 from openff.toolkit import Molecule, Topology
 from interax.force_field import ForceField
 from interax.models import NAGLModel, PerAtomicNumberModel
 from interax.openmm import create_system_from_topology
-M = "/shared/joaomorado/repos/InteraxFF/examples/models_v3R4bfdE1MQ"
+M = model("models_v3R4bfdE1MQ")
 nagl = NAGLModel.load(f"{M}/nagl_model.pt"); ff = ForceField(nagl, PerAtomicNumberModel.load(f"{M}/per_atomic_number_model.pt", device="cpu"))
 ff.load_state_dict(torch.load(f"{M}/force_field_state.pt", map_location="cpu"), strict=False); ff.eval()
 mols = [Molecule.from_smiles(s) for s in ("CCO", "O", "O", "O")]

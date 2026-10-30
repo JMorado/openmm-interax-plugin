@@ -185,7 +185,7 @@ from interax.force_field import ForceField
 from interax.models import NAGLModel, PerAtomicNumberModel
 from interax.openmm_forcefield import create_system
 
-MODEL = "/shared/joaomorado/repos/InteraxFF/examples/models_v3R4bfdE1MQsce07fFIA"
+MODEL = "/path/to/InteraxFF/examples/models_v3R4bfdE1MQsce07fFIA"  # a trained InteraxFF model
 nagl = NAGLModel.load(f"{MODEL}/nagl_model.pt")
 ff = ForceField(nagl, PerAtomicNumberModel.load(f"{MODEL}/per_atomic_number_model.pt", device="cpu"))
 ff.load_state_dict(torch.load(f"{MODEL}/force_field_state.pt", map_location="cpu"), strict=False)
@@ -258,7 +258,9 @@ platform against energies and forces of the InteraxFF export stored in `tests/da
 triclinic boxes (OpenMM's reduced form). GitHub Actions (`.github/workflows/ci.yml`) builds the plugin against conda-forge OpenMM and runs the
 Reference, CPU and serialization tests and the force field file test on every push and pull request;
 `devtools/run_all_tests.sh BUILD_DIR PREFIX [GPU]` builds, installs and runs every suite on a GPU node (CUDA, and the
-InteraxFF tests against the build). The Python tests in `tests/python` need the plugin to be installed:
+InteraxFF tests against the build). The Python tests in `tests/python` need the plugin to be installed; they find it,
+InteraxFF and a model through `INTERAX_PLUGIN_PREFIX` (unset: installed next to OpenMM), `INTERAX_REPO` and `INTERAX_MODEL`
+(`tests/python/plugin_path.py`), and `pytest` leaves out the comparisons with InteraxFF when it is not available:
 
 | Test | What it checks |
 |---|---|

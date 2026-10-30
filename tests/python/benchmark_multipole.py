@@ -12,22 +12,21 @@ CustomCVForce as the InteraxFF export uses it) for molecular dynamics.
             * E_off with two HIPPO copies (one without the solute), vs one InteraxMultipoleForce with alchemical solute
 
 Systems (0.9 nm cutoff, PME): a box of liquid methanol and one ethanol in water (the HFE box).
-Usage: python benchmark_multipole.py [--model MODEL_DIR] [--systems methanol hfe] [--platform CUDA]
+Usage: python benchmark_multipole.py [--systems methanol hfe] [--platform CUDA]      (model: INTERAX_MODEL, default MQ)
 """
 import argparse
-import os
 import time
 
-os.environ.setdefault("INTERAX_PLUGIN_PREFIX", "/shared/joaomorado/opt/openmm-interax-v3")
-os.environ.setdefault("INTERAX_MODEL", "/shared/joaomorado/repos/InteraxFF/examples/models_v3R4bfdE1MQ")
-
 from compare_export import COMPONENTS, interaxplugin, interaxplugin_convert, load_model, np, openmm, unit  # noqa: E402
+from plugin_path import model  # noqa: E402
 
 from openff.interchange.components._packmol import UNIT_CUBE, pack_box  # noqa: E402
 from openff.toolkit import Molecule  # noqa: E402
 from openff.units import unit as off_unit  # noqa: E402
 
 from interax.openmm import create_system_from_topology  # noqa: E402
+
+MODEL = model("models_v3R4bfdE1MQ")
 
 KJ = unit.kilojoule_per_mole
 
@@ -109,7 +108,7 @@ def main():
     parser.add_argument("--platform", default="CUDA")
     parser.add_argument("--skip-md", action="store_true")
     args = parser.parse_args()
-    ff, nagl = load_model()
+    ff, nagl = load_model(MODEL)
     for name in args.systems:
         topology, positions = build(name)
         full = {}
