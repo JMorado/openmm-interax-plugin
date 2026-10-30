@@ -79,7 +79,16 @@ error is `CUDA_ERROR_UNSUPPORTED_PTX_VERSION`), preload an NVRTC that matches th
 Using The Plugin
 ================
 
-`interaxplugin_convert.convert_system(system)` takes a System built by the InteraxFF export and replaces its
+**From a force field file.** Importing `interaxplugin_forcefield` registers OpenMM `ForceField` generators for the
+ffxml tags `<InteraxMultipoleForce>`, `<InteraxDispersionForce>`, `<InteraxExchangeForce>`, `<InteraxShortRangeForce>`
+and `<InteraxThreeBodyForce>`, so that `openmm.app.ForceField(...).createSystem(topology)` builds the plugin forces
+from scratch, as for any OpenMM force field. Parameters are per atom type (the attributes of each force's
+`addParticle()`); multipole frames are given by the atom types of the z, x and y atoms, as in OpenMM's AMOEBA and
+HIPPO files; every intramolecular pair is excluded. The module docstring lists the tags and their settings. InteraxFF
+writes these files per molecule with a residue template generator (`interax.openmm_forcefield`), in the way
+openmmforcefields parameterizes small molecules.
+
+**From an exported System.** `interaxplugin_convert.convert_system(system)` takes a System built by the InteraxFF export and replaces its
 dispersion, exchange repulsion, short-range correction and three-body forces by the plugin forces, keeping every other
 force. With `overlap="exact"` (the default) the Slater overlaps are evaluated exactly; with `overlap="export"` they use
 the export's Taylor scheme and the converted forces reproduce the export to rounding. With `copy=False` the System is
