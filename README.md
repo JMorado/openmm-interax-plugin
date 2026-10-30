@@ -51,7 +51,8 @@ The plugin is built with [CMake](http://www.cmake.org) against an installed Open
 1. Create a build directory and run `ccmake` or `cmake` in it, pointing at the source directory.
 2. Set `OPENMM_DIR` to where OpenMM is installed (for a conda environment, the environment's root), and
    `CMAKE_INSTALL_PREFIX` to where the plugin should be installed. If it is not set, the plugin is installed next to
-   OpenMM.
+   OpenMM: its platform libraries in OpenMM's plugin directory, which OpenMM loads when it is imported, and its
+   Python modules in the Python environment, so nothing has to be set at runtime.
 3. The CUDA platform is built when CMake finds the CUDA toolkit (`INTERAX_BUILD_CUDA_LIB`; set `CUDAToolkit_ROOT` if
    needed). The Python wrapper is built when it finds Python and SWIG (`PYTHON_EXECUTABLE`, `SWIG_EXECUTABLE`). Use the
    SWIG with the runtime version of OpenMM's Python module: for OpenMM 8.1, SWIG 4.0-4.2 (runtime 4); SWIG 4.3 and
@@ -59,14 +60,15 @@ The plugin is built with [CMake](http://www.cmake.org) against an installed Open
    `Force.setName()`). CMake compares the two and stops on a mismatch.
 4. Build with `make install`, then `make PythonInstall` for the Python wrapper.
 
-For example, against the `interax` conda environment:
+For example, into the active conda environment:
 
-    cmake .. -DOPENMM_DIR=$CONDA_PREFIX -DCMAKE_INSTALL_PREFIX=/path/to/openmm-interax \
-             -DSWIG_EXECUTABLE=/path/to/swig -DPYTHON_EXECUTABLE=$CONDA_PREFIX/bin/python
+    cmake .. -DOPENMM_DIR=$CONDA_PREFIX -DPYTHON_EXECUTABLE=$CONDA_PREFIX/bin/python
     make -j16 install
     make PythonInstall
+    python -c "import interaxplugin_convert; print(interaxplugin_convert.build_info())"
 
-When the plugin is installed in its own prefix, load it at runtime and make its Python modules importable:
+To keep several builds side by side, give each its own prefix (`-DCMAKE_INSTALL_PREFIX=/path/to/openmm-interax`):
+the Python modules then go into `PREFIX/python`, and the plugin is loaded at runtime:
 
 ```python
 import sys
@@ -87,13 +89,14 @@ error is `CUDA_ERROR_UNSUPPORTED_PTX_VERSION`), preload an NVRTC that matches th
 Using The Plugin
 ================
 
-Load the plugin and make its Python modules importable (when it is installed in its own prefix):
+Installed next to OpenMM (the default), `import interaxplugin` is all it takes. A build in its own prefix is loaded
+first (`PREFIX` is its `CMAKE_INSTALL_PREFIX`):
 
 ```python
 import sys
 import openmm
 
-PREFIX = "/shared/joaomorado/opt/openmm-interax-v9"
+PREFIX = "/path/to/openmm-interax"  # CMAKE_INSTALL_PREFIX
 sys.path.insert(0, f"{PREFIX}/python")
 openmm.Platform.loadPluginsFromDirectory(f"{PREFIX}/lib/plugins")
 
