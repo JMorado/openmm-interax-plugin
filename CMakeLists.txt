@@ -127,5 +127,25 @@ ELSE(PYTHON_EXECUTABLE AND SWIG_EXECUTABLE)
     SET(INTERAX_BUILD_PYTHON_WRAPPERS OFF CACHE BOOL "Build wrappers for Python")
 ENDIF(PYTHON_EXECUTABLE AND SWIG_EXECUTABLE)
 IF(INTERAX_BUILD_PYTHON_WRAPPERS)
+    # The plugin's module must use the SWIG runtime version of OpenMM's Python module (devtools/openmm_swig_runtime.py):
+    # otherwise its forces are not OpenMM Forces to OpenMM's Python API. SWIG 4.0-4.2 generate runtime 4, 4.3+ runtime 5.
+    FILE(WRITE ${CMAKE_BINARY_DIR}/swig_runtime_check.i "%module swig_runtime_check\n")
+    EXECUTE_PROCESS(COMMAND ${SWIG_EXECUTABLE} -python -c++ -o ${CMAKE_BINARY_DIR}/swig_runtime_check.cpp ${CMAKE_BINARY_DIR}/swig_runtime_check.i
+                    RESULT_VARIABLE SWIG_CHECK_RESULT OUTPUT_QUIET ERROR_QUIET)
+    EXECUTE_PROCESS(COMMAND ${PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/devtools/openmm_swig_runtime.py
+                    OUTPUT_VARIABLE OPENMM_SWIG_RUNTIME OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
+    IF(SWIG_CHECK_RESULT EQUAL 0 AND OPENMM_SWIG_RUNTIME)
+        FILE(STRINGS ${CMAKE_BINARY_DIR}/swig_runtime_check.cpp SWIG_RUNTIME_LINE REGEX "define SWIG_RUNTIME_VERSION")
+        STRING(REGEX MATCH "\"([0-9]+)\"" SWIG_RUNTIME_MATCH "${SWIG_RUNTIME_LINE}")
+        SET(PLUGIN_SWIG_RUNTIME ${CMAKE_MATCH_1})
+        IF(NOT PLUGIN_SWIG_RUNTIME STREQUAL OPENMM_SWIG_RUNTIME)
+            MESSAGE(FATAL_ERROR "${SWIG_EXECUTABLE} generates SWIG runtime ${PLUGIN_SWIG_RUNTIME} but OpenMM's Python module uses "
+                    "runtime ${OPENMM_SWIG_RUNTIME}: the plugin's forces would not work with OpenMM's Python API. Use a SWIG with "
+                    "runtime ${OPENMM_SWIG_RUNTIME} (SWIG 4.0-4.2 for runtime 4, 4.3 or later for runtime 5): set SWIG_EXECUTABLE.")
+        ENDIF()
+        MESSAGE(STATUS "SWIG runtime ${PLUGIN_SWIG_RUNTIME}, the same as OpenMM's Python module")
+    ELSE()
+        MESSAGE(WARNING "Could not compare the SWIG runtime version with OpenMM's Python module (SWIG 4.0-4.2 for OpenMM 8.1).")
+    ENDIF()
     ADD_SUBDIRECTORY(python)
 ENDIF(INTERAX_BUILD_PYTHON_WRAPPERS)

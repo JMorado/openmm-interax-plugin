@@ -54,7 +54,9 @@ The plugin is built with [CMake](http://www.cmake.org) against an installed Open
    OpenMM.
 3. The CUDA platform is built when CMake finds the CUDA toolkit (`INTERAX_BUILD_CUDA_LIB`; set `CUDAToolkit_ROOT` if
    needed). The Python wrapper is built when it finds Python and SWIG (`PYTHON_EXECUTABLE`, `SWIG_EXECUTABLE`). Use the
-   SWIG major version that OpenMM itself was built with.
+   SWIG with the runtime version of OpenMM's Python module: for OpenMM 8.1, SWIG 4.0-4.2 (runtime 4); SWIG 4.3 and
+   later generate runtime 5, whose plugin forces OpenMM's Python API rejects (`TypeError` in `System.addForce()` or
+   `Force.setName()`). CMake compares the two and stops on a mismatch.
 4. Build with `make install`, then `make PythonInstall` for the Python wrapper.
 
 For example, against the `interax` conda environment:
