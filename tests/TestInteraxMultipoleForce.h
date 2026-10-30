@@ -545,6 +545,45 @@ void testZOnlyFrame() {
 }
 
 /**
+ * Test ThreeFold frames, as InteraxFF uses them for pyramidal centres: an NH2-R nitrogen whose z axis is the sum of its
+ * three bond directions and whose x axis points to the distinct neighbour (dipole and quadrupole in the mirror plane:
+ * mu_x, mu_z, Q_xz), and an NH3 nitrogen with three equivalent neighbours (axial moments only), next to a water.
+ * Forces against finite differences (double precision), and every platform against Reference.
+ */
+void testThreeFoldFrame() {
+    MultipoleSystem s;
+    double qs = 0.0001;
+    // NH2-CH3: N 0, H 1, H 2, C 3
+    s.particles.push_back({-0.6, {0.004, 0.0, 0.006}, {qs, 0, 0.6*qs, 0, 0.4*qs, 0, 0.6*qs, 0, -1.4*qs}, 5.0, 35.0, 0.0011,
+                           InteraxMultipoleForce::ThreeFold, 1, 3, 2});
+    for (int k = 0; k < 2; k++)
+        s.particles.push_back({0.3, {0.0, 0.0, 0.002}, vector<double>(9, 0.0), 1.0, 40.0, 0.0004, InteraxMultipoleForce::ZOnly, 0, -1, -1});
+    s.particles.push_back({0.0, {0.0, 0.0, -0.001}, vector<double>(9, 0.0), 4.0, 32.0, 0.0010, InteraxMultipoleForce::ZOnly, 0, -1, -1});
+    // NH3: N 4, H 5, 6, 7
+    s.particles.push_back({-0.9, {0.0, 0.0, 0.005}, {-0.5*qs, 0, 0, 0, -0.5*qs, 0, 0, 0, qs}, 5.0, 35.0, 0.0011,
+                           InteraxMultipoleForce::ThreeFold, 5, 6, 7});
+    for (int k = 0; k < 3; k++)
+        s.particles.push_back({0.3, {0.0, 0.0, 0.002}, vector<double>(9, 0.0), 1.0, 40.0, 0.0004, InteraxMultipoleForce::ZOnly, 4, -1, -1});
+    for (int m : {0, 4})
+        for (int i = m; i < m+4; i++)
+            for (int j = i+1; j < m+4; j++)
+                s.exceptions.push_back({i, j, 0.0, 0.0, 0.0});
+    s.positions = {Vec3(0, 0, 0), Vec3(0.03, 0.09, 0.04), Vec3(-0.09, -0.02, 0.04), Vec3(0.06, -0.06, 0.11),
+                   Vec3(0.35, 0.05, -0.05), Vec3(0.39, 0.13, -0.08), Vec3(0.39, 0.0, 0.03), Vec3(0.39, 0.0, -0.13)};
+    addWater(s, Vec3(0.12, 0.25, -0.12), Vec3(0.07, 0.18, -0.08), Vec3(0.2, 0.22, -0.16));
+    System system;
+    createSystem(system, s, createInteraxForce(s));
+    VerletIntegrator integrator(0.001);
+    Context context(system, integrator, platform);
+    context.setPositions(s.positions);
+    if (getPlatformPrecision(platform, true) == "double")
+        checkFiniteDifferenceForces(context, 1e-6);
+    checkForceEnergyConsistency(context, consistencyTol, consistencyStep);
+    if (platform.getName() != "Reference")
+        compareResults(evaluate(system, s.positions, Platform::getPlatformByName("Reference")), evaluate(system, s.positions, platform), energyTol);
+}
+
+/**
  * Test exponents that are nearly but not exactly equal, where HIPPO's formulas for unequal exponents lose precision
  * to cancellation. The energy must be a smooth function of the difference d of the exponents: (E(d) - E(0))/d is
  * the same for d from 1e-4 to 1e-7 (relative to the exponent) to within the first order change in d.
@@ -931,6 +970,7 @@ int main(int argc, char* argv[]) {
         testCoreDampingPme();
         testInteraxOptionsForces();
         testZOnlyFrame();
+        testThreeFoldFrame();
         testNearlyEqualExponents();
         testAlchemical();
         testOwnKernel();
