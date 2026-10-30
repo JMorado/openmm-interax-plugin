@@ -1,6 +1,8 @@
-# Build the plugin against conda-forge OpenMM and run the tests that need no GPU: the C++ tests of the Reference and
-# CPU platforms and of serialization (ctest), and the Python test of the force field (ffxml) generators. The CUDA
-# platform and the Python tests that need InteraxFF models run on the lab's GPU node (devtools/run_all_tests.sh).
+# Build the plugin against the OpenMM that conda-forge resolves (not pinned: CI follows the current release), install it
+# into the environment (next to OpenMM), and run the tests that need no GPU: the C++ tests of the Reference and CPU
+# platforms and of serialization (ctest), and the Python tests on those platforms. The CUDA platform and the
+# comparisons with InteraxFF models run on a GPU node (devtools/run_all_tests.sh). SWIG is not pinned either; CMake
+# checks that its runtime version matches the one of OpenMM's Python module.
 name: CI
 
 on:
@@ -15,13 +17,12 @@ concurrency:
 
 jobs:
   test:
-    name: Linux, OpenMM ${{ matrix.openmm }}, Python ${{ matrix.python }}
+    name: Linux, conda-forge OpenMM, Python ${{ matrix.python }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        openmm: ["8.1.2"]
-        python: ["3.11"]
+        python: ["3.12"]
     defaults:
       run:
         shell: bash -el {0}
@@ -34,22 +35,21 @@ jobs:
           environment-name: ci
           create-args: >-
             python=${{ matrix.python }}
-            openmm=${{ matrix.openmm }}
+            openmm
             cxx-compiler
             cmake
             make
-            swig=4
+            swig
             numpy
             pip
             setuptools
             pytest
-          cache-environment: true
+          cache-environment: false  # a cached environment would keep the OpenMM of its first solve
 
       - name: Configure
         run: |
           cmake -S . -B build \
             -DOPENMM_DIR="$CONDA_PREFIX" \
-            -DCMAKE_INSTALL_PREFIX="$GITHUB_WORKSPACE/install" \
             -DINTERAX_BUILD_CUDA_LIB=OFF \
             -DPYTHON_EXECUTABLE="$(which python)" \
             -DSWIG_EXECUTABLE="$(which swig)"
@@ -60,13 +60,11 @@ jobs:
           cmake --build build --target PythonInstall
 
       - name: Build stamp
-        run: |
-          PYTHONPATH="$GITHUB_WORKSPACE/install/python" python -c \
-            "import openmm; openmm.Platform.loadPluginsFromDirectory('$GITHUB_WORKSPACE/install/lib/plugins'); import interaxplugin_convert as c; print(c.build_info())"
+        run: python -c "import openmm, interaxplugin_convert as c; print('OpenMM', openmm.__version__, '| plugin', c.build_info())"
 
       - name: C++ tests (Reference, CPU, serialization)
         working-directory: build
         run: ctest --output-on-failure -j 4
 
-      - name: Python tests (force field files)
-        run: INTERAX_PLUGIN_PREFIX="$GITHUB_WORKSPACE/install" python -m pytest -q -p no:cacheprovider tests/python/test_forcefield.py
+      - name: Python tests
+        run: python -m pytest -q -p no:cacheprovider -rs tests/python

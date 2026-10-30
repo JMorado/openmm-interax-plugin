@@ -4,7 +4,7 @@ OpenMM InteraxFF Plugin
 [![CI](https://github.com/JMorado/openmm-interax-plugin/actions/workflows/ci.yml/badge.svg)](https://github.com/JMorado/openmm-interax-plugin/actions/workflows/ci.yml)
 ![OpenMM](https://img.shields.io/badge/OpenMM-%E2%89%A5%208.1-blue)
 ![Platforms](https://img.shields.io/badge/platforms-Reference%20%7C%20CPU%20%7C%20CUDA-informational)
-![Python](https://img.shields.io/badge/python-3.11-blue)
+![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12-blue)
 ![Force field files](https://img.shields.io/badge/ffxml-ForceField.createSystem-success)
 
 This plugin implements the intermolecular terms of the InteraxFF force field as five [OpenMM](https://openmm.org)
@@ -255,8 +255,8 @@ against finite differences, cutoffs, periodic boxes, exclusions, alchemical scal
 HIPPO's options, compare `InteraxMultipoleForce` with `HippoNonbondedForce`. `TestInteraxExportValues` checks every
 platform against energies and forces of the InteraxFF export stored in `tests/data`, and
 `serialization/tests/TestSerializeInterax<Force>.cpp` the serialization of every force. Every platform supports
-triclinic boxes (OpenMM's reduced form). GitHub Actions (`.github/workflows/ci.yml`) builds the plugin against conda-forge OpenMM and runs the
-Reference, CPU and serialization tests and the force field file test on every push and pull request;
+triclinic boxes (OpenMM's reduced form). GitHub Actions (`.github/workflows/ci.yml`) builds the plugin against the current conda-forge OpenMM and runs
+the Reference, CPU and serialization tests and the Python tests on those platforms on every push and pull request;
 `devtools/run_all_tests.sh BUILD_DIR PREFIX [GPU]` builds, installs and runs every suite on a GPU node (CUDA, and the
 InteraxFF tests against the build). The Python tests in `tests/python` need the plugin to be installed; they find it,
 InteraxFF and a model through `INTERAX_PLUGIN_PREFIX` (unset: installed next to OpenMM), `INTERAX_REPO` and `INTERAX_MODEL`
