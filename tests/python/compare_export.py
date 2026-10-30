@@ -12,10 +12,13 @@ Usage: python compare_export.py [--platform Reference] [--precision double] [--o
 With --overlap export the plugin uses the InteraxFF Taylor scheme of the export and must reproduce it to rounding;
 with --overlap exact it uses its accurate scheme, which differs from the export by the export's truncation error.
 Run with the interax environment; the plugin is loaded from INTERAX_PLUGIN_PREFIX and the model from INTERAX_MODEL
-(models with lone-pair virtual sites work too).
+(models with lone-pair virtual sites work too). The base force field's charges (intramolecular terms only) are AM1-BCC
+when AmberTools or OpenEye can compute them, else Gasteiger (INTERAX_BASE_CHARGES=am1bcc|gasteiger forces one);
+packmol is looked for on PATH, then next to the Python interpreter.
 """
 import argparse
 import os
+import shutil
 import sys
 import warnings
 
@@ -41,6 +44,39 @@ from openff.units import unit as off_unit  # noqa: E402
 from interax.force_field import ForceField  # noqa: E402
 from interax.models import NAGLModel, PerAtomicNumberModel  # noqa: E402
 from interax.openmm import create_system_from_topology, extend_positions_for_sites  # noqa: E402
+
+# packmol (pack_box) from the environment of this interpreter when it is not on PATH
+if shutil.which("packmol") is None:
+    os.environ["PATH"] = os.path.dirname(sys.executable) + os.pathsep + os.environ.get("PATH", "")
+
+
+def _base_charges():
+    """'am1bcc' or 'gasteiger' (INTERAX_BASE_CHARGES, else AM1-BCC if a toolkit can compute it)."""
+    choice = os.environ.get("INTERAX_BASE_CHARGES", "auto").lower()
+    if choice != "auto":
+        return choice
+    from openff.toolkit.utils.toolkits import GLOBAL_TOOLKIT_REGISTRY, AmberToolsToolkitWrapper, OpenEyeToolkitWrapper
+
+    # the toolkits the registry holds, not just installed binaries: it is built at import, before PATH changes
+    registered = GLOBAL_TOOLKIT_REGISTRY.registered_toolkits
+    return "am1bcc" if any(isinstance(t, (AmberToolsToolkitWrapper, OpenEyeToolkitWrapper)) for t in registered) else "gasteiger"
+
+
+if _base_charges() == "gasteiger":
+    # The base force field's charges only enter the intramolecular terms, which every comparison here leaves unchanged
+    from openff.interchange import Interchange  # noqa: E402
+
+    _from_smirnoff = Interchange.from_smirnoff.__func__
+
+    def _with_gasteiger(cls, force_field, topology, **kwargs):
+        molecules = []
+        for molecule in topology.unique_molecules:
+            molecule = Molecule(molecule)
+            molecule.assign_partial_charges("gasteiger")
+            molecules.append(molecule)
+        return _from_smirnoff(cls, force_field, topology, charge_from_molecules=molecules, **kwargs)
+
+    Interchange.from_smirnoff = classmethod(_with_gasteiger)
 
 COMPONENTS = ["E_static", "E_ind", "E_disp", "E_exrep", "E_src", "E_exind", "E_atm"]
 KINDS = {

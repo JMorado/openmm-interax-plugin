@@ -12,7 +12,8 @@ systems (electrostatics and polarization only):
                  exclusions) that uses the default nonbonded kernel, against the Reference platform
 
 Systems: the non-periodic cluster and the periodic methanol box of compare_export.py.
-Usage: python test_multipole_features.py [--platform CUDA] [--precision double]
+Usage: python test_multipole_features.py [--platform CUDA] [--precision double], or python -m pytest
+test_multipole_features.py (CUDA in double precision; skipped without a CUDA device).
 """
 import argparse
 import os
@@ -159,6 +160,19 @@ def main():
     ok = run("cluster", *cluster_topology(), args.platform, args.precision, ff, nagl, tolerance)
     ok &= run("methanol box", *box_topology(), args.platform, args.precision, ff, nagl, tolerance)
     print("all passed" if ok else "SOME FAILED")
+
+
+def test_multipole_features():
+    import pytest
+
+    try:
+        openmm.Context(openmm.System(), openmm.VerletIntegrator(1.0), openmm.Platform.getPlatformByName("CUDA"))
+    except Exception:
+        pytest.skip("no usable CUDA platform")
+    ff, nagl = load_model()
+    ok = run("cluster", *cluster_topology(), "CUDA", "double", ff, nagl, 1e-5)
+    ok &= run("methanol box", *box_topology(), "CUDA", "double", ff, nagl, 1e-5)
+    assert ok
 
 
 if __name__ == "__main__":

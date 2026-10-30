@@ -11,7 +11,8 @@ removed from the term (zero polarizability or width): every pair and triple invo
 The same holds for the forces and, in the periodic box, for the dispersion long range correction, whose pairs with
 an alchemical particle are all scaled (those within the alchemical molecule included).
 
-Usage: python test_alchemical.py [--platform Reference] [--precision double]
+Usage: python test_alchemical.py [--platform Reference] [--precision double], or python -m pytest test_alchemical.py
+(Reference platform).
 """
 import argparse
 
@@ -112,6 +113,13 @@ def main():
     worst = check("cluster", *cluster_topology(), False, args.platform, args.precision, ff, nagl)
     worst = max(worst, check("methanol box", *box_topology(), True, args.platform, args.precision, ff, nagl))
     print(f"\nlargest difference relative to the decoupling energy: {worst:.1e}")
+
+
+def test_alchemical_scaling():
+    ff, nagl = load_model()
+    worst = check("cluster", *cluster_topology(), False, "Reference", "double", ff, nagl)
+    worst = max(worst, check("methanol box", *box_topology(), True, "Reference", "double", ff, nagl))
+    assert worst < 1e-8
 
 
 if __name__ == "__main__":
