@@ -217,6 +217,7 @@ protected:
     // dipole couplings, and the value of the alchemical parameter
     bool _coreDamping;
     double _coreDampingScale, _mutualDampingScale, _lambda;
+    InteraxMultipoleForce::ChiralityMode _chiralityMode;
     std::map<std::pair<int, int>, Exception> exceptions;
     std::vector<MultipoleParticleData> particleData;
     std::vector<TransformedMultipole> _transformed;

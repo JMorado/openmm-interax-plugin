@@ -153,6 +153,7 @@ void CommonCalcInteraxMultipoleForceKernel::initialize(const System& system, con
     coreDamping = force.getCoreDamping();
     coreDampingScale = force.getCoreDampingScale();
     mutualDampingScale = force.getMutualDampingScale();
+    useChirality = (force.getChiralityMode() == InteraxMultipoleForce::AmoebaChirality);
     alchemicalParameter = force.getAlchemicalParameterName();
 
     // Initialize particle parameters. The parameters of alchemical particles are scaled on the device (execute()), from
@@ -274,6 +275,8 @@ void CommonCalcInteraxMultipoleForceKernel::initialize(const System& system, con
 
     map<string, string> defines = getPhysicsDefines();
     defines["HIPPO"] = "1";
+    if (useChirality)
+        defines["USE_CHIRALITY"] = "1";
     defines["NUM_ATOMS"] = cc.intToString(numParticles);
     defines["PADDED_NUM_ATOMS"] = cc.intToString(cc.getPaddedNumAtoms());
     defines["NUM_BLOCKS"] = cc.intToString(cc.getNumAtomBlocks());

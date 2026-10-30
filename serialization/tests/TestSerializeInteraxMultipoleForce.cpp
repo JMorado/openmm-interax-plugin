@@ -54,6 +54,7 @@ void testSerialization() {
     force.setCoreDampingScale(0.7);
     force.setMutualDampingScale(0.8);
     force.setUseOwnKernel(true);
+    force.setChiralityMode(InteraxMultipoleForce::NoChirality);
     force.setAlchemicalParameterName("lambda_test");
     double qs = 0.0001;
     force.addParticle(-0.38, {0.0, 0.001, 0.003}, {qs*0.7, qs*0.1, qs*0.2, qs*0.1, -qs*0.6, qs*0.3, qs*0.2, qs*0.3, -qs*0.1}, 6.0, 47.075, 0.000795,
@@ -94,6 +95,7 @@ void testSerialization() {
     ASSERT_EQUAL(force.getCoreDampingScale(), force2.getCoreDampingScale());
     ASSERT_EQUAL(force.getMutualDampingScale(), force2.getMutualDampingScale());
     ASSERT_EQUAL(force.getUseOwnKernel(), force2.getUseOwnKernel());
+    ASSERT_EQUAL(force.getChiralityMode(), force2.getChiralityMode());
     ASSERT_EQUAL(force.getAlchemicalParameterName(), force2.getAlchemicalParameterName());
     ASSERT_EQUAL(force.getNumParticles(), force2.getNumParticles());
     for (int i = 0; i < force.getNumParticles(); i++) {
@@ -163,7 +165,23 @@ void testDefaults() {
     ASSERT_EQUAL(1.0, copy->getCoreDampingScale());
     ASSERT_EQUAL(1.0, copy->getMutualDampingScale());
     ASSERT_EQUAL(false, copy->getUseOwnKernel());
+    ASSERT_EQUAL(InteraxMultipoleForce::AmoebaChirality, copy->getChiralityMode());
     ASSERT_EQUAL(string("lambda_electrostatics"), copy->getAlchemicalParameterName());
+}
+
+void testVersion1() {
+    // A force serialized before the chirality mode (version 1) gets the default, AmoebaChirality.
+
+    InteraxMultipoleForce force;
+    force.setChiralityMode(InteraxMultipoleForce::NoChirality);
+    stringstream buffer;
+    XmlSerializer::serialize<InteraxMultipoleForce>(&force, "Force", buffer);
+    string xml = buffer.str();
+    xml.replace(xml.find("version=\"2\""), 11, "version=\"1\"");
+    xml.replace(xml.find(" chiralityMode=\"0\""), 18, "");
+    stringstream modified(xml);
+    unique_ptr<InteraxMultipoleForce> copy(XmlSerializer::deserialize<InteraxMultipoleForce>(modified));
+    ASSERT_EQUAL(InteraxMultipoleForce::AmoebaChirality, copy->getChiralityMode());
 }
 
 void testUnsupportedVersion() {
@@ -171,7 +189,7 @@ void testUnsupportedVersion() {
     stringstream buffer;
     XmlSerializer::serialize<InteraxMultipoleForce>(&force, "Force", buffer);
     string xml = buffer.str();
-    xml.replace(xml.find("version=\"1\""), 11, "version=\"2\"");
+    xml.replace(xml.find("version=\"2\""), 11, "version=\"3\"");
     stringstream modified(xml);
     bool failed = false;
     try {
@@ -187,6 +205,7 @@ int main() {
     try {
         testSerialization();
         testDefaults();
+        testVersion1();
         testUnsupportedVersion();
     }
     catch(const exception& e) {

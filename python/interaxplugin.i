@@ -211,6 +211,7 @@ public:
         PME = 1
     };
     enum ParticleAxisTypes { ZThenX = 0, Bisector = 1, ZBisect = 2, ThreeFold = 3, ZOnly = 4, NoAxisType = 5 };
+    enum ChiralityMode { NoChirality = 0, AmoebaChirality = 1 };
     InteraxMultipoleForce();
     int getNumParticles() const;
     int getNumExceptions() const;
@@ -239,6 +240,8 @@ public:
     void setMutualDampingScale(double kappa);
     bool getUseOwnKernel() const;
     void setUseOwnKernel(bool enabled);
+    ChiralityMode getChiralityMode() const;
+    void setChiralityMode(ChiralityMode mode);
     const std::string& getAlchemicalParameterName() const;
     void setAlchemicalParameterName(const std::string& name);
     void updateParametersInContext(OpenMM::Context& context);

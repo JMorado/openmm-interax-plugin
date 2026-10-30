@@ -98,6 +98,21 @@ public:
      */
     enum ParticleAxisTypes { ZThenX = 0, Bisector = 1, ZBisect = 2, ThreeFold = 3, ZOnly = 4, NoAxisType = 5 };
     /**
+     * This is an enumeration of the ways the chirality of ZThenX frames is handled (see setChiralityMode()).
+     */
+    enum ChiralityMode {
+        /**
+         * The local frame is always x, y = z cross x, z: the y atom of a ZThenX frame is ignored.
+         */
+        NoChirality = 0,
+        /**
+         * AMOEBA's chirality check, at every evaluation on every platform: for a ZThenX particle with a y atom, the y
+         * component of the dipole and the xy and yz components of the quadrupole change sign when the particle lies
+         * on the negative side of the plane of its z, x and y atoms, (r_i - r_y) . ((r_z - r_y) x (r_x - r_y)) < 0.
+         */
+        AmoebaChirality = 1
+    };
+    /**
      * Create an InteraxMultipoleForce.
      */
     InteraxMultipoleForce();
@@ -347,6 +362,19 @@ public:
      */
     bool getUseOwnKernel() const;
     /**
+     * Get how the chirality of ZThenX frames with a y atom is handled.  The default is AmoebaChirality, as in
+     * HippoNonbondedForce on the GPU platforms.
+     */
+    ChiralityMode getChiralityMode() const;
+    /**
+     * Set how the chirality of ZThenX frames with a y atom is handled: NoChirality ignores the y atom; AmoebaChirality
+     * (the default) flips the y components of the multipoles of a particle whose z, x, y atoms are arranged with
+     * negative volume, at every evaluation.  HippoNonbondedForce applies this check at every step on its GPU
+     * platforms but on its Reference platform only once, before the positions are known (so never); in
+     * InteraxMultipoleForce all platforms apply it at every evaluation.
+     */
+    void setChiralityMode(ChiralityMode mode);
+    /**
      * Set whether the GPU platforms evaluate the real-space multipole interactions with a kernel of this force's own.
      * See getUseOwnKernel() for details.
      */
@@ -410,6 +438,7 @@ private:
     double alpha;
     int nx, ny, nz;
     bool coreDamping, useOwnKernel;
+    ChiralityMode chiralityMode;
     double coreDampingScale, mutualDampingScale;
     std::string alchemicalParameterName;
     std::vector<ParticleInfo> particles;

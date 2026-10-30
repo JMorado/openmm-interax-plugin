@@ -40,7 +40,7 @@ InteraxMultipoleForceProxy::InteraxMultipoleForceProxy() : SerializationProxy("I
 }
 
 void InteraxMultipoleForceProxy::serialize(const void* object, SerializationNode& node) const {
-    node.setIntProperty("version", 1);
+    node.setIntProperty("version", 2);  // 2: chiralityMode
     const InteraxMultipoleForce& force = *reinterpret_cast<const InteraxMultipoleForce*>(object);
     node.setIntProperty("forceGroup", force.getForceGroup());
     node.setStringProperty("name", force.getName());
@@ -53,6 +53,7 @@ void InteraxMultipoleForceProxy::serialize(const void* object, SerializationNode
     node.setDoubleProperty("pmeAlpha", alpha).setIntProperty("pmeNx", nx).setIntProperty("pmeNy", ny).setIntProperty("pmeNz", nz);
     node.setBoolProperty("coreDamping", force.getCoreDamping());
     node.setBoolProperty("useOwnKernel", force.getUseOwnKernel());
+    node.setIntProperty("chiralityMode", (int) force.getChiralityMode());
     node.setDoubleProperty("mutualDampingScale", force.getMutualDampingScale());
     node.setDoubleProperty("coreDampingScale", force.getCoreDampingScale());
     node.setStringProperty("alchemicalParameter", force.getAlchemicalParameterName());
@@ -87,7 +88,8 @@ void InteraxMultipoleForceProxy::serialize(const void* object, SerializationNode
 }
 
 void* InteraxMultipoleForceProxy::deserialize(const SerializationNode& node) const {
-    if (node.getIntProperty("version") != 1)
+    int version = node.getIntProperty("version");
+    if (version < 1 || version > 2)
         throw OpenMMException("Unsupported version number");
     InteraxMultipoleForce* force = new InteraxMultipoleForce();
     try {
@@ -99,6 +101,7 @@ void* InteraxMultipoleForceProxy::deserialize(const SerializationNode& node) con
         force->setPMEParameters(node.getDoubleProperty("pmeAlpha"), node.getIntProperty("pmeNx"), node.getIntProperty("pmeNy"), node.getIntProperty("pmeNz"));
         force->setCoreDamping(node.getBoolProperty("coreDamping"));
         force->setUseOwnKernel(node.getBoolProperty("useOwnKernel", false));
+        force->setChiralityMode((InteraxMultipoleForce::ChiralityMode) node.getIntProperty("chiralityMode", InteraxMultipoleForce::AmoebaChirality));
         force->setMutualDampingScale(node.getDoubleProperty("mutualDampingScale"));
         force->setCoreDampingScale(node.getDoubleProperty("coreDampingScale", 1.0));
         force->setAlchemicalParameterName(node.getStringProperty("alchemicalParameter"));

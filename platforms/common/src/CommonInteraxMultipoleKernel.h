@@ -149,7 +149,7 @@ protected:
     int numParticles, maxExtrapolationOrder, maxTiles, fieldThreadBlockSize, forceThreadBlockSize;
     int gridSizeX, gridSizeY, gridSizeZ;
     double pmeAlpha, cutoff, coreDampingScale, mutualDampingScale, lastLambda;
-    bool usePME, hasInitializedKernels, multipolesAreValid, coreDamping, hasAlchemicalParticles, useOwnKernel;
+    bool usePME, hasInitializedKernels, multipolesAreValid, coreDamping, hasAlchemicalParticles, useOwnKernel, useChirality;
     std::string alchemicalParameter, electrostaticsSource;
     std::vector<double> extrapolationCoefficients;
     std::vector<KernelParameter> electrostaticsParams, electrostaticsArgs;

@@ -78,9 +78,10 @@ KERNEL void computeLabFrameMoments(GLOBAL real4* RESTRICT posq, GLOBAL int4* RES
                 vectorZ.z = 1;
             }
             
-            // Check the chirality and see whether it needs to be reversed
+            // Check the chirality and see whether it needs to be reversed (InteraxMultipoleForce::AmoebaChirality)
             
             bool reverse = false;
+#ifdef USE_CHIRALITY
             if (axisType == 0 && particles.x >= 0 && particles.y >=0 && particles.z >= 0) {
                 real4 posY = posq[particles.y];
                 real delta[4][3];
@@ -104,6 +105,7 @@ KERNEL void computeLabFrameMoments(GLOBAL real4* RESTRICT posq, GLOBAL int4* RES
                 real volume = delta[3][0]*delta[0][0] + delta[3][1]*delta[1][0] + delta[3][2]*delta[2][0];
                 reverse = (volume < 0);
             }
+#endif
         
             // Transform the dipole
             

@@ -95,7 +95,9 @@ ReferenceInteraxMultipole::ReferenceInteraxMultipole(const InteraxMultipoleForce
     _coreDamping = force.getCoreDamping();
     _coreDampingScale = force.getCoreDampingScale();
     _mutualDampingScale = force.getMutualDampingScale();
-    checkChiral();
+    // InteraxFF: the chirality check needs the positions, so it is applied in loadParticleData() at every evaluation
+    // (as on the GPU platforms), not once here
+    _chiralityMode = force.getChiralityMode();
 }
 
 InteraxMultipoleForce::NonbondedMethod ReferenceInteraxMultipole::getNonbondedMethod() const {
@@ -141,6 +143,8 @@ void ReferenceInteraxMultipole::loadParticleData(const vector<Vec3>& particlePos
         for (int k = 0; k < 6; k++)
             p.localQuadrupole[k] = scale*p.baseLocalQuadrupole[k];
     }
+    if (_chiralityMode == InteraxMultipoleForce::AmoebaChirality)
+        checkChiral();
 }
 
 void ReferenceInteraxMultipole::checkChiralCenterAtParticle(MultipoleParticleData& particleI, int axisType,
@@ -157,10 +161,12 @@ void ReferenceInteraxMultipole::checkChiralCenterAtParticle(MultipoleParticleDat
     Vec3 deltaC    = deltaBD.cross(deltaCD);
     double volume = deltaC.dot(deltaAD);
 
+    // InteraxFF: flip the local moments, which applyRotationMatrix() then rotates (the lab frame moments that
+    // HIPPO's Reference code flips here are overwritten by the rotation)
     if (volume < 0.0) {
-        particleI.dipole[1] *= -1.0; // pole(3,i)
-        particleI.quadrupole[QXY] *= -1.0; // pole(6,i) && pole(8,i)
-        particleI.quadrupole[QYZ] *= -1.0; // pole(10,i) && pole(12,i)
+        particleI.localDipole[1] *= -1.0; // pole(3,i)
+        particleI.localQuadrupole[QXY] *= -1.0; // pole(6,i) && pole(8,i)
+        particleI.localQuadrupole[QYZ] *= -1.0; // pole(10,i) && pole(12,i)
     }
 }
 

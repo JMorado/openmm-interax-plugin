@@ -175,6 +175,7 @@ struct InteraxOptions {
     double coreDampingScale = 1.0, mutualDampingScale = 1.0;
     vector<bool> isAlchemical;
     string alchemicalParameter = "lambda_electrostatics";
+    InteraxMultipoleForce::ChiralityMode chiralityMode = InteraxMultipoleForce::AmoebaChirality;
 };
 
 InteraxMultipoleForce* createInteraxForce(const MultipoleSystem& s, const InteraxOptions& options=InteraxOptions()) {
@@ -188,6 +189,7 @@ InteraxMultipoleForce* createInteraxForce(const MultipoleSystem& s, const Intera
     force->setMutualDampingScale(options.mutualDampingScale);
     force->setUseOwnKernel(options.useOwnKernel);
     force->setAlchemicalParameterName(options.alchemicalParameter);
+    force->setChiralityMode(options.chiralityMode);
     for (int i = 0; i < s.particles.size(); i++) {
         const MultipoleParticle& p = s.particles[i];
         force->addParticle(p.charge, p.dipole, p.quadrupole, p.coreCharge, p.alpha, p.polarizability, p.axisType, p.atomZ, p.atomX, p.atomY,
@@ -698,6 +700,74 @@ void testChangingParameters() {
 }
 
 /**
+ * A molecule with a chiral centre (particle 0, a ZThenX frame with a y atom and four distinct neighbours) whose
+ * dipole and quadrupole have y components, near a water molecule, and the mirror image of the pair (x -> -x).
+ */
+MultipoleSystem createChiralPair(bool mirror) {
+    MultipoleSystem s;
+    double qs = 1e-4;
+    s.particles.push_back({0.1, {0.003, 0.004, 0.005}, {qs, 2*qs, -qs, 2*qs, 0.5*qs, 1.5*qs, -qs, 1.5*qs, -1.5*qs}, 4.0, 30.0, 0.0012,
+                           InteraxMultipoleForce::ZThenX, 1, 2, 3});
+    double charges[4] = {-0.25, 0.05, 0.08, 0.02};
+    for (int k = 0; k < 4; k++)
+        s.particles.push_back({charges[k], {0.0, 0.0, 0.002*(k+1)}, vector<double>(9, 0.0), 1.0+k, 35.0+3*k, 0.0005+0.0002*k,
+                               InteraxMultipoleForce::ZOnly, 0, -1, -1});
+    for (int i = 0; i < 5; i++)
+        for (int j = i+1; j < 5; j++)
+            s.exceptions.push_back({i, j, 0.0, 0.0, 0.0});
+    s.positions = {Vec3(0, 0, 0), Vec3(0.14, 0.01, -0.02), Vec3(-0.05, 0.10, 0.03), Vec3(-0.04, -0.06, 0.09), Vec3(-0.03, -0.05, -0.10)};
+    addWater(s, Vec3(0.30, 0.12, 0.05), Vec3(0.37, 0.16, 0.10), Vec3(0.33, 0.04, 0.02));
+    if (mirror)
+        for (Vec3& r : s.positions)
+            r[0] = -r[0];
+    return s;
+}
+
+/**
+ * Test the chirality modes. With AmoebaChirality the multipoles of the chiral centre change their y components when
+ * the frame is left-handed, so the energy of the mirror image is the same and its forces are the mirror images, on
+ * every platform (HIPPO only applies the check on the GPU platforms); with NoChirality the y atom is ignored.
+ */
+void testChirality() {
+    for (auto mode : {InteraxMultipoleForce::AmoebaChirality, InteraxMultipoleForce::NoChirality}) {
+        InteraxOptions options;
+        options.chiralityMode = mode;
+        MultipoleResults results[2];
+        for (int mirror = 0; mirror < 2; mirror++) {
+            MultipoleSystem s = createChiralPair(mirror);
+            System system;
+            createSystem(system, s, createInteraxForce(s, options));
+            results[mirror] = evaluate(system, s.positions, platform);
+            if (platform.getName() != "Reference")
+                compareResults(evaluate(system, s.positions, Platform::getPlatformByName("Reference")), results[mirror], energyTol);
+            VerletIntegrator integrator(0.001);
+            Context context(system, integrator, platform);
+            context.setPositions(s.positions);
+            if (getPlatformPrecision(platform, true) == "double")
+                checkFiniteDifferenceForces(context, 1e-6);
+            checkForceEnergyConsistency(context, consistencyTol, consistencyStep);
+            if (mode == InteraxMultipoleForce::NoChirality) {
+                // The same as without a y atom
+                MultipoleSystem noY = s;
+                noY.particles[0].atomY = -1;
+                System system2;
+                createSystem(system2, noY, createInteraxForce(noY, options));
+                compareResults(evaluate(system2, s.positions, platform), results[mirror], energyTol);
+            }
+        }
+        if (mode == InteraxMultipoleForce::AmoebaChirality) {
+            ASSERT_EQUAL_TOL(results[0].energy, results[1].energy, energyTol);
+            for (int i = 0; i < results[0].forces.size(); i++) {
+                Vec3 f = results[0].forces[i];
+                ASSERT_EQUAL_VEC(Vec3(-f[0], f[1], f[2]), results[1].forces[i], 10*energyTol);
+            }
+        }
+        else
+            ASSERT(fabs(results[0].energy-results[1].energy) > 10*energyTol*fabs(results[0].energy));  // 2% here
+    }
+}
+
+/**
  * Test, on a platform other than Reference, the InteraxFF options in a periodic box against the Reference platform.
  */
 void testAgainstReference() {
@@ -826,6 +896,7 @@ int main(int argc, char* argv[]) {
         testOwnKernel();
         testChangingParameters();
         testAgainstReference();
+        testChirality();
         testAlchemicalOverlap();
         testIllegalSettings();
         runPlatformTests();

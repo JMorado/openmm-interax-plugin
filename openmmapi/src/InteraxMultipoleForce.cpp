@@ -40,7 +40,7 @@ using namespace OpenMM;
 using namespace std;
 
 InteraxMultipoleForce::InteraxMultipoleForce() : nonbondedMethod(NoCutoff), cutoffDistance(1.0), ewaldErrorTol(1e-4), alpha(0.0),
-        nx(0), ny(0), nz(0), coreDamping(false), useOwnKernel(false), coreDampingScale(1.0), mutualDampingScale(1.0),
+        nx(0), ny(0), nz(0), coreDamping(false), useOwnKernel(false), chiralityMode(AmoebaChirality), coreDampingScale(1.0), mutualDampingScale(1.0),
         alchemicalParameterName("lambda_electrostatics") {
     extrapolationCoefficients = {0.042, 0.635, 0.414};
 }
@@ -125,6 +125,16 @@ void InteraxMultipoleForce::setMutualDampingScale(double kappa) {
     if (kappa <= 0)
         throw OpenMMException("InteraxMultipoleForce: The mutual damping scale must be positive");
     mutualDampingScale = kappa;
+}
+
+InteraxMultipoleForce::ChiralityMode InteraxMultipoleForce::getChiralityMode() const {
+    return chiralityMode;
+}
+
+void InteraxMultipoleForce::setChiralityMode(InteraxMultipoleForce::ChiralityMode mode) {
+    if (mode != NoChirality && mode != AmoebaChirality)
+        throw OpenMMException("InteraxMultipoleForce: Illegal value for chirality mode");
+    chiralityMode = mode;
 }
 
 bool InteraxMultipoleForce::getUseOwnKernel() const {
