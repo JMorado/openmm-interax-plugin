@@ -35,6 +35,7 @@
 #include "openmm/OpenMMException.h"
 #include "openmm/cpu/CpuNeighborList.h"
 #include <atomic>
+#include <cmath>
 #include <set>
 
 namespace InteraxPlugin {
@@ -93,7 +94,9 @@ private:
     InteraxPairForce::NonbondedMethod nonbondedMethod;
     float cutoff, switchingDistance, softcoreRadius;
     bool useSwitch, periodic;
-    float boxSize[3], invBoxSize[3];
+    float boxSize[3], invBoxSize[3], boxVecs[3][3];
+    bool triclinic;
+    OpenMM::AlignedArray<float> wrappedPosq;
     OpenMM::ThreadPool& threads;
     std::vector<float> parameters[Term::NUM_PARAMETERS];
     std::vector<float> isAlchemical;
@@ -168,20 +171,45 @@ template <class FVEC, int BLOCK_SIZE, class Term>
 void CpuInteraxPairForceFvec<FVEC, BLOCK_SIZE, Term>::calculatePairIxn(const OpenMM::AlignedArray<float>& posq, const OpenMM::Vec3* boxVectors,
         double lambda, const CpuInteraxPairGlobals& globals, std::vector<OpenMM::AlignedArray<float> >& threadForce, bool includeEnergy, double& totalEnergy) {
     if (periodic) {
-        if (boxVectors[0][1] != 0 || boxVectors[0][2] != 0 || boxVectors[1][0] != 0 || boxVectors[1][2] != 0 || boxVectors[2][0] != 0 || boxVectors[2][1] != 0)
-            throw OpenMM::OpenMMException("The CPU implementation of the InteraxFF pair forces does not support triclinic boxes");
+        // OpenMM keeps the box in reduced form: a = (ax, 0, 0), b = (bx, by, 0), c = (cx, cy, cz)
+        triclinic = (boxVectors[1][0] != 0 || boxVectors[2][0] != 0 || boxVectors[2][1] != 0);
         for (int i = 0; i < 3; i++) {
             boxSize[i] = (float) boxVectors[i][i];
             invBoxSize[i] = (float) (1/boxVectors[i][i]);
+            for (int j = 0; j < 3; j++)
+                boxVecs[i][j] = (float) boxVectors[i][j];
         }
     }
     int numParticles = isAlchemical.size();
+    const OpenMM::AlignedArray<float>* positions = &posq;
+    if (periodic && triclinic) {
+        // The neighbor list needs the positions in the periodic cell of a triclinic box (the CPU platform does not wrap
+        // them): wrap a copy into the reduced cell, c first, then b, then a
+        if (wrappedPosq.size() != posq.size())
+            wrappedPosq.resize(posq.size());
+        for (int i = 0; i < numParticles; i++) {
+            double x = posq[4*i], y = posq[4*i+1], z = posq[4*i+2];
+            double s3 = std::floor(z/boxVectors[2][2]);
+            x -= s3*boxVectors[2][0];
+            y -= s3*boxVectors[2][1];
+            z -= s3*boxVectors[2][2];
+            double s2 = std::floor(y/boxVectors[1][1]);
+            x -= s2*boxVectors[1][0];
+            y -= s2*boxVectors[1][1];
+            x -= std::floor(x/boxVectors[0][0])*boxVectors[0][0];
+            wrappedPosq[4*i] = (float) x;
+            wrappedPosq[4*i+1] = (float) y;
+            wrappedPosq[4*i+2] = (float) z;
+            wrappedPosq[4*i+3] = posq[4*i+3];
+        }
+        positions = &wrappedPosq;
+    }
     if (nonbondedMethod != InteraxPairForce::NoCutoff)
-        neighborList.computeNeighborList(numParticles, posq, exclusions, boxVectors, periodic, cutoff, threads);
+        neighborList.computeNeighborList(numParticles, *positions, exclusions, boxVectors, periodic, cutoff, threads);
 
     // Record the parameters for the threads.
 
-    this->posq = &posq[0];
+    this->posq = &(*positions)[0];
     this->threadForce = &threadForce;
     this->lambda = (float) lambda;
     this->globals = globals;
@@ -266,9 +294,22 @@ void CpuInteraxPairForceFvec<FVEC, BLOCK_SIZE, Term>::calculateBlockIxn(int bloc
         FVEC dy = blockY-posq[4*atom+1];
         FVEC dz = blockZ-posq[4*atom+2];
         if (periodic) {
-            dx -= round(dx*invBoxSize[0])*boxSize[0];
-            dy -= round(dy*invBoxSize[1])*boxSize[1];
-            dz -= round(dz*invBoxSize[2])*boxSize[2];
+            if (triclinic) {
+                // As OpenMM's CPU nonbonded kernels: c, then b, then a (reduced form)
+                FVEC scale3 = round(dz*invBoxSize[2]);
+                dx -= scale3*boxVecs[2][0];
+                dy -= scale3*boxVecs[2][1];
+                dz -= scale3*boxVecs[2][2];
+                FVEC scale2 = round(dy*invBoxSize[1]);
+                dx -= scale2*boxVecs[1][0];
+                dy -= scale2*boxVecs[1][1];
+                dx -= round(dx*invBoxSize[0])*boxVecs[0][0];
+            }
+            else {
+                dx -= round(dx*invBoxSize[0])*boxSize[0];
+                dy -= round(dy*invBoxSize[1])*boxSize[1];
+                dz -= round(dz*invBoxSize[2])*boxSize[2];
+            }
         }
         FVEC r2 = dx*dx + dy*dy + dz*dz;
 

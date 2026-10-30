@@ -243,8 +243,8 @@ and double precision. They compare energies and forces with values computed from
 against finite differences, cutoffs, periodic boxes, exclusions, alchemical scaling and parameter updates, and, with
 HIPPO's options, compare `InteraxMultipoleForce` with `HippoNonbondedForce`. `TestInteraxExportValues` checks every
 platform against energies and forces of the InteraxFF export stored in `tests/data`, and
-`serialization/tests/TestSerializeInterax<Force>.cpp` the serialization of every force. The CPU pair forces support
-rectangular boxes only (triclinic boxes raise an exception). The Python tests in `tests/python` need the plugin to be
+`serialization/tests/TestSerializeInterax<Force>.cpp` the serialization of every force. Every platform supports
+triclinic boxes (OpenMM's reduced form). The Python tests in `tests/python` need the plugin to be
 installed:
 
 | Test | What it checks |

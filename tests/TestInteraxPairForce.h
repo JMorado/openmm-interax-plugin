@@ -300,18 +300,6 @@ void testTriclinic() {
     VerletIntegrator integrator(0.001);
     Context context(system, integrator, platform);
     context.setPositions(positions);
-    if (platform.getName() == "CPU") {
-        // The CPU implementation of the pair forces does not support triclinic boxes, and says so.
-        bool failed = false;
-        try {
-            getEnergyAndForces(context);
-        }
-        catch (const OpenMMException& e) {
-            failed = true;
-        }
-        ASSERT(failed);
-        return;
-    }
     compareWithReference<Model>(context, *force, 1, energyTol, forceTol);
 }
 
