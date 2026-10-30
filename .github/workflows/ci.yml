@@ -1,0 +1,72 @@
+# Build the plugin against conda-forge OpenMM and run the tests that need no GPU: the C++ tests of the Reference and
+# CPU platforms and of serialization (ctest), and the Python test of the force field (ffxml) generators. The CUDA
+# platform and the Python tests that need InteraxFF models run on the lab's GPU node (devtools/run_all_tests.sh).
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Linux, OpenMM ${{ matrix.openmm }}, Python ${{ matrix.python }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        openmm: ["8.1.2"]
+        python: ["3.11"]
+    defaults:
+      run:
+        shell: bash -el {0}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up the environment
+        uses: mamba-org/setup-micromamba@v2
+        with:
+          environment-name: ci
+          create-args: >-
+            python=${{ matrix.python }}
+            openmm=${{ matrix.openmm }}
+            cxx-compiler
+            cmake
+            make
+            swig=4
+            numpy
+            pip
+            setuptools
+            pytest
+          cache-environment: true
+
+      - name: Configure
+        run: |
+          cmake -S . -B build \
+            -DOPENMM_DIR="$CONDA_PREFIX" \
+            -DCMAKE_INSTALL_PREFIX="$GITHUB_WORKSPACE/install" \
+            -DINTERAX_BUILD_CUDA_LIB=OFF \
+            -DPYTHON_EXECUTABLE="$(which python)" \
+            -DSWIG_EXECUTABLE="$(which swig)"
+
+      - name: Build and install
+        run: |
+          cmake --build build -j 4 --target install
+          cmake --build build --target PythonInstall
+
+      - name: Build stamp
+        run: |
+          PYTHONPATH="$GITHUB_WORKSPACE/install/python" python -c \
+            "import openmm; openmm.Platform.loadPluginsFromDirectory('$GITHUB_WORKSPACE/install/lib/plugins'); import interaxplugin_convert as c; print(c.build_info())"
+
+      - name: C++ tests (Reference, CPU, serialization)
+        working-directory: build
+        run: ctest --output-on-failure -j 4
+
+      - name: Python tests (force field files)
+        run: INTERAX_PLUGIN_PREFIX="$GITHUB_WORKSPACE/install" python -m pytest -q -p no:cacheprovider tests/python/test_forcefield.py
