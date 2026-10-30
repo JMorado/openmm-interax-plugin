@@ -51,7 +51,7 @@ def main():
     commit = subprocess.run(["git", "-C", INTERAX_REPO, "rev-parse", "--short", "HEAD"], capture_output=True, text=True).stdout.strip()
     for name, (make_topology, periodic, description) in SYSTEMS.items():
         topology, positions = make_topology()
-        export = create_system_from_topology(topology, ff, nagl, electrostatics="hippo", nonbonded_cutoff=0.9, components=COMPONENTS)
+        export = create_system_from_topology(topology, ff, nagl, electrostatics="interax", nonbonded_cutoff=0.9, components=COMPONENTS)
         box = export.getDefaultPeriodicBoxVectors() if periodic else None
         values = evaluate(export, positions, box, "Reference", terms_by_kind(export, False))
         system = plugin_system(export)

@@ -74,7 +74,7 @@ def finite_difference_error(system, positions, box, forces, atoms, h=1e-5):
 
 
 def compare(name, topology, positions, periodic, platform, precision, ff, nagl, core_damping=False, kappa=1.0):
-    system = create_system_from_topology(topology, ff, nagl, electrostatics="hippo", nonbonded_cutoff=0.9, components=["E_static", "E_ind"])
+    system = create_system_from_topology(topology, ff, nagl, electrostatics="interax", nonbonded_cutoff=0.9, components=["E_static", "E_ind"])
     positions = extend_positions_for_sites(positions, system)
     box = system.getDefaultPeriodicBoxVectors() if periodic else None
     hippo_system, plugin_system = split(system, core_damping, kappa)

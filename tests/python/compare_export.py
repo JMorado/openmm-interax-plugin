@@ -123,7 +123,7 @@ def evaluate(system, positions, box, platform, indices, precision="double"):
 
 
 def compare(name, topology, positions, periodic, platform, precision, overlap, ff, nagl):
-    system = create_system_from_topology(topology, ff, nagl, electrostatics="hippo", nonbonded_cutoff=0.9, components=COMPONENTS)
+    system = create_system_from_topology(topology, ff, nagl, electrostatics="interax", nonbonded_cutoff=0.9, components=COMPONENTS)
     box = system.getDefaultPeriodicBoxVectors() if periodic else None
     converted = interaxplugin_convert.convert_system(system, overlap=overlap)
     export_terms, plugin_terms = terms_by_kind(system, False), terms_by_kind(converted, True)

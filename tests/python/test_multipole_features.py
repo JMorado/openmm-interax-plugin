@@ -17,7 +17,7 @@ Usage: python test_multipole_features.py [--platform CUDA] [--precision double]
 import argparse
 import os
 
-os.environ.setdefault("INTERAX_PLUGIN_PREFIX", "/shared/joaomorado/opt/openmm-interax-v3")
+os.environ.setdefault("INTERAX_PLUGIN_PREFIX", "/shared/joaomorado/opt/openmm-interax-v8")
 os.environ.setdefault("INTERAX_MODEL", "/shared/joaomorado/repos/InteraxFF/examples/models_v3R4bfdE1MQ")
 
 from compare_export import box_topology, cluster_topology, interaxplugin, interaxplugin_convert, load_model, np, openmm, unit  # noqa: E402
@@ -25,8 +25,32 @@ from compare_export import box_topology, cluster_topology, interaxplugin, intera
 from interax.openmm import create_system_from_topology  # noqa: E402
 
 
-def hippo_of(system):
-    return next(interaxplugin_convert.wrapped_hippo(f) for f in system.getForces() if interaxplugin_convert.wrapped_hippo(f) is not None)
+def multipoles_of(system):
+    """The InteraxMultipoleForce of an export (electrostatics="interax", wrapped in a CustomCVForce "E_hippo")."""
+    for f in system.getForces():
+        if isinstance(f, openmm.CustomCVForce):
+            for k in range(f.getNumCollectiveVariables()):
+                cv = f.getCollectiveVariable(k)
+                if interaxplugin.InteraxMultipoleForce.isinstance(cv):
+                    return cv
+    raise ValueError("no InteraxMultipoleForce in the system")
+
+
+def variant(base, core_damping=False, core_damping_scale=1.0, mutual_damping_scale=1.0, alchemical_particles=()):
+    """A copy of an exported InteraxMultipoleForce with the given options (the defaults are HIPPO's), as
+    convert_multipoles made from the HippoNonbondedForce before the export's HIPPO path was removed (2026-10-30).
+    Returns (force, typed view): add the force to a System, change it through the view."""
+    force = openmm.XmlSerializer.deserialize(openmm.XmlSerializer.serialize(base))
+    typed = interaxplugin.InteraxMultipoleForce.cast(force)
+    typed.setCoreDamping(core_damping)
+    typed.setCoreDampingScale(core_damping_scale)
+    typed.setMutualDampingScale(mutual_damping_scale)
+    alchemical = set(alchemical_particles)
+    for i in range(typed.getNumParticles()):
+        p = typed.getParticleParametersList(i)
+        typed.setParticleParameters(i, p[0], p[1:4], p[4:13], p[13], p[14], p[15], int(p[16]), int(p[17]), int(p[18]), int(p[19]),
+                                    i in alchemical)
+    return force, typed
 
 
 def single(system, force):
@@ -60,36 +84,35 @@ def report(label, test, ref, tolerance):
 def run(name, topology, positions, platform, precision, ff, nagl, tolerance):
     print(f"{name}: {topology.n_atoms} atoms, {platform} ({precision}) vs Reference")
     ok = True
-    system = create_system_from_topology(topology, ff, nagl, electrostatics="hippo", nonbonded_cutoff=0.9, components=["E_static", "E_ind"])
-    hippo = hippo_of(system)
+    system = create_system_from_topology(topology, ff, nagl, electrostatics="interax", nonbonded_cutoff=0.9, components=["E_static", "E_ind"])
+    base = multipoles_of(system)
     na = topology.molecule(0).n_atoms
 
     # core damping, eta and kappa
-    force = interaxplugin_convert.convert_multipoles(hippo, core_damping=True, core_damping_scale=0.6, mutual_damping_scale=0.8)
+    force, _ = variant(base, core_damping=True, core_damping_scale=0.6, mutual_damping_scale=0.8)
     s = single(system, force)
     ok &= report("core damping, eta 0.6, kappa 0.8", evaluate(s, positions, platform, precision), evaluate(s, positions, "Reference", "double"), tolerance)
 
     # intramolecular coupling of the induced dipoles
-    intra = create_system_from_topology(topology, ff, nagl, electrostatics="hippo", nonbonded_cutoff=0.9, components=["E_static", "E_ind"],
+    intra = create_system_from_topology(topology, ff, nagl, electrostatics="interax", nonbonded_cutoff=0.9, components=["E_static", "E_ind"],
                                         polarization="mutual-intra")
-    s = single(system, interaxplugin_convert.convert_multipoles(hippo_of(intra), core_damping=True))
+    s = single(system, variant(multipoles_of(intra), core_damping=True)[0])
     ok &= report("mutual-intra, core damping", evaluate(s, positions, platform, precision), evaluate(s, positions, "Reference", "double"), tolerance)
 
     # alchemical scaling
-    alchemical = single(system, interaxplugin_convert.convert_multipoles(hippo, core_damping=True, alchemical_particles=range(na)))
+    alchemical = single(system, variant(base, core_damping=True, alchemical_particles=range(na))[0])
     lam = {"lambda_electrostatics": 0.3}
     ok &= report("lambda_electrostatics 0.3", evaluate(alchemical, positions, platform, precision, lam),
                  evaluate(alchemical, positions, "Reference", "double", lam), tolerance)
-    off = interaxplugin_convert.convert_multipoles(hippo, core_damping=True)
+    off_force, off = variant(base, core_damping=True)
     for i in range(na):
         p = off.getParticleParametersList(i)
         off.setParticleParameters(i, 0.0, [0, 0, 0], [0] * 9, 0.0, p[14], 0.0, int(p[16]), int(p[17]), int(p[18]), int(p[19]), False)
     ok &= report("lambda_electrostatics 0 = solute removed", evaluate(alchemical, positions, platform, precision, {"lambda_electrostatics": 0.0}),
-                 evaluate(single(system, off), positions, "Reference", "double"), tolerance)
+                 evaluate(single(system, off_force), positions, "Reference", "double"), tolerance)
 
     # serialization (of a force not yet owned by a System, which the comparison then owns)
-    force = interaxplugin_convert.convert_multipoles(hippo, core_damping=True, core_damping_scale=0.6, mutual_damping_scale=0.8,
-                                                     alchemical_particles=range(na))
+    force, _ = variant(base, core_damping=True, core_damping_scale=0.6, mutual_damping_scale=0.8, alchemical_particles=range(na))
     xml = openmm.XmlSerializer.serialize(force)
     reference = single(system, force)
     clone = single(system, openmm.XmlSerializer.deserialize(xml))
@@ -98,23 +121,27 @@ def run(name, topology, positions, platform, precision, ff, nagl, tolerance):
                  evaluate(reference, positions, platform, precision, lam), 1e-12 if precision == "double" else 1e-7)
 
     # own kernel: alone, and sharing the context (and neighbor list) with a NonbondedForce
-    force = interaxplugin_convert.convert_multipoles(hippo, core_damping=True, core_damping_scale=0.6, mutual_damping_scale=0.8)
-    force.setUseOwnKernel(True)
+    force, typed = variant(base, core_damping=True, core_damping_scale=0.6, mutual_damping_scale=0.8)
+    typed.setUseOwnKernel(True)
     if not interaxplugin.InteraxMultipoleForce.cast(openmm.XmlSerializer.deserialize(openmm.XmlSerializer.serialize(force))).getUseOwnKernel():
         print("  FAIL useOwnKernel lost in the XML round trip")
         ok = False
     own = single(system, force)
     ok &= report("own kernel", evaluate(own, positions, platform, precision), evaluate(own, positions, "Reference", "double"), tolerance)
     lj = openmm.NonbondedForce()
-    periodic = hippo.getNonbondedMethod() == openmm.HippoNonbondedForce.PME
+    periodic = typed.getNonbondedMethod() == interaxplugin.InteraxMultipoleForce.PME
     lj.setNonbondedMethod(openmm.NonbondedForce.PME if periodic else openmm.NonbondedForce.NoCutoff)
-    lj.setCutoffDistance(force.getCutoffDistance())
+    lj.setCutoffDistance(typed.getCutoffDistance())
     lj.setUseDispersionCorrection(False)
-    for i in range(force.getNumParticles()):
+    for i in range(typed.getNumParticles()):
         lj.addParticle(0.0, 0.3, 0.2)
-    for k in range(hippo.getNumExceptions()):  # the exceptions of force (convert_multipoles copies them)
-        i, j = hippo.getExceptionParameters(k)[:2]
-        lj.addException(i, j, 0.0, 1.0, 0.0)
+    offset = 0  # the exceptions of the export: every intramolecular pair
+    for molecule in topology.molecules:
+        for i in range(offset, offset + molecule.n_atoms):
+            for j in range(i + 1, offset + molecule.n_atoms):
+                lj.addException(i, j, 0.0, 1.0, 0.0)
+        offset += molecule.n_atoms
+    assert lj.getNumExceptions() == typed.getNumExceptions()
     lj.setForceGroup(1)
     own.addForce(lj)
     ok &= report("own kernel + NonbondedForce, one context", evaluate(own, positions, platform, precision),

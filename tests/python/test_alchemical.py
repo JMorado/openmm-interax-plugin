@@ -72,7 +72,7 @@ def energies(system, positions, box, platform, precision, indices, lambdas):
 
 
 def check(name, topology, positions, periodic, platform, precision, ff, nagl):
-    export = create_system_from_topology(topology, ff, nagl, electrostatics="hippo", nonbonded_cutoff=0.9, components=COMPONENTS)
+    export = create_system_from_topology(topology, ff, nagl, electrostatics="interax", nonbonded_cutoff=0.9, components=COMPONENTS)
     box = export.getDefaultPeriodicBoxVectors() if periodic else None
     solute = first_molecule(topology)
     systems = {}

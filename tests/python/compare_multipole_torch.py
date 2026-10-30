@@ -25,7 +25,7 @@ xb = xa + np.array([shift, 0.05, 0.02])
 with torch.no_grad():
     pol.mutual_order.fill_(order); pol.mutual_damping_scale.fill_(1.0); pol.core_damping.fill_(False)
     pol.mutual_lambda.fill_(1.0)
-system = create_system_from_topology(Topology.from_molecules(mols), ff, nagl, components=["E_static", "E_ind"], electrostatics="hippo",
+system = create_system_from_topology(Topology.from_molecules(mols), ff, nagl, components=["E_static", "E_ind"], electrostatics="interax",
                                      polarization="mutual" if order > 0 else "direct")
 hippo = next(interaxplugin_convert.wrapped_hippo(f) for f in system.getForces() if interaxplugin_convert.wrapped_hippo(f) is not None)
 with torch.no_grad():

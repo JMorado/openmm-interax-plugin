@@ -24,7 +24,7 @@ X = []
 for k, m in enumerate(mols):
     m.generate_conformers(n_conformers=1); X.append(m.conformers[0].m_as("nanometer") + np.array([0.3*k, 0.07*k, -0.05*k]))
 X = np.vstack(X); na = mols[0].n_atoms
-system = create_system_from_topology(Topology.from_molecules(mols), ff, nagl, components=["E_static", "E_ind"], electrostatics="hippo")
+system = create_system_from_topology(Topology.from_molecules(mols), ff, nagl, components=["E_static", "E_ind"], electrostatics="interax")
 hippo = next(interaxplugin_convert.wrapped_hippo(f) for f in system.getForces() if interaxplugin_convert.wrapped_hippo(f) is not None)
 def ctx(force):
     s = openmm.System()

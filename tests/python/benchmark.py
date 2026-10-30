@@ -104,13 +104,13 @@ def main():
     for name in args.systems:
         topology, positions = build(name)
         start = time.perf_counter()
-        export = create_system_from_topology(topology, ff, nagl, electrostatics="hippo", nonbonded_cutoff=0.9, components=COMPONENTS)
+        export = create_system_from_topology(topology, ff, nagl, electrostatics="interax", nonbonded_cutoff=0.9, components=COMPONENTS)
         build_export = time.perf_counter() - start
         triples = sum(f.getNumBonds() for f in export.getForces() if isinstance(f, openmm.CustomCentroidBondForce))
         mark_terms(export, False)
         # The plugin system is converted from a second copy of the export, built the same way (copying the export
         # through XML would serialize all its triples).
-        plugin = create_system_from_topology(topology, ff, nagl, electrostatics="hippo", nonbonded_cutoff=0.9, components=COMPONENTS)
+        plugin = create_system_from_topology(topology, ff, nagl, electrostatics="interax", nonbonded_cutoff=0.9, components=COMPONENTS)
         start = time.perf_counter()
         plugin = interaxplugin_convert.convert_system(plugin, copy=False)
         convert = time.perf_counter() - start

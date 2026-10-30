@@ -120,7 +120,7 @@ def main():
             if exact:
                 iom._snap_close_values = lambda v, rel_tol: np.asarray(v, dtype=np.float64)
             try:
-                full[exact] = create_system_from_topology(topology, ff, nagl, electrostatics="hippo", nonbonded_cutoff=0.9, components=COMPONENTS)
+                full[exact] = create_system_from_topology(topology, ff, nagl, electrostatics="interax", nonbonded_cutoff=0.9, components=COMPONENTS)
             finally:
                 iom._snap_close_values = snap
         hippo = {k: interaxplugin_convert.wrapped_hippo(next(f for f in s.getForces() if interaxplugin_convert.wrapped_hippo(f) is not None))

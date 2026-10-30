@@ -1,4 +1,6 @@
-"""HIPPO and InteraxMultipoleForce on CUDA, bare and wrapped in a CustomCVForce, against the Reference platform (PME)."""
+"""HIPPO and InteraxMultipoleForce on CUDA, bare and wrapped in a CustomCVForce, against the Reference platform (PME).
+
+Historical: needs the export's electrostatics="hippo" path, removed from InteraxFF on 2026-10-30 (it now raises)."""
 import os
 os.environ.setdefault("INTERAX_PLUGIN_PREFIX", "/shared/joaomorado/opt/openmm-interax-v3")
 from benchmark_multipole import COMPONENTS, build, context, electrostatics_system, energy_forces, interaxplugin_convert, load_model, np, openmm, wrapped

@@ -88,7 +88,7 @@ def main():
     ff, nagl = load_model()
     for name in args.systems:
         topology, positions = build(name)
-        export = create_system_from_topology(topology, ff, nagl, electrostatics="hippo", nonbonded_cutoff=0.9, components=COMPONENTS)
+        export = create_system_from_topology(topology, ff, nagl, electrostatics="interax", nonbonded_cutoff=0.9, components=COMPONENTS)
         # A copy: converting the export in place deletes its dispersion force.
         dispersion = next(f for f in export.getForces()
                           if isinstance(f, openmm.CustomNonbondedForce) and interaxplugin_convert._classify(f) == "dispersion")
