@@ -658,6 +658,7 @@ void CommonCalcInteraxMultipoleForceKernel::initialize(const System& system, con
     replacements["USE_EWALD"] = (usePME ? "1" : "0");
     replacements["PME_ALPHA"] = (usePME ? cc.doubleToString(pmeAlpha) : "0");
     replacements["SQRT_PI"] = cc.doubleToString(sqrt(M_PI));
+    addCoincidentPairConstants(replacements);
     string interactionSource = cc.replaceStrings(CommonInteraxKernelSources::interaxMultipoleInteraction, replacements);
     if (useOwnKernel) {
         nb.addInteraction(usePME, usePME, true, force.getCutoffDistance(), exclusions, "", force.getForceGroup());
@@ -751,6 +752,7 @@ void CommonCalcInteraxMultipoleForceKernel::createFieldKernel(const string& inte
         defines["USE_EWALD"] = "1";
         defines["PME_ALPHA"] = cc.doubleToString(pmeAlpha);
         defines["SQRT_PI"] = cc.doubleToString(sqrt(M_PI));
+        addCoincidentPairConstants(defines);
     }
     defines["WARPS_PER_GROUP"] = cc.intToString(fieldThreadBlockSize/ComputeContext::TileSize);
     defines["THREAD_BLOCK_SIZE"] = cc.intToString(fieldThreadBlockSize);
@@ -1167,6 +1169,18 @@ void CommonCalcInteraxMultipoleForceKernel::getPMEParameters(double& alpha, int&
     nx = gridSizeX;
     ny = gridSizeY;
     nz = gridSizeZ;
+}
+
+void CommonCalcInteraxMultipoleForceKernel::addCoincidentPairConstants(map<string, string>& defines) const {
+    // InteraxFF: a fully excluded pair at the same position (a bond multipole site on its host atom) is an exception
+    // whose real-space Ewald terms remove the reciprocal-space (erf) interaction, B_k(r) - (2k-1)!!/r^(2k+1) =
+    // -erf_k(r). Each part diverges at r = 0 but the difference does not: erf_k(0) = 2^(k+1) alpha^(2k+1) /
+    // ((2k+1) sqrt(pi)). The exception kernels then set the bare terms to zero and B_k to -COINCIDENT_Bk.
+    defines["COINCIDENT_R2"] = cc.doubleToString(1e-12);
+    for (int k = 0; k < 6; k++) {
+        double limit = (usePME ? pow(2.0, k+1)*pow(pmeAlpha, 2*k+1)/((2*k+1)*sqrt(M_PI)) : 0.0);
+        defines["COINCIDENT_B"+cc.intToString(k)] = cc.doubleToString(limit);
+    }
 }
 
 map<string, string> CommonCalcInteraxMultipoleForceKernel::getPhysicsDefines() const {

@@ -139,6 +139,11 @@ protected:
      */
     void updateFieldKernelMaxTiles();
     /**
+     * Add the constants of fully excluded pairs at the same position (COINCIDENT_R2, COINCIDENT_B0 ... B5) to a set of
+     * defines or replacements.
+     */
+    void addCoincidentPairConstants(std::map<std::string, std::string>& defines) const;
+    /**
      * Get the kernel of the real-space interactions (useOwnKernel), creating it if necessary.
      */
     OpenMM::ComputeKernel& getElectrostaticsKernel(bool includeForces, bool includeEnergy);

@@ -27,6 +27,15 @@ alsq2n *= alsq2;
 real bn2 = (3*bn1+alsq2n*exp2a)*invR2;
 alsq2n *= alsq2;
 real bn3 = (5*bn2+alsq2n*exp2a)*invR2;
+#ifdef COMPUTING_EXCEPTIONS
+if (coincident) {
+    // InteraxFF: r = 0 limits of the Ewald terms of a fully excluded pair
+    bn0 = -COINCIDENT_B0;
+    bn1 = -COINCIDENT_B1;
+    bn2 = -COINCIDENT_B2;
+    bn3 = -COINCIDENT_B3;
+}
+#endif
 #endif
 
 // Calculate the field at particle 1 due to multipoles at particle 2

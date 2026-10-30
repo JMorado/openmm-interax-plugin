@@ -18,6 +18,11 @@ import openmm
 
 import interaxplugin as ip
 
+# InteraxMultipoleForce handles particles at the same position that are fully excluded from each other (all scale
+# factors zero), with and without PME: the r = 0 limits of the excluded-pair Ewald terms. InteraxFF's bond-vector
+# multipole sites sit on their host atom and need it.
+COINCIDENT_PAIRS_WITH_PME = True
+
 # The unit conversions of the InteraxFF export (interax/openmm.py).
 HARTREE_TO_KJ_MOL = 2625.4996394799
 BOHR_TO_NM = 0.0529177210903

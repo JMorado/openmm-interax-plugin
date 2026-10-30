@@ -11,6 +11,14 @@ includeInteraction = includeInteraction && !isInertParticle(coreCharge1, valence
 
 real mat[3][3];
 formQIRotationMatrix(delta, rInv, mat);
+#ifdef COMPUTING_EXCEPTIONS
+if (coincident) {
+    // InteraxFF: at r = 0 only rotation invariant terms remain, so any frame will do
+    for (int i = 0; i < 3; i++)
+        for (int j = 0; j < 3; j++)
+            mat[i][j] = (i == j ? 1 : 0);
+}
+#endif
 real3 labForce = make_real3(0);
 real3 qiDipole1 = rotateVectorToQI(dipole1, mat);
 real3 qiDipole2 = rotateVectorToQI(dipole2, mat);
@@ -92,6 +100,17 @@ alsq2n *= alsq2;
 real bn4 = (7*bn3+alsq2n*exp2a)*rInv2;
 alsq2n *= alsq2;
 real bn5 = (9*bn4+alsq2n*exp2a)*rInv2;
+#ifdef COMPUTING_EXCEPTIONS
+if (coincident) {
+    // InteraxFF: r = 0 limits of the Ewald terms of a fully excluded pair (see addCoincidentPairConstants())
+    bn0 = -COINCIDENT_B0;
+    bn1 = -COINCIDENT_B1;
+    bn2 = -COINCIDENT_B2;
+    bn3 = -COINCIDENT_B3;
+    bn4 = -COINCIDENT_B4;
+    bn5 = -COINCIDENT_B5;
+}
+#endif
 #endif
 
 // Compute the fixed multipole interaction.

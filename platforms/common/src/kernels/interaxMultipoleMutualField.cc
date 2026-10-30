@@ -26,6 +26,14 @@ alsq2n *= alsq2;
 real bn1 = (bn0+alsq2n*exp2a)*invR2;
 alsq2n *= alsq2;
 real bn2 = (3*bn1+alsq2n*exp2a)*invR2;
+#ifdef COMPUTING_EXCEPTIONS
+if (coincident) {
+    // InteraxFF: r = 0 limits of the Ewald terms of a fully excluded pair
+    bn0 = -COINCIDENT_B0;
+    bn1 = -COINCIDENT_B1;
+    bn2 = -COINCIDENT_B2;
+}
+#endif
 real scale3 = -bn1 + (1-fdamp3)*invR3;
 real scale5 = bn2 - 3*(1-fdamp5)*invR3*invR2;
 #else

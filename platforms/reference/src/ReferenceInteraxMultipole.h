@@ -329,6 +329,12 @@ protected:
      * their host atom), whose pair terms would otherwise be evaluated at r = 0 and multiplied by zero.
      */
     bool isFullyExcluded(int i, int j) const;
+
+    /**
+     * InteraxFF: pairs closer than this (nm) are taken to be at the same position. Only fully excluded pairs may be;
+     * with PME their real-space terms use the r = 0 limits (ReferenceInteraxMultipolePme::coincidentEwaldLimit()).
+     */
+    static constexpr double COINCIDENT_DISTANCE = 1e-6;
     /**
      * Apply rotation matrix to molecular dipole/quadrupoles to get corresponding lab frame values
      * for particle I.
@@ -831,6 +837,12 @@ private:
      *
      * @param particleData            vector of parameters (charge, labFrame dipoles, quadrupoles, ...) for particles
      */
+    /**
+     * InteraxFF: the r = 0 limit erf_k(0) = 2^(k+1) alpha^(2k+1) / ((2k+1) sqrt(pi)) of the reciprocal-space radial
+     * function of order k, for fully excluded pairs at the same position.
+     */
+    double coincidentEwaldLimit(int k) const;
+
     double calculatePmeSelfEnergy(const std::vector<MultipoleParticleData>& particleData) const;
 
     /**

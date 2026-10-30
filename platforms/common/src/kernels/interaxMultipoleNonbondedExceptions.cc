@@ -56,6 +56,13 @@ KERNEL void computeNonbondedExceptions(
             real dipoleDipoleScale = ddScale[index];
             real rInv = RSQRT(r2);
             real r = r2*rInv;
+            // InteraxFF: a fully excluded pair at the same position (a bond multipole site on its host atom): the bare
+            // 1/r terms vanish and the Ewald terms take their r = 0 limits in the interaction below
+            const bool coincident = (USE_EWALD && r2 < COINCIDENT_R2);
+            if (coincident) {
+                rInv = 0;
+                r = 0;
+            }
             real3 tempForce = make_real3(0);
             real3 tempTorque1 = make_real3(0);
             real3 tempTorque2 = make_real3(0);

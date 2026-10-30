@@ -309,6 +309,14 @@ void ReferenceInteraxMultipole::applyRotationMatrixToParticle( MultipoleParticle
 }
 
 void ReferenceInteraxMultipole::formQIRotationMatrix(const Vec3 &deltaR, double r, double (&rotationMatrix)[3][3]) const {
+    // InteraxFF: at r = 0 (a fully excluded pair at the same position, see coincidentEwaldLimit()) only rotation
+    // invariant terms remain, so any frame will do.
+    if (r < COINCIDENT_DISTANCE) {
+        for (int i = 0; i < 3; i++)
+            for (int j = 0; j < 3; j++)
+                rotationMatrix[i][j] = (i == j ? 1.0 : 0.0);
+        return;
+    }
     Vec3 vectorZ = deltaR/r;
     Vec3 vectorX;
     if (fabs(vectorZ[1]) > fabs(vectorZ[0]))
@@ -974,7 +982,7 @@ void ReferenceInteraxMultipole::computeCoreDampingFactor(const MultipoleParticle
 Vec3 ReferenceInteraxMultipole::calculateDirectPairField(const MultipoleParticleData& particleI, const MultipoleParticleData& particleJ,
                                                         const Vec3& deltaR) const {
     double r = sqrt(deltaR.dot(deltaR));
-    double rInv = 1/r;
+    double rInv = (r < COINCIDENT_DISTANCE ? 0.0 : 1/r);  // InteraxFF: see coincidentEwaldLimit()
     double rInv3 = rInv*rInv*rInv;
     double rInv5 = rInv3*rInv*rInv;
     double rInv7 = rInv5*rInv*rInv;
@@ -1040,7 +1048,7 @@ void ReferenceInteraxMultipole::calculateCoreDampingPairIxn(const MultipoleParti
     double uir = ui[2]*r;
     double ukr = uk[2]*r;
 
-    double rInv = 1/r;
+    double rInv = (r < COINCIDENT_DISTANCE ? 0.0 : 1/r);  // InteraxFF: see coincidentEwaldLimit()
     double rInv2 = rInv*rInv;
     double rr3 = rInv*rInv2;
     double rr5 = 3*rr3*rInv2;
@@ -1603,7 +1611,7 @@ void ReferenceInteraxMultipolePme::calculateFixedMultipoleFieldPairIxn(const Mul
     if (r2 > _cutoffDistanceSquared)
         return;
     double r = sqrt(r2);
-    double rInv = 1/r;
+    double rInv = (r < COINCIDENT_DISTANCE ? 0.0 : 1/r);  // InteraxFF: see coincidentEwaldLimit()
     double rInv2 = rInv*rInv;
     double rInv3 = rInv*rInv2;
     double rInv5 = rInv3*rInv2;
@@ -1622,6 +1630,12 @@ void ReferenceInteraxMultipolePme::calculateFixedMultipoleFieldPairIxn(const Mul
     double bn2 = (3*bn1+alsq2n*exp2a)*rInv2;
     alsq2n *= alsq2;
     double bn3 = (5*bn2+alsq2n*exp2a)*rInv2;
+    if (r < COINCIDENT_DISTANCE) {  // InteraxFF: a fully excluded pair at the same position
+        bn0 = -coincidentEwaldLimit(0);
+        bn1 = -coincidentEwaldLimit(1);
+        bn2 = -coincidentEwaldLimit(2);
+        bn3 = -coincidentEwaldLimit(3);
+    }
 
     // Calculate the field at particle I due to multipoles at particle J.
 
@@ -2468,7 +2482,7 @@ void ReferenceInteraxMultipolePme::calculateDirectInducedDipolePairIxns(const Mu
         fdamp3 *= exception->second.dipoleDipoleScale;
         fdamp5 *= exception->second.dipoleDipoleScale;
     }
-    double rInv = 1/r;
+    double rInv = (r < COINCIDENT_DISTANCE ? 0.0 : 1/r);  // InteraxFF: see coincidentEwaldLimit()
     double rInv2 = rInv*rInv;
     double rInv3 = rInv*rInv2;
 
@@ -2483,10 +2497,24 @@ void ReferenceInteraxMultipolePme::calculateDirectInducedDipolePairIxns(const Mu
     double bn1 = (bn0+alsq2n*exp2a)*rInv2;
     alsq2n *= alsq2;
     double bn2 = (3*bn1+alsq2n*exp2a)*rInv2;
+    if (r < COINCIDENT_DISTANCE) {  // InteraxFF: a fully excluded pair at the same position
+        bn0 = -coincidentEwaldLimit(0);
+        bn1 = -coincidentEwaldLimit(1);
+        bn2 = -coincidentEwaldLimit(2);
+    }
     double scale3 = -bn1 + (1-fdamp3)*rInv3;
     double scale5 = bn2 - 3*(1-fdamp5)*rInv3*rInv2;
     _inducedDipoleField[i] += _inducedDipole[j]*scale3 + deltaR*scale5*(_inducedDipole[j].dot(deltaR));
     _inducedDipoleField[j] += _inducedDipole[i]*scale3 + deltaR*scale5*(_inducedDipole[i].dot(deltaR));
+}
+
+double ReferenceInteraxMultipolePme::coincidentEwaldLimit(int k) const {
+    // InteraxFF: for a fully excluded pair the real-space Ewald term removes the reciprocal-space (erf) interaction,
+    // B_k(r) - 1/r^(2k+1) (times (2k-1)!!) = -erf_k(r), which is finite at r = 0: erf_k(0) = 2^(k+1) alpha^(2k+1) /
+    // ((2k+1) sqrt(pi)). The bare terms (1/r) are set to zero and the B_k to -erf_k(0), so that pairs at the same
+    // position (InteraxFF's bond multipole sites on their host atom) give the exact limit. The pair forces of such a pair
+    // are equal and opposite on one point; the torques are exact.
+    return pow(2.0, k+1)*pow(_alphaEwald, 2*k+1)/((2*k+1)*SQRT_PI);
 }
 
 double ReferenceInteraxMultipolePme::calculatePmeSelfEnergy(const vector<MultipoleParticleData>& particleData) const {
@@ -2561,7 +2589,7 @@ double ReferenceInteraxMultipolePme::calculateElectrostaticPairIxn(const Multipo
 
     // Get reciprocal distance terms for this interaction.
 
-    double rInv = 1/r;
+    double rInv = (r < COINCIDENT_DISTANCE ? 0.0 : 1/r);  // InteraxFF: see coincidentEwaldLimit()
     double rInv2 = rInv*rInv;
     double rr1 = rInv;
     double rr3 = rr1*rInv2;
@@ -2587,6 +2615,14 @@ double ReferenceInteraxMultipolePme::calculateElectrostaticPairIxn(const Multipo
     double bn4 = (7*bn3+alsq2n*exp2a)*rInv2;
     alsq2n *= alsq2;
     double bn5 = (9*bn4+alsq2n*exp2a)*rInv2;
+    if (r < COINCIDENT_DISTANCE) {  // InteraxFF: a fully excluded pair at the same position
+        bn0 = -coincidentEwaldLimit(0);
+        bn1 = -coincidentEwaldLimit(1);
+        bn2 = -coincidentEwaldLimit(2);
+        bn3 = -coincidentEwaldLimit(3);
+        bn4 = -coincidentEwaldLimit(4);
+        bn5 = -coincidentEwaldLimit(5);
+    }
 
     // Find damped multipole intermediates and energy value.
 
@@ -2680,7 +2716,7 @@ void ReferenceInteraxMultipolePme::calculateInducedDipolePairIxn(const Multipole
 
     // Get reciprocal distance terms for this interaction.
 
-    double rInv = 1/r;
+    double rInv = (r < COINCIDENT_DISTANCE ? 0.0 : 1/r);  // InteraxFF: see coincidentEwaldLimit()
     double rInv2 = rInv*rInv;
     double rr1 = rInv;
     double rr3 = rr1*rInv2;
@@ -2703,6 +2739,13 @@ void ReferenceInteraxMultipolePme::calculateInducedDipolePairIxn(const Multipole
     double bn3 = (5*bn2+alsq2n*exp2a)*rInv2;
     alsq2n *= alsq2;
     double bn4 = (7*bn3+alsq2n*exp2a)*rInv2;
+    if (r < COINCIDENT_DISTANCE) {  // InteraxFF: a fully excluded pair at the same position
+        bn0 = -coincidentEwaldLimit(0);
+        bn1 = -coincidentEwaldLimit(1);
+        bn2 = -coincidentEwaldLimit(2);
+        bn3 = -coincidentEwaldLimit(3);
+        bn4 = -coincidentEwaldLimit(4);
+    }
 
     // Apply charge penetration damping to scale factors.
 

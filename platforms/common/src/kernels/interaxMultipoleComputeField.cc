@@ -366,6 +366,15 @@ KERNEL void computeFieldExceptions(GLOBAL const real4* RESTRICT posq, GLOBAL mm_
 #endif
             real invR = RSQRT(r2);
             real r = r2*invR;
+#ifdef USE_EWALD
+            // InteraxFF: a fully excluded pair at the same position (a bond multipole site on its host atom): the bare
+            // 1/r terms vanish and the Ewald terms take their r = 0 limits in the field below
+            const bool coincident = (r2 < COINCIDENT_R2);
+            if (coincident) {
+                invR = 0;
+                r = 0;
+            }
+#endif
             real3 tempField1 = make_real3(0);
             real3 tempField2 = make_real3(0);
             COMPUTE_FIELD
