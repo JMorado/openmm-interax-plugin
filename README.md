@@ -187,11 +187,11 @@ xyz = topology.get_positions().m_as("nanometer")
 xyz[water.n_atoms:] += [0.35, 0.0, 0.0]               # both molecules start at the origin
 topology.set_positions(xyz * off_unit.nanometer)
 
-system, omm_topology, positions = create_system(topology, ff, nagl, components=[
-    "E_static", "E_ind", "E_disp", "E_exrep", "E_src", "E_exind", "E_ct", "E_atm"])
+system, omm_topology, positions = create_system(topology, ff, nagl)
 ```
 
-`create_system` returns the OpenMM Topology and positions with the virtual sites (lone pairs, bond multipoles) added.
+Every term of the model is included, the three-body dispersion too (molecular: one site per molecule, cheap in
+InteraxThreeBodyForce); `components=[...]` selects terms, for instance for an energy decomposition. `create_system` returns the OpenMM Topology and positions with the virtual sites (lone pairs, bond multipoles) added.
 For a Topology from elsewhere (a PDB file), use the template generator with OpenMM's own tools:
 
 ```python
@@ -219,8 +219,7 @@ virtual sites after all atoms:
 ```python
 from interax.openmm import create_system_from_topology, extend_positions_for_sites
 
-exported = create_system_from_topology(topology, ff, nagl, electrostatics="interax", components=[
-    "E_static", "E_ind", "E_disp", "E_exrep", "E_src", "E_exind", "E_ct", "E_atm"])
+exported = create_system_from_topology(topology, ff, nagl, electrostatics="interax")
 system = interaxplugin_convert.convert_system(exported, copy=False)
 positions = extend_positions_for_sites(topology.get_positions().to_openmm(), system)
 ```
