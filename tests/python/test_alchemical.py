@@ -18,8 +18,8 @@ import argparse
 
 import numpy as np
 
-from compare_export import (COMPONENTS, box_topology, cluster_topology, interaxplugin, interaxplugin_convert, load_model,
-                            openmm, terms_by_kind, unit)
+from compare_export import (COMPONENTS, CONVERT_OVERLAP, box_topology, cluster_topology, interaxplugin, interaxplugin_convert,
+                            load_model, openmm, terms_by_kind, unit)
 from interax.openmm import create_system_from_topology
 
 LAMBDAS = (0.0, 0.3, 0.75, 1.0)
@@ -78,7 +78,7 @@ def check(name, topology, positions, periodic, platform, precision, ff):
     solute = first_molecule(topology)
     systems = {}
     for mode in ("on", "off", "alchemical"):
-        system = interaxplugin_convert.convert_system(export)
+        system = interaxplugin_convert.convert_system(export, overlap=CONVERT_OVERLAP[ff.slater_taylor])
         indices = terms_by_kind(system)
         if mode != "on":
             for i in indices.values():

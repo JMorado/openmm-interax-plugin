@@ -14,7 +14,7 @@ import time
 
 import numpy as np
 from benchmark import build, mark_terms
-from compare_export import COMPONENTS, interaxplugin, interaxplugin_convert, load_model, openmm, unit
+from compare_export import COMPONENTS, CONVERT_OVERLAP, interaxplugin, interaxplugin_convert, load_model, openmm, unit
 
 from interax.openmm import create_system_from_topology
 
@@ -93,7 +93,7 @@ def main():
         dispersion = next(f for f in export.getForces()
                           if isinstance(f, openmm.CustomNonbondedForce) and interaxplugin_convert._classify(f) == "dispersion")
         dispersion = openmm.XmlSerializer.deserialize(openmm.XmlSerializer.serialize(dispersion))
-        plugin = interaxplugin_convert.convert_system(export, copy=False, overlap="exact")
+        plugin = interaxplugin_convert.convert_system(export, copy=False, overlap=CONVERT_OVERLAP[ff.slater_taylor])
         mark_terms(plugin, True)
         box = np.diag(np.array([v.value_in_unit(unit.nanometer) for v in plugin.getDefaultPeriodicBoxVectors()]))
         exported = next(f for f in plugin.getForces() if interaxplugin.InteraxThreeBodyForce.isinstance(f))

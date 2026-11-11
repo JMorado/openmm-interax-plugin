@@ -20,7 +20,7 @@ import argparse
 import tempfile
 import time
 
-from compare_export import COMPONENTS, interaxplugin, interaxplugin_convert, load_model, openmm
+from compare_export import COMPONENTS, CONVERT_OVERLAP, interaxplugin, interaxplugin_convert, load_model, openmm
 
 from openff.interchange.components._packmol import UNIT_CUBE, pack_box
 from openff.toolkit import Molecule
@@ -111,7 +111,7 @@ def main():
         export = create_system_from_topology(topology, ff, nonbonded_cutoff=0.9, components=COMPONENTS)
         build_export = time.perf_counter() - start
         start = time.perf_counter()
-        plugin = interaxplugin_convert.convert_system(export)
+        plugin = interaxplugin_convert.convert_system(export, overlap=CONVERT_OVERLAP[ff.slater_taylor])
         convert = time.perf_counter() - start
         mark_terms(export, False)
         mark_terms(plugin, True)

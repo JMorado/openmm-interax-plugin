@@ -179,7 +179,8 @@ shorter cutoff.
 `tests/python/generate_export_values.py`). `tests/TestInteraxExportValues.h` checks every platform against them
 (ctest: Reference, CPU, CUDA single/mixed/double), and `tests/python/test_export_values.py` does the same through the
 Python API: in double precision the plugin reproduces the export to rounding with its overlap scheme, and the `Exact`
-method agrees to ~1e-6. The data were generated with the InteraxFF model `models_v3R4bfdE1`.
+method agrees to ~1e-6. The data were generated with the InteraxFF model `models_v3R4bfdE1` and the order-2 Slater
+scheme, which the generator uses whatever the model's.
 `tests/TestInteraxMultipoleForce.h` tests the multipole force against HippoNonbondedForce and against the definitions
 of its options (core damping, mutual damping scale, alchemical scaling, chirality modes, ThreeFold frames, coincident
 particles with and without PME). `tests/python/test_alchemical.py` checks the lambda scaling against decoupled

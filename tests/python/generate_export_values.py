@@ -10,6 +10,10 @@ forces:
                                       the k'th term of TERMS
   tests/data/<system>/reference.txt   the positions, the box, and the energy and forces of each term in the export
 
+The export uses the order-2 Slater Taylor scheme whatever the model's (ff.slater_taylor): the tests check that the
+plugin reproduces it to rounding in double precision. The order-6 export expands about the width of particle 1 of each
+pair, which OpenMM's neighbor list may swap, so with a cutoff it differs from the plugin's InteraxOrder6 by ~1e-5.
+
 The tests (tests/TestInteraxExportValues.h on every platform, tests/python/test_export_values.py) load these files
 and need neither InteraxFF nor its model. Regenerate them when the model or the export changes:
 
@@ -49,6 +53,7 @@ def plugin_system(export):
 
 def main():
     ff = load_model()
+    ff.slater_taylor = "order2"
     commit = subprocess.run(["git", "-C", INTERAX_REPO, "rev-parse", "--short", "HEAD"], capture_output=True, text=True).stdout.strip()
     # The model files themselves identify the parameters even if the InteraxFF commit becomes unreachable
     import hashlib
@@ -67,8 +72,9 @@ def main():
             file.write(openmm.XmlSerializer.serialize(system))
         with open(os.path.join(directory, "reference.txt"), "w") as file:
             file.write(f"# InteraxFF export values: {description}\n")
-            file.write(f"# model {os.path.basename(MODEL)}, InteraxFF {commit}, OpenMM {openmm.__version__}, Reference platform, double "
-                       f"precision, generated {datetime.date.today()} by tests/python/generate_export_values.py\n")
+            file.write(f"# model {os.path.basename(MODEL)} ({ff.slater_taylor} Slater overlap), InteraxFF {commit}, "
+                       f"OpenMM {openmm.__version__}, Reference platform, double precision, generated {datetime.date.today()} "
+                       f"by tests/python/generate_export_values.py\n")
             file.write(f"# model files: {checksums}\n")
             file.write("# Units: nm, kJ/mol, kJ/mol/nm. Each term is force group k of system.xml, in the order listed.\n")
             n = system.getNumParticles()

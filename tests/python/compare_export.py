@@ -9,10 +9,12 @@ interaxplugin_convert.convert_system, and compares the energy and the forces of 
 
 Usage: python compare_export.py [--platform Reference] [--precision double] [--overlap export] [--systems cluster box]
 
-With --overlap export the plugin uses the InteraxFF Taylor scheme of the export and must reproduce it to rounding;
-with --overlap exact it uses its accurate scheme, which differs from the export by the export's truncation error. The
-export builds the three-body dispersion as an InteraxThreeBodyForce already, which the conversion keeps: its row
-compares the platform with the Reference platform.
+By default the Slater overlap follows the Taylor scheme of the model (interax.openmm.CONVERT_OVERLAP[ff.slater_taylor]:
+"export" for order2, "exact" for order6). With --overlap export the plugin uses the InteraxFF Taylor scheme of the
+export and must reproduce it to rounding (the order-6 export in the box only to ~1e-5: it expands about the width of
+particle 1 of each pair, which OpenMM's neighbor list may swap); with --overlap exact it uses its accurate scheme,
+which differs from the export by the export's truncation error. The export builds the three-body dispersion as an InteraxThreeBodyForce
+already, which the conversion keeps: its row compares the platform with the Reference platform.
 Run with the interax environment; the plugin, InteraxFF and the model (INTERAX_MODEL) are found as plugin_path.py
 describes. The base force field's charges (intramolecular terms only) are AM1-BCC when AmberTools or OpenEye can
 compute them, else Gasteiger (INTERAX_BASE_CHARGES=am1bcc|gasteiger forces one); packmol is looked for on PATH, then
@@ -41,7 +43,7 @@ from openff.units import unit as off_unit  # noqa: E402
 
 from interax.force_field import ForceField  # noqa: E402
 from interax.models import NAGLModel, PerAtomicNumberModel  # noqa: E402
-from interax.openmm import COMPONENTS, create_system_from_topology  # noqa: E402
+from interax.openmm import COMPONENTS, CONVERT_OVERLAP, create_system_from_topology  # noqa: E402
 
 # packmol (pack_box) from the environment of this interpreter when it is not on PATH
 if shutil.which("packmol") is None:
@@ -164,7 +166,8 @@ def compare(name, topology, positions, periodic, platform, precision, overlap, f
     assert set(export_terms) == set(plugin_terms) == set(KINDS), (export_terms, plugin_terms)
     reference = evaluate(system, positions, box, "Reference", export_terms)
     test = evaluate(converted, positions, box, platform, plugin_terms, precision)
-    print(f"\n{name}: {system.getNumParticles()} particles, plugin on {platform} ({precision}, {overlap} overlap) vs export on Reference")
+    print(f"\n{name}: {system.getNumParticles()} particles, plugin on {platform} ({precision}, {overlap} overlap) "
+          f"vs {ff.slater_taylor} export on Reference")
     print(f"  {'term':<12} {'E export':>14} {'E plugin':>14} {'rel dE':>9} {'max |dF|':>10} {'rms F':>10}")
     worst = 0.0
     for kind in export_terms:
@@ -182,15 +185,16 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--platform", default="Reference")
     parser.add_argument("--precision", default="double", help="CUDA/OpenCL precision")
-    parser.add_argument("--overlap", default="export", choices=["export", "exact"])
+    parser.add_argument("--overlap", choices=["export", "exact"], help="default: the scheme of the model (CONVERT_OVERLAP)")
     parser.add_argument("--systems", nargs="+", default=["cluster", "box"])
     args = parser.parse_args()
     ff = load_model()
+    overlap = args.overlap or CONVERT_OVERLAP[ff.slater_taylor]
     worst = 0.0
     if "cluster" in args.systems:
-        worst = max(worst, compare("cluster", *cluster_topology(), False, args.platform, args.precision, args.overlap, ff))
+        worst = max(worst, compare("cluster", *cluster_topology(), False, args.platform, args.precision, overlap, ff))
     if "box" in args.systems:
-        worst = max(worst, compare("methanol box", *box_topology(), True, args.platform, args.precision, args.overlap, ff))
+        worst = max(worst, compare("methanol box", *box_topology(), True, args.platform, args.precision, overlap, ff))
     print(f"\nlargest relative difference: {worst:.1e}")
 
 
