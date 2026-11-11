@@ -86,7 +86,7 @@ namespace InteraxPairTerms {
 
 /**
  * Coefficients of the Taylor expansion of the Slater overlap integral about the width l, in t = (b - l)/l (b the
- * other width) and x = r/l (interax.geometry.OVERLAP_TAYLOR_COEFFS, divided by their denominators):
+ * other width) and x = r/l (the coefficients of InteraxFF, divided by their denominators):
  *
  *   S     = exp(-x)/(pi l^3) sum_n t^n sum_k VALUE[n][k] x^k
  *   dS/dr = exp(-x)/(pi l^4) sum_n t^n sum_k DERIV[n][k] x^k,   DERIV[n][k] = (k+1) VALUE[n][k+1] - VALUE[n][k]
@@ -124,11 +124,10 @@ static const double OVERLAP_TAYLOR_DERIV[MAX_TAYLOR_ORDER+1][TAYLOR_TERMS] = {
  *   accurate(doublePrecision)  order 6 about the smaller width, with a switch chosen for the precision: the
  *                              integral is exact to ~1e-6 relative in single precision and ~1e-10 in double
  *                              precision over the whole range of distances
- *   interax(order)             the schemes of InteraxFF (interax.geometry.SLATER_TAYLOR_SCHEMES), exactly as the
- *                              InteraxFF export evaluates them: the expansion is about the width of the particle
- *                              with the lower index (particle 1 of the CustomNonbondedForce on the Reference
- *                              platform), order 2 below a difference of 0.01 bohr, order 6 below 20% of l. They
- *                              reproduce the export, including its truncation errors (up to ~1e-6 relative).
+ *   interax(order)             the schemes of the InteraxFF reference implementation, evaluated as it evaluates
+ *                              them: the expansion is about the width of the particle with the lower index, order 2
+ *                              below a difference of 0.01 bohr, order 6 below 20% of l.  They reproduce it, including
+ *                              its truncation errors (up to ~1e-6 relative to the exact integral).
  */
 struct SlaterTaylorScheme {
     int order;
@@ -174,7 +173,7 @@ inline void slaterOverlap(T r, T a, T b, const SlaterTaylorScheme& scheme, T& ov
     typedef typename ScalarOf<T>::type Scalar;
     const Scalar pi = Scalar(M_PI);
 
-    // Closed form (MEDFF SI Eq. 32): S = F/(8 pi r).
+    // Closed form: S = F/(8 pi r).
 
     T aa = a*a, bb = b*b;
     T d = bb-aa;

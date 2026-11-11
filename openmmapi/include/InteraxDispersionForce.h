@@ -75,6 +75,8 @@ public:
     InteraxDispersionForce();
     /**
      * Get the number of particles for which force field parameters are defined.
+     *
+     * @return the number of particles
      */
     int getNumParticles() const {
         return particles.size();
@@ -138,6 +140,8 @@ public:
     /**
      * Get whether to add a correction to the energy to compensate for the cutoff and switching function.
      * This has no effect if periodic boundary conditions are not used.
+     *
+     * @return true if the long range correction is used
      */
     bool getUseLongRangeCorrection() const;
     /**
@@ -150,6 +154,8 @@ public:
      * an alchemical particle, the pairs within the alchemical molecules included, is scaled by the alchemical
      * parameter, so that the correction is that of the whole System when it is 1 and that of the rest of the System
      * when it is 0.
+     *
+     * @param use    whether to use the long range correction
      */
     void setUseLongRangeCorrection(bool use);
     /**
@@ -162,6 +168,8 @@ public:
      * This method has several limitations.  The alchemical flags of the particles, the exclusions, the nonbonded
      * method, the cutoff and the switching function cannot be changed by this method, and it cannot be used to add
      * new particles, only to change the parameters of existing ones.
+     *
+     * @param context    the Context in which to update the parameters
      */
     void updateParametersInContext(OpenMM::Context& context);
 protected:

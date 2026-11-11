@@ -93,6 +93,8 @@ public:
     InteraxThreeBodyForce();
     /**
      * Get the number of sites in the force.
+     *
+     * @return the number of sites
      */
     int getNumSites() const {
         return sites.size();
@@ -164,10 +166,14 @@ public:
     void setScaleFactor(double scale);
     /**
      * Get the damping function applied to the triples.
+     *
+     * @return the damping method
      */
     DampingMethod getDampingMethod() const;
     /**
      * Set the damping function applied to the triples.
+     *
+     * @param method    the damping method
      */
     void setDampingMethod(DampingMethod method);
     /**
@@ -201,10 +207,14 @@ public:
      * Set whether to use periodic boundary conditions.  Each site distance is that of the nearest periodic image,
      * as in CustomCentroidBondForce.  The cutoff may exceed half the box size, in which case a triple still
      * interacts only through the nearest image of each of its pairs.
+     *
+     * @param periodic    whether to use periodic boundary conditions
      */
     void setUsesPeriodicBoundaryConditions(bool periodic);
     /**
      * Get the name of the context parameter that scales the triples containing an alchemical site.
+     *
+     * @return the name of the context parameter
      */
     const std::string& getAlchemicalParameterName() const;
     /**
@@ -224,6 +234,8 @@ public:
      * changed: the particles and molecules of the sites, their alchemical flags, the damping method and the cutoff
      * cannot, nor can the centroid damping be switched on or off (a nonzero radius can be changed).  It cannot be used
      * to add new sites, only to change the parameters of existing ones.
+     *
+     * @param context    the Context in which to update the parameters
      */
     void updateParametersInContext(OpenMM::Context& context);
     /**

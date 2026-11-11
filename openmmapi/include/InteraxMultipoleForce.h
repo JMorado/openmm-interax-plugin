@@ -118,22 +118,30 @@ public:
     InteraxMultipoleForce();
     /**
      * Get the number of particles in the potential function.
+     *
+     * @return the number of particles
      */
     int getNumParticles() const {
         return particles.size();
     }
     /**
      * Get the number of exceptions.
+     *
+     * @return the number of exceptions
      */
     int getNumExceptions() const {
         return exceptions.size();
     }
     /**
      * Get the method used for handling long-range nonbonded interactions.
+     *
+     * @return the method used for handling long-range nonbonded interactions
      */
     NonbondedMethod getNonbondedMethod() const;
     /**
      * Set the method used for handling long-range nonbonded interactions.
+     *
+     * @param method    the method used for handling long-range nonbonded interactions
      */
     void setNonbondedMethod(NonbondedMethod method);
     /**
@@ -153,6 +161,8 @@ public:
     /**
      * Get the coefficients for the mu_0, mu_1, mu_2, ..., mu_n terms in the extrapolation
      * algorithm for induced dipoles.
+     *
+     * @return the coefficients of the extrapolation
      */
     const std::vector<double>& getExtrapolationCoefficients() const;
     /**
@@ -307,6 +317,8 @@ public:
      * rigorous guarantee that all forces on all atoms will be less than the tolerance, however.
      *
      * This can be overridden by explicitly setting an alpha parameter and grid dimensions to use.
+     *
+     * @return the error tolerance
      */
     double getEwaldErrorTolerance() const;
     /**
@@ -316,22 +328,30 @@ public:
      * rigorous guarantee that all forces on all atoms will be less than the tolerance, however.
      *
      * This can be overridden by explicitly setting an alpha parameter and grid dimensions to use.
+     *
+     * @param tol    the error tolerance
      */
     void setEwaldErrorTolerance(double tol);
     /**
      * Get whether core damping is used: the permanent field that polarizes an atom is multiplied by the fraction
      * f(r) = 1 - (1 + a r + (a r)^2/2) exp(-a r) of the atom's own Slater density within r.
+     *
+     * @return true if core damping is used
      */
     bool getCoreDamping() const;
     /**
      * Set whether core damping is used: the permanent field that polarizes an atom is multiplied by the fraction
      * f(r) = 1 - (1 + a r + (a r)^2/2) exp(-a r) of the atom's own Slater density within r.  This is off by default,
      * as in HIPPO.
+     *
+     * @param enabled    whether to use core damping
      */
     void setCoreDamping(bool enabled);
     /**
      * Get the scale eta of the exponents used in the core damping: the field on an atom is damped with the exponent
      * a = eta*alpha, so eta < 1 damps over a larger distance.  The default value is 1.
+     *
+     * @return the core damping scale
      */
     double getCoreDampingScale() const;
     /**
@@ -344,6 +364,8 @@ public:
     /**
      * Get the scale kappa of the exponents used in the damping of the couplings between induced dipoles, which use
      * the exponents kappa*alpha.  The default value is 1, as in HIPPO.
+     *
+     * @return the mutual damping scale
      */
     double getMutualDampingScale() const;
     /**
@@ -359,28 +381,36 @@ public:
      * (false, the default).  With true the force can share a Context with other forces that use the default nonbonded
      * kernel (NonbondedForce, CustomNonbondedForce, the InteraxFF pair forces).  Their exclusions must then be the
      * same as the exceptions of this force, and forces in the same force group must use the same cutoff.
+     *
+     * @return true if the force uses its own kernel
      */
     bool getUseOwnKernel() const;
     /**
+     * Set whether the GPU platforms evaluate the real-space multipole interactions with a kernel of this force's own.
+     * See getUseOwnKernel() for details.
+     *
+     * @param enabled    whether the force uses its own kernel
+     */
+    void setUseOwnKernel(bool enabled);
+    /**
      * Get how the chirality of ZThenX frames with a y atom is handled.  The default is AmoebaChirality, as in
      * HippoNonbondedForce on the GPU platforms.
+     *
+     * @return the chirality mode
      */
     ChiralityMode getChiralityMode() const;
     /**
      * Set how the chirality of ZThenX frames with a y atom is handled: NoChirality ignores the y atom; AmoebaChirality
      * (the default) flips the y components of the multipoles of a particle whose z, x, y atoms are arranged with
-     * negative volume, at every evaluation.  HippoNonbondedForce applies this check at every step on its GPU
-     * platforms but on its Reference platform only once, before the positions are known (so never); in
-     * InteraxMultipoleForce all platforms apply it at every evaluation.
+     * negative volume.  The check is made at every evaluation on all platforms.
+     *
+     * @param mode    the chirality mode
      */
     void setChiralityMode(ChiralityMode mode);
     /**
-     * Set whether the GPU platforms evaluate the real-space multipole interactions with a kernel of this force's own.
-     * See getUseOwnKernel() for details.
-     */
-    void setUseOwnKernel(bool enabled);
-    /**
      * Get the name of the context parameter that scales the multipoles and polarizabilities of alchemical particles.
+     *
+     * @return the name of the context parameter
      */
     const std::string& getAlchemicalParameterName() const;
     /**
@@ -416,6 +446,8 @@ public:
      * pair of particles involved in the exception cannot change.  The local frames and the set of alchemical particles
      * cannot change either.  Finally, this method cannot be used to add new particles or exceptions, only to change the
      * parameters of existing ones.
+     *
+     * @param context    the Context in which to update the parameters
      */
     void updateParametersInContext(OpenMM::Context& context);
     /**

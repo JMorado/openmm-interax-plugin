@@ -1,3 +1,6 @@
+#ifndef OPENMM_INTERAXPLUGINVERSION_H_
+#define OPENMM_INTERAXPLUGINVERSION_H_
+
 /* -------------------------------------------------------------------------- *
  *                            OpenMM InteraxFF Plugin                         *
  * -------------------------------------------------------------------------- *
@@ -27,24 +30,25 @@
  * USE OR OTHER DEALINGS IN THE SOFTWARE.                                     *
  * -------------------------------------------------------------------------- */
 
-#ifndef OPENMM_INTERAX_PLUGIN_VERSION_H_
-#define OPENMM_INTERAX_PLUGIN_VERSION_H_
-
 #include "internal/windowsExportInterax.h"
 
 namespace InteraxPlugin {
 
 /**
  * Get the version of the plugin, set at build time.
+ *
+ * @return the version of the plugin, for example "0.1.0"
  */
 OPENMM_EXPORT_INTERAX const char* getPluginVersion();
 
 /**
  * Get the git commit the plugin was built from ("git describe --always --dirty" at CMake time; "unknown" outside a
  * git checkout). A "-dirty" suffix means the source had uncommitted changes.
+ *
+ * @return the description of the git commit of the source
  */
 OPENMM_EXPORT_INTERAX const char* getPluginGitCommit();
 
 } // namespace InteraxPlugin
 
-#endif /*OPENMM_INTERAX_PLUGIN_VERSION_H_*/
+#endif /*OPENMM_INTERAXPLUGINVERSION_H_*/

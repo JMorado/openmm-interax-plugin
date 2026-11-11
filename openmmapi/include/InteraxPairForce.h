@@ -85,12 +85,14 @@ public:
          * Periodic boundary conditions are used, so that each particle interacts only with the nearest periodic copy
          * of each other particle.  Interactions beyond the cutoff distance are ignored.
          */
-        CutoffPeriodic = 2,
+        CutoffPeriodic = 2
     };
     virtual ~InteraxPairForce() {
     }
     /**
      * Get the number of particles for which force field parameters are defined.
+     *
+     * @return the number of particles
      */
     virtual int getNumParticles() const = 0;
     /**
@@ -102,10 +104,14 @@ public:
     virtual bool getParticleIsAlchemical(int index) const = 0;
     /**
      * Get the method used for handling long range interactions.
+     *
+     * @return the method used for handling long range interactions
      */
     NonbondedMethod getNonbondedMethod() const;
     /**
      * Set the method used for handling long range interactions.
+     *
+     * @param method    the method used for handling long range interactions
      */
     void setNonbondedMethod(NonbondedMethod method);
     /**
@@ -125,25 +131,35 @@ public:
     /**
      * Get whether a switching function is applied to the interaction.  If the nonbonded method is set to NoCutoff,
      * this option is ignored.
+     *
+     * @return true if a switching function is used
      */
     bool getUseSwitchingFunction() const;
     /**
      * Set whether a switching function is applied to the interaction.  If the nonbonded method is set to NoCutoff,
      * this option is ignored.
+     *
+     * @param use    whether to use a switching function
      */
     void setUseSwitchingFunction(bool use);
     /**
      * Get the distance at which the switching function begins to reduce the interaction.  This must be less than
      * the cutoff distance.
+     *
+     * @return the switching distance, measured in nm
      */
     double getSwitchingDistance() const;
     /**
      * Set the distance at which the switching function begins to reduce the interaction.  This must be less than
      * the cutoff distance.
+     *
+     * @param distance    the switching distance, measured in nm
      */
     void setSwitchingDistance(double distance);
     /**
      * Get the number of particle pairs whose interactions should be excluded.
+     *
+     * @return the number of exclusions
      */
     int getNumExclusions() const {
         return exclusions.size();
@@ -175,6 +191,8 @@ public:
     /**
      * Get the name of the context parameter that scales the interactions between an alchemical and a non-alchemical
      * particle.
+     *
+     * @return the name of the context parameter
      */
     const std::string& getAlchemicalParameterName() const;
     /**

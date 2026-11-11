@@ -69,15 +69,15 @@ public:
          */
         Exact = 0,
         /**
-         * The order 2 scheme of InteraxFF (MEDFF), used where the widths differ by less than 0.01 bohr, evaluated
-         * exactly as the InteraxFF export does (about the width of the particle with the lower index).  It reproduces
-         * the export, including its truncation errors; in single precision the closed form near the switch has
-         * relative errors up to ~3e-2.
+         * The order 2 expansion of the InteraxFF reference implementation (MEDFF), about the width of the particle
+         * with the lower index, used where the widths differ by less than 0.01 bohr.  It reproduces the reference
+         * implementation, including its truncation errors.  In single precision the closed form has relative errors
+         * up to ~3e-2 just outside the switch.
          */
         InteraxOrder2 = 2,
         /**
-         * The order 6 scheme of InteraxFF, used where the widths differ by less than 20%, evaluated exactly as the
-         * InteraxFF export does.
+         * The order 6 expansion of the InteraxFF reference implementation, about the width of the particle with the
+         * lower index, used where the widths differ by less than 20%.
          */
         InteraxOrder6 = 6
     };
@@ -87,6 +87,8 @@ public:
     InteraxShortRangeForce();
     /**
      * Get the number of particles for which force field parameters are defined.
+     *
+     * @return the number of particles
      */
     int getNumParticles() const {
         return particles.size();
@@ -132,11 +134,15 @@ public:
     /**
      * Get the method used to evaluate the Slater overlap integral for nearly equal widths, where its closed form
      * loses precision to cancellation.
+     *
+     * @return the method used to evaluate the overlap integral
      */
     OverlapMethod getOverlapMethod() const;
     /**
      * Set the method used to evaluate the Slater overlap integral for nearly equal widths, where its closed form
      * loses precision to cancellation.
+     *
+     * @param method    the method used to evaluate the overlap integral
      */
     void setOverlapMethod(OverlapMethod method);
     /**
@@ -148,6 +154,8 @@ public:
      * This method has several limitations.  The alchemical flags of the particles, the exclusions, the nonbonded
      * method, the cutoff, the switching function and the overlap method cannot be changed by this method, and it
      * cannot be used to add new particles, only to change the parameters of existing ones.
+     *
+     * @param context    the Context in which to update the parameters
      */
     void updateParametersInContext(OpenMM::Context& context);
 protected:
