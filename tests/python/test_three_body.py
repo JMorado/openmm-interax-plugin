@@ -8,8 +8,6 @@ Usage: python -m pytest test_three_body.py      (INTERAX_PLUGIN_PREFIX: where th
 """
 import itertools
 import math
-import os
-import sys
 
 import numpy as np
 import pytest

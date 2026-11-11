@@ -1,4 +1,3 @@
-
 KERNEL void initExtrapolatedDipoles(GLOBAL real* RESTRICT inducedDipole, GLOBAL real* RESTRICT extrapolatedDipole) {
     for (int index = GLOBAL_ID; index < 3*NUM_ATOMS; index += GLOBAL_SIZE) {
         extrapolatedDipole[index] = inducedDipole[index];

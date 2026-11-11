@@ -31,7 +31,6 @@
 #include "InteraxDispersionForce.h"
 #include "openmm/OpenMMException.h"
 #include "openmm/serialization/SerializationNode.h"
-#include <sstream>
 
 using namespace InteraxPlugin;
 using namespace OpenMM;

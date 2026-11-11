@@ -81,13 +81,13 @@ public:
 
     /**
      * Constructor
-     * 
+     *
      */
     ReferenceInteraxMultipole(const InteraxMultipoleForce& force);
- 
+
     /**
      * Get nonbonded method.
-     * 
+     *
      * @return nonbonded method
      */
     InteraxMultipoleForce::NonbondedMethod getNonbondedMethod() const;
@@ -103,11 +103,10 @@ public:
     }
 
     /**
-     * Set the coefficients for the mu_0, mu_1, mu_2, mu_n terms in the extrapolation
-     * theory algorithm for induced dipoles
+     * Set the coefficients for the mu_0, mu_1, mu_2, ..., mu_n terms in the extrapolation
+     * algorithm for induced dipoles.
      *
-     * @param optCoefficients a vector whose mth entry specifies the coefficient for mu_m
-     *
+     * @param coefficients    a vector whose mth entry specifies the coefficient for mu_m
      */
     void setExtrapolationCoefficients(const std::vector<double> &coefficients);
 
@@ -125,8 +124,8 @@ public:
     /**
      * Calculate particle induced dipoles.
      *
-     * @param particlePositions         Cartesian coordinates of particles
-     * @param outputMultipoleMoments    output multipole moments
+     * @param particlePositions            Cartesian coordinates of particles
+     * @param[out] outputInducedDipoles    the induced dipole of each particle
      */
     void calculateInducedDipoles(const std::vector<OpenMM::Vec3>& particlePositions,
                                  std::vector<Vec3>& outputInducedDipoles);
@@ -134,10 +133,9 @@ public:
     /**
      * Calculate particle permanent dipoles rotated in the lab frame.
      *
-     * @param particlePositions         Cartesian coordinates of particles
-     * @param outputMultipoleMoments    output multipole moments
+     * @param particlePositions                     Cartesian coordinates of particles
+     * @param[out] outputRotatedPermanentDipoles    the permanent dipole of each particle in the lab frame
      */
-
     void calculateLabFramePermanentDipoles(const std::vector<Vec3>& particlePositions,
                                            std::vector<Vec3>& outputRotatedPermanentDipoles);
 
@@ -145,12 +143,12 @@ protected:
 
     enum QuadrupoleIndices { QXX, QXY, QXZ, QYY, QYZ, QZZ };
 
-    /* 
+    /*
      * Particle parameters and coordinates
      */
     class MultipoleParticleData {
         public:
-            int index, axisType, multipoleAtomX, multipoleAtomY, multipoleAtomZ;    
+            int index, axisType, multipoleAtomX, multipoleAtomY, multipoleAtomZ;
             Vec3 position;
             Vec3 dipole, localDipole, qiDipole, qiInducedDipole;
             double quadrupole[6], localQuadrupole[6], qiQuadrupole[6];
@@ -161,7 +159,7 @@ protected:
             Vec3 baseLocalDipole;
             double baseLocalQuadrupole[6], baseCoreCharge, baseValenceCharge, basePolarizability;
     };
-    
+
     /**
      * Particle parameters transformed into fractional coordinates
      */
@@ -171,7 +169,7 @@ protected:
         Vec3 dipole;
         double quadrupole[6];
     };
-    
+
     /**
      * Information defining an exception.
      */
@@ -206,21 +204,17 @@ protected:
      * Load particle data.
      *
      * @param particlePositions   particle coordinates
-     *
      */
     void loadParticleData(const std::vector<OpenMM::Vec3>& particlePositions);
 
     /**
      * Calculate fixed multipole fields.
-     *
-     * @param particleData vector of particle data
-     * 
      */
     virtual void calculateFixedMultipoleField();
 
     /**
      * Compute the damping factors for the field due to the fixed multipole moments of a particle.
-     * 
+     *
      * @param particle     parameters for the particle
      * @param r            the distance from the particle at which to calculate the damping factors
      * @param fdamp3       outputs the damping factor for the r^-3 term
@@ -230,7 +224,7 @@ protected:
     void computeDirectFieldDampingFactors(const MultipoleParticleData& particle, double r, double& fdamp3, double& fdamp5, double& fdamp7) const;
     /**
      * Compute the damping factors for the field at one particle due to the induced dipole of another particle.
-     * 
+     *
      * @param particleI    parameters for the first particle
      * @param particleJ    parameters for the second particle
      * @param r            the distance between the two particles
@@ -240,7 +234,7 @@ protected:
     void computeMutualFieldDampingFactors(const MultipoleParticleData& particleI, const MultipoleParticleData& particleJ, double r, double& fdamp3, double& fdamp5) const;
     /**
      * Compute the damping factors for the overlap of two particles.
-     * 
+     *
      * @param particleI    parameters for the first particle
      * @param particleJ    parameters for the second particle
      * @param r            the distance between the two particles
@@ -279,7 +273,7 @@ protected:
     /**
      * Check if multipoles at chiral site should be inverted.
      *
-     * @param  particleI            particleI data 
+     * @param  particleI            particleI data
      * @param  axisType             axis type
      * @param  particleZ            z-axis particle to particleI
      * @param  particleX            x-axis particle to particleI
@@ -309,10 +303,12 @@ protected:
     /**
      * Apply rotation matrix to molecular dipole/quadrupoles to get corresponding lab frame values
      * for particle I.
-     * 
-     * @param  particleI            particleI data
-     * @param  particleJ            particleI data
-     * @param  axisType             axis type
+     *
+     * @param particleI    the particle
+     * @param particleZ    the z particle of its frame
+     * @param particleX    the x particle of its frame, or nullptr
+     * @param particleY    the y particle of its frame, or nullptr
+     * @param axisType     the axis type
      */
     void applyRotationMatrixToParticle(      MultipoleParticleData& particleI,
                                        const MultipoleParticleData* particleZ,
@@ -326,7 +322,7 @@ protected:
      *
      * @param deltaR                the internuclear vector, corrected for periodic boundary conditions
      * @param r                     the distance between atoms I and J
-     * @param rotationmatrix        the output rotation matrix for a 3-vector
+     * @param rotationMatrix        the output rotation matrix for a 3-vector
      */
     void formQIRotationMatrix(const Vec3 &deltaR, double r, double (&rotationMatrix)[3][3]) const;
 
@@ -352,27 +348,20 @@ protected:
      * Rotate a quadrupole from the lab frame to the quasi-internal coordinate system.
      *
      * @param q      the quadrupole to rotate
-     * @param r      the rotated quadrupole to stored into this
+     * @param r      the rotated quadrupole is stored into this
      * @param mat    the rotation matrix computed by formQIRotationMatrix()
      */
     void rotateQuadrupoleToQI(const double (&q)[6], double (&r)[6], const double (&mat)[3][3]) const;
 
     /**
-     * Apply rotation matrix to molecular dipole/quadrupoles to get corresponding lab frame values.
-     * 
-     * @param particleData            vector of parameters (charge, labFrame dipoles, quadrupoles, ...) for particles
-     *                                dipole and quadrupole entries are modified
-     * @param multipoleAtomXs         vector of z-particle indices used to map molecular frame to lab frame
-     * @param multipoleAtomYs         vector of x-particle indices used to map molecular frame to lab frame
-     * @param multipoleAtomZs         vector of y-particle indices used to map molecular frame to lab frame
-     * @param axisType                axis type
+     * Apply rotation matrix to molecular dipole/quadrupoles of all particles to get corresponding lab frame values.
      */
     void applyRotationMatrix();
 
     /**
      * Calculate electric field at particle I due fixed multipoles at particle J and vice versa
      * (field at particle J due fixed multipoles at particle I).
-     * 
+     *
      * @param particleI               positions and parameters (charge, labFrame dipoles, quadrupoles, ...) for particle I
      * @param particleJ               positions and parameters (charge, labFrame dipoles, quadrupoles, ...) for particle J
      */
@@ -381,7 +370,7 @@ protected:
     /**
      * Initialize induced dipoles
      */
-    virtual void initializeInducedDipoles(); 
+    virtual void initializeInducedDipoles();
 
     /**
      * Calculate fields due induced dipoles at each site.
@@ -393,8 +382,9 @@ protected:
 
     /**
      * Calculate induced dipole fields.
-     * 
+     *
      * @param particleData    vector of particle positions and parameters (charge, labFrame dipoles, quadrupoles, ...)
+     * @param optOrder        the order of the extrapolated perturbation series being computed
      */
     virtual void calculateInducedDipoleFields(const std::vector<MultipoleParticleData>& particleData, int optOrder);
     /**
@@ -410,10 +400,10 @@ protected:
     virtual void calculateInducedDipoles();
 
     /**
-     * Setup: 
+     * Setup:
      *        if needed invert multipole moments at chiral centers
-     *        rotate molecular multipole moments to lab frame 
-     *        setup scaling maps and 
+     *        rotate molecular multipole moments to lab frame
+     *        setup scaling maps and
      *        calculate induced dipoles (see calculateInducedDipoles below)
      *
      * @param particlePositions         Cartesian coordinates of particles
@@ -422,7 +412,7 @@ protected:
 
     /**
      * Calculate electrostatic interaction between particles I and K.
-     * 
+     *
      * @param particleI         positions and parameters (charge, labFrame dipoles, quadrupoles, ...) for particle I
      * @param particleK         positions and parameters (charge, labFrame dipoles, quadrupoles, ...) for particle K
      * @param r                 the distance between the two particles
@@ -435,7 +425,7 @@ protected:
 
     /**
      * Calculate electrostatic interactions involving induced dipoles on particles I and K.
-     * 
+     *
      * @param particleI         positions and parameters (charge, labFrame dipoles, quadrupoles, ...) for particle I
      * @param particleK         positions and parameters (charge, labFrame dipoles, quadrupoles, ...) for particle K
      * @param deltaR            the displacement between the two particles (in the lab frame)
@@ -492,11 +482,11 @@ protected:
 
     /**
      * Map particle torque to force.
-     * 
+     *
      * @param particleI               particle whose torque is to be mapped
-     * @param particleU               particle1 of lab frame for particleI 
-     * @param particleV               particle2 of lab frame for particleI 
-     * @param particleW               particle3 of lab frame for particleI 
+     * @param particleU               particle1 of lab frame for particleI
+     * @param particleV               particle2 of lab frame for particleI
+     * @param particleW               particle3 of lab frame for particleI
      * @param axisType                axis type (Bisector/Z-then-X, ...)
      * @param torque                  torque on particle I
      * @param forces                  vector of particle forces to be updated
@@ -509,48 +499,42 @@ protected:
 
     /**
      * Map torques to forces.
-     * 
+     *
      * @param torques                 output torques
-     * @param forces                  output forces 
+     * @param forces                  output forces
      */
     void mapTorqueToForce(std::vector<OpenMM::Vec3>& torques,
                           std::vector<OpenMM::Vec3>& forces);
 
     /**
-     * Calculate the forces and energy
-     * 
-     * @param particleData            vector of parameters (charge, labFrame dipoles, quadrupoles, ...) for particles
-     * @param torques                 output torques
-     * @param forces                  output forces 
+     * Calculate the forces and energy.
      *
+     * @param torques    output torques
+     * @param forces     output forces
      * @return energy
      */
     virtual double calculateInteractions(std::vector<OpenMM::Vec3>& torques,
                                          std::vector<OpenMM::Vec3>& forces);
 
     /**
-     * Normalize a Vec3
+     * Normalize a Vec3.
      *
-     * @param vectorToNormalize vector to normalize
-     *
+     * @param vectorToNormalize    vector to normalize
      * @return norm of vector on input
-     * 
      */
     double normalizeVec3(Vec3& vectorToNormalize) const;
 
     /**
-     * Initialize vector of Vec3 (size=numParticles)
+     * Initialize vector of Vec3 (size=numParticles).
      *
-     * @param vectorToInitialize vector to initialize
-     * 
+     * @param vectorToInitialize    vector to initialize
      */
     void initializeVec3Vector(std::vector<Vec3>& vectorToInitialize) const;
 
     /**
-     * Apply periodic boundary conditions to difference in positions
-     * 
-     * @param deltaR  difference in particle positions; modified on output after applying PBC
-     * 
+     * Apply periodic boundary conditions to difference in positions.
+     *
+     * @param deltaR    difference in particle positions; modified on output after applying PBC
      */
     virtual void getPeriodicDelta(Vec3& deltaR) const {};
 };
@@ -562,16 +546,16 @@ public:
 
     /**
      * Constructor
-     * 
+     *
      */
     ReferenceInteraxMultipolePme(const InteraxMultipoleForce& force, const System& system);
- 
+
     /**
      * Destructor
-     * 
+     *
      */
     ~ReferenceInteraxMultipolePme();
- 
+
     /**
      * Get cutoff distance.
      *
@@ -591,9 +575,7 @@ public:
     /**
      * Get PME grid dimensions.
      *
-     * @param pmeGridDimensions contains PME grid dimensions upon return
-
-     *
+     * @param pmeGridDimensions    contains PME grid dimensions upon return
      */
     void getPmeGridDimensions(std::vector<int>& pmeGridDimensions) const;
 
@@ -617,7 +599,7 @@ private:
     int _pmeGridDimensions[3];
 
     std::vector<std::complex<double> > _pmeGrid;
- 
+
     std::vector<double> _pmeBsplineModuli[3];
     std::vector<InteraxDouble4> _thetai[3];
     std::vector<std::array<int, 3> > _iGrid;
@@ -627,7 +609,7 @@ private:
 
     /**
      * Resize PME arrays.
-     * 
+     *
      */
     void resizePmeArrays();
 
@@ -638,42 +620,39 @@ private:
 
     /**
      * Modify input vector of differences in particle positions for periodic boundary conditions.
-     * 
-     * @param delta                   input vector of difference in particle positions; on output adjusted for
-     *                                periodic boundary conditions
+     *
+     * @param deltaR    input vector of difference in particle positions; on output adjusted for
+     *                  periodic boundary conditions
      */
     void getPeriodicDelta(Vec3& deltaR) const;
-    
+
     /**
      * Initialize B-spline moduli.
-     * 
+     *
      */
     void initializeBSplineModuli();
 
     /**
      * Calculate direct-space field at site I due fixed multipoles at site J and vice versa.
-     * 
+     *
      * @param particleI               positions and parameters (charge, labFrame dipoles, quadrupoles, ...) for particle I
      * @param particleJ               positions and parameters (charge, labFrame dipoles, quadrupoles, ...) for particle J
      */
     void calculateFixedMultipoleFieldPairIxn(const MultipoleParticleData& particleI, const MultipoleParticleData& particleJ);
-    
+
     /**
      * Calculate fixed multipole fields.
-     *
-     * @param particleData vector particle data
-     * 
      */
     void calculateFixedMultipoleField();
 
     /**
      * This is called from computeAmoebaBsplines().  It calculates the spline coefficients for a single atom along a single axis.
-     * 
-     * @param thetai output spline coefficients
-     * @param w offset from grid point
+     *
+     * @param thetai    output spline coefficients
+     * @param w         offset from grid point
      */
     void computeBSplinePoint(std::vector<InteraxDouble4>& thetai, double w);
-    
+
     /**
      * Compute bspline coefficients.
      *
@@ -693,32 +672,32 @@ private:
 
     /**
      * Spread fixed multipoles onto PME grid.
-     * 
+     *
      * @param particleData vector of particle positions and parameters (charge, labFrame dipoles, quadrupoles, ...)
      */
     void spreadFixedMultipolesOntoGrid(const std::vector<MultipoleParticleData>& particleData);
 
     /**
      * Perform reciprocal convolution.
-     * 
+     *
      */
     void performAmoebaReciprocalConvolution();
 
     /**
      * Compute reciprocal potential due fixed multipoles at each particle site.
-     * 
+     *
      */
     void computeFixedPotentialFromGrid(void);
 
     /**
      * Compute reciprocal potential due fixed multipoles at each particle site.
-     * 
+     *
      */
     void computeInducedPotentialFromGrid();
 
     /**
      * Calculate reciprocal space energy and force due to fixed multipoles.
-     * 
+     *
      * @param particleData    vector of particle positions and parameters (charge, labFrame dipoles, quadrupoles, ...)
      * @param forces          upon return updated vector of forces
      * @param torques         upon return updated vector of torques
@@ -730,7 +709,7 @@ private:
 
     /**
      * Set reciprocal space fixed multipole fields.
-     * 
+     *
      */
     void recordFixedMultipoleField();
 
@@ -742,7 +721,7 @@ private:
     /**
      * Calculate direct space field at particleI due to induced dipole at particle J and vice versa for
      * inducedDipole and inducedDipolePolar.
-     * 
+     *
      * @param particleI    positions and parameters (charge, labFrame dipoles, quadrupoles, ...) for particle I
      * @param particleJ    positions and parameters (charge, labFrame dipoles, quadrupoles, ...) for particle J
      */
@@ -752,7 +731,7 @@ private:
     /**
      * Initialize induced dipoles
      */
-    void initializeInducedDipoles(); 
+    void initializeInducedDipoles();
 
     /**
      * Spread induced dipoles onto grid.
@@ -763,30 +742,31 @@ private:
 
     /**
      * Calculate induced dipole fields.
-     * 
-     * @param particleData   vector of particle positions and parameters (charge, labFrame dipoles, quadrupoles, ...)
+     *
+     * @param particleData    vector of particle positions and parameters (charge, labFrame dipoles, quadrupoles, ...)
+     * @param optOrder        the order of the extrapolated perturbation series being computed
      */
     void calculateInducedDipoleFields(const std::vector<MultipoleParticleData>& particleData, int optOrder);
 
     /**
-     * Set reciprocal space induced dipole fields. 
+     * Set reciprocal space induced dipole fields.
      *
      * @param field       reciprocal space output induced dipole field value at each site
-     * 
+     *
      */
     void recordInducedDipoleField(std::vector<Vec3>& field);
 
-    /**
-     * Compute Pme self energy.
-     *
-     * @param particleData            vector of parameters (charge, labFrame dipoles, quadrupoles, ...) for particles
-     */
     /**
      * The r = 0 limit erf_k(0) = 2^(k+1) alpha^(2k+1) / ((2k+1) sqrt(pi)) of the reciprocal-space radial
      * function of order k, for fully excluded pairs at the same position.
      */
     double coincidentEwaldLimit(int k) const;
 
+    /**
+     * Compute Pme self energy.
+     *
+     * @param particleData            vector of parameters (charge, labFrame dipoles, quadrupoles, ...) for particles
+     */
     double calculatePmeSelfEnergy(const std::vector<MultipoleParticleData>& particleData) const;
 
     /**
@@ -799,7 +779,7 @@ private:
 
     /**
      * Calculate direct space electrostatic interaction between particles I and K.
-     * 
+     *
      * @param particleI         positions and parameters (charge, labFrame dipoles, quadrupoles, ...) for particle I
      * @param particleK         positions and parameters (charge, labFrame dipoles, quadrupoles, ...) for particle K
      * @param r                 the distance between the two particles
@@ -812,7 +792,7 @@ private:
 
     /**
      * Calculate electrostatic interactions involving induced dipoles on particles I and K.
-     * 
+     *
      * @param particleI         positions and parameters (charge, labFrame dipoles, quadrupoles, ...) for particle I
      * @param particleK         positions and parameters (charge, labFrame dipoles, quadrupoles, ...) for particle K
      * @param deltaR            the displacement between the two particles (in the lab frame)
@@ -827,7 +807,7 @@ private:
 
     /**
      * Calculate reciprocal space force/torque for dipole interaction.
-     * 
+     *
      * @param particleData      vector of particle positions and parameters (charge, labFrame dipoles, quadrupoles, ...)
      * @param forces            vector of particle forces to be updated
      * @param torques           vector of particle torques to be updated
@@ -837,11 +817,9 @@ private:
 
     /**
      * Calculate the forces and energy.
-     * 
-     * @param particleData            vector of parameters (charge, labFrame dipoles, quadrupoles, ...) for particles
-     * @param torques                 output torques
-     * @param forces                  output forces 
      *
+     * @param torques    output torques
+     * @param forces     output forces
      * @return energy
      */
     double calculateInteractions(std::vector<OpenMM::Vec3>& torques,

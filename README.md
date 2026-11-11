@@ -23,11 +23,10 @@ Lengths are in nm, energies in kJ/mol and charges in e, as everywhere in OpenMM.
 and conventions of every force are given in [docs/SPEC.md](docs/SPEC.md) and in the documentation of each class in
 `openmmapi/include`.
 
-`InteraxMultipoleForce` is derived from OpenMM's `HippoNonbondedForce`, without HIPPO's repulsion, dispersion and charge
-transfer. It adds core damping (the permanent field that polarizes an atom is damped by the atom's own Slater density,
-which keeps the polarization energy finite when atoms overlap), a damping scale of the couplings between induced
-dipoles, alchemical scaling of multipoles and polarizabilities, an exact evaluation of the damping factors for nearly
-equal exponents, and zero polarizabilities. With HIPPO's options it reproduces `HippoNonbondedForce`.
+`InteraxMultipoleForce` computes the electrostatics and polarization of OpenMM's `HippoNonbondedForce`, without its
+repulsion, dispersion and charge transfer, and adds core damping of the field that polarizes each atom, a damping
+scale of the couplings between induced dipoles, alchemical scaling, and zero polarizabilities. With HIPPO's options it
+reproduces `HippoNonbondedForce`.
 
 Every force can decouple alchemical particles through a context parameter (`lambda_sterics` by default,
 `lambda_electrostatics` for `InteraxMultipoleForce`).
@@ -269,15 +268,11 @@ Each force has a Reference, a CPU and a common compute implementation; the commo
   platforms, which vectorizes it with SSE or AVX (`CpuInteraxPairForceVec4.cpp`, `CpuInteraxPairForceAvx.cpp`, chosen
   at run time, as in OpenMM's `CpuCustomNonbondedForce`). On the GPU they add their interactions to OpenMM's nonbonded
   kernel (`platforms/common/src/kernels/interax*.cc`) and share its neighbor list.
-* The three-body force finds its triples from neighbor lists of the sites. On the GPU each site keeps a half list (the
-  sites above it within the cutoff plus a 0.1 nm skin), rebuilt when a site has moved by more than half the skin; at
-  every evaluation the neighbors within the cutoff are compacted into tiles, and a thread block per site loops over
-  the pairs of tiles, skipping those whose bounding boxes are more than the cutoff apart. Each triple is computed once.
-* `InteraxMultipoleForce` keeps HIPPO's structure: its Reference platform (also used by the CPU platform) is derived
-  from HIPPO's reference code, and its GPU kernels from HIPPO's common kernels
-  (`platforms/common/src/kernels/interaxMultipole*.cc`), with cuFFT for PME. The files derived from OpenMM keep the
-  upstream code, names and comments where the code is the same, so that `diff` against OpenMM 8.1.2
-  (`plugins/amoeba`) shows the changes of this plugin, each marked at the point of change.
+* The three-body force finds its triples from neighbor lists of the sites (docs/SPEC.md); each triple is computed
+  once.
+* `InteraxMultipoleForce` is derived from OpenMM's implementation of `HippoNonbondedForce` (`plugins/amoeba`): its
+  Reference platform, also used by the CPU platform, from the reference code, and its GPU kernels
+  (`platforms/common/src/kernels/interaxMultipole*.cc`) from the common kernels, with cuFFT for PME.
 
 The common kernels are encoded into the class `CommonInteraxKernelSources` at build time, as in the example plugin.
 `third_party/pocketfft` is the header-only FFT (BSD license) that OpenMM's reference PME uses; it is compiled into the

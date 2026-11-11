@@ -210,6 +210,7 @@ def convert_multipoles(hippo, core_damping=False, core_damping_scale=1.0):
     """
 
     def strip(value):
+        """Return the value of a Quantity in OpenMM's units, or a plain number unchanged."""
         return value.value_in_unit(value.unit) if hasattr(value, "unit") else value
 
     plugin = ip.InteraxMultipoleForce()

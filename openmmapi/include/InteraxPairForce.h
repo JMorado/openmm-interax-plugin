@@ -48,7 +48,7 @@ namespace InteraxPlugin {
  * particles must be exactly equal to the number of particles in the System, or else an exception will be thrown
  * when you try to create a Context.  Every pair of particles interacts unless it has been excluded with
  * addExclusion(); the InteraxFF force field excludes every pair of particles within the same molecule.  When all
- * pair forces of a System have the same exclusions and cutoff, the CUDA and OpenCL platforms evaluate them together
+ * pair forces of a System have the same exclusions and cutoff, the CUDA platform evaluates them together
  * with the default nonbonded kernel and its neighbor list.
  *
  * When using a cutoff, by default the interaction is sharply truncated at the cutoff distance.  Optionally you can

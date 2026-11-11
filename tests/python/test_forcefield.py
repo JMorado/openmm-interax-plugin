@@ -17,7 +17,7 @@ import pytest
 import openmm  # noqa: E402
 from openmm import app, unit  # noqa: E402
 
-import plugin_path  # noqa: E402  (INTERAX_PLUGIN_PREFIX)
+import plugin_path  # noqa: E402, F401  (loads the plugin: INTERAX_PLUGIN_PREFIX)
 
 sys.path.insert(1, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "python"))
 import interaxplugin as ip  # noqa: E402

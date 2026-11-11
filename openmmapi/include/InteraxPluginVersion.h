@@ -42,7 +42,7 @@ namespace InteraxPlugin {
 OPENMM_EXPORT_INTERAX const char* getPluginVersion();
 
 /**
- * Get the git commit the plugin was built from ("git describe --always --dirty" at CMake time; "unknown" outside a
+ * Get the git commit the plugin was built from ("git describe --always --dirty" at build time; "unknown" outside a
  * git checkout). A "-dirty" suffix means the source had uncommitted changes.
  *
  * @return the description of the git commit of the source

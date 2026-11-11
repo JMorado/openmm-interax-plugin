@@ -6,9 +6,6 @@ at r_eff; forces against finite differences; every platform against Reference.
 
 Usage: python -m pytest test_softcore.py      (INTERAX_PLUGIN_PREFIX: where the plugin is installed)
 """
-import os
-import sys
-
 import numpy as np
 import pytest
 

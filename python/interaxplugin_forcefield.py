@@ -49,6 +49,7 @@ _TRUE = ("true", "1", "yes")
 
 
 def _bool(value):
+    """Return whether an attribute value of a force field file is true."""
     return str(value).lower() in _TRUE
 
 
@@ -88,10 +89,12 @@ def _molecules(sys, data):
 
 
 def _is_site(data, atom):
+    """Return whether an atom of createSystem() is a virtual site."""
     return atom.element is None or atom in data.virtualSites
 
 
 def _periodic(nonbondedMethod):
+    """Return whether a nonbonded method of createSystem() is periodic."""
     return nonbondedMethod in (_ff.PME, _ff.CutoffPeriodic, _ff.LJPME, _ff.Ewald)
 
 
@@ -119,6 +122,8 @@ def _setup_pair_force(force, nonbondedMethod, nonbondedCutoff, args, molecules):
 
 
 class _PairGenerator:
+    """The base class of the generators of the pair forces, with one set of parameters per atom type."""
+
     tag = None
     paramNames = ()
     defaults = {}
@@ -130,10 +135,12 @@ class _PairGenerator:
 
     @classmethod
     def parseElement(cls, element, ff):
+        """Add the parameters of an element of a force field file to the generator of ff."""
         generator = _get_generator(cls, ff, element, cls.defaults)
         generator.params.parseDefinitions(element)
 
     def createForce(self, sys, data, nonbondedMethod, nonbondedCutoff, args):
+        """Add the force to a System being created by ForceField.createSystem()."""
         force = self.makeForce()
         for atom in data.atoms:
             force.addParticle(*[float(v) for v in self.params.getAtomParameters(atom, data)])
@@ -144,7 +151,7 @@ class _PairGenerator:
         sys.addForce(force)
 
     def finish(self, force, nonbondedMethod):
-        pass
+        """Set the options that depend on the nonbonded method."""
 
 
 _OVERLAP = {"exact": "Exact", "order2": "InteraxOrder2"}
@@ -158,11 +165,13 @@ class InteraxDispersionGenerator(_PairGenerator):
     defaults = {"dampingScale": "1", "useLongRangeCorrection": "true"}
 
     def makeForce(self):
+        """Create the force with its force-level settings."""
         force = ip.InteraxDispersionForce()
         force.setDampingScale(float(self.settings["dampingScale"]))
         return force
 
     def finish(self, force, nonbondedMethod):
+        """Use the long range correction with periodic boundary conditions, if the force field file asks for it."""
         force.setUseLongRangeCorrection(_periodic(nonbondedMethod) and _bool(self.settings["useLongRangeCorrection"]))
 
 
@@ -174,6 +183,7 @@ class InteraxExchangeGenerator(_PairGenerator):
     defaults = {"overlapMethod": "exact"}
 
     def makeForce(self):
+        """Create the force with its force-level settings."""
         force = ip.InteraxExchangeForce()
         force.setOverlapMethod(getattr(ip.InteraxExchangeForce, _OVERLAP[self.settings["overlapMethod"]]))
         return force
@@ -187,6 +197,7 @@ class InteraxShortRangeGenerator(_PairGenerator):
     defaults = {"overlapMethod": "exact"}
 
     def makeForce(self):
+        """Create the force with its force-level settings."""
         force = ip.InteraxShortRangeForce()
         force.setOverlapMethod(getattr(ip.InteraxShortRangeForce, _OVERLAP[self.settings["overlapMethod"]]))
         return force
@@ -210,10 +221,12 @@ class InteraxThreeBodyGenerator:
 
     @classmethod
     def parseElement(cls, element, ff):
+        """Add the parameters of an element of a force field file to the generator of ff."""
         generator = _get_generator(cls, ff, element, cls.defaults)
         generator.params.parseDefinitions(element)
 
     def createForce(self, sys, data, nonbondedMethod, nonbondedCutoff, args):
+        """Add the force to a System being created by ForceField.createSystem()."""
         alpha, frequency = [], []
         for atom in data.atoms:
             a, w = (float(v) for v in self.params.getAtomParameters(atom, data))
@@ -256,10 +269,12 @@ class InteraxMultipoleGenerator:
 
     @classmethod
     def parseElement(cls, element, ff):
+        """Add the parameters of an element of a force field file to the generator of ff."""
         generator = _get_generator(cls, ff, element, cls.defaults)
         generator.params.parseDefinitions(element)
 
     def _axis_atom(self, name, extra, atom, data, group, molecules, bonded12, bonded13, exclude):
+        """Return the index of the frame atom of an atom given by the atom type name, or -1 if there is none."""
         if name not in extra:
             return -1
         wanted = extra[name]
@@ -274,6 +289,7 @@ class InteraxMultipoleGenerator:
         return matches[0]
 
     def createForce(self, sys, data, nonbondedMethod, nonbondedCutoff, args):
+        """Add the force to a System being created by ForceField.createSystem()."""
         methods = {_ff.NoCutoff: ip.InteraxMultipoleForce.NoCutoff, _ff.PME: ip.InteraxMultipoleForce.PME}
         if nonbondedMethod not in methods:
             raise ValueError("InteraxMultipoleForce supports NoCutoff and PME")

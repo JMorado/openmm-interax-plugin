@@ -6,7 +6,6 @@ tests/TestInteraxExportValues.h and needs neither InteraxFF nor its model.
 Usage: python -m pytest test_export_values.py      (INTERAX_PLUGIN_PREFIX: where the plugin is installed)
 """
 import os
-import sys
 
 import numpy as np
 import pytest
