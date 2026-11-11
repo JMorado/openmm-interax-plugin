@@ -4,7 +4,9 @@
 
 CMAKE_MINIMUM_REQUIRED(VERSION 3.17)
 
-PROJECT(OpenMMInteraxPlugin)
+# The version number is set here and copied to anywhere it is needed (the library, the Python package).
+PROJECT(OpenMMInteraxPlugin VERSION 0.1.0)
+SET(INTERAX_PLUGIN_VERSION ${PROJECT_VERSION})
 
 # We need to know where OpenMM is installed so we can access the headers and libraries.
 SET(OPENMM_DIR "/usr/local/openmm" CACHE PATH "Where OpenMM is installed")
@@ -70,7 +72,6 @@ ENDFOREACH(subdir)
 # Build stamp: the plugin version and the git commit of the source ("-dirty" with uncommitted changes), returned by
 # InteraxPlugin::getPluginVersion() and getPluginGitCommit(). Written at configure time and refreshed before every build
 # (devtools/stamp_version.cmake), so a rebuild without re-running CMake still records the current commit.
-SET(INTERAX_PLUGIN_VERSION "0.2.0")
 SET(INTERAX_VERSION_CPP ${CMAKE_CURRENT_BINARY_DIR}/InteraxPluginVersion.cpp)
 EXECUTE_PROCESS(COMMAND ${CMAKE_COMMAND} -DSOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR} -DOUTPUT=${INTERAX_VERSION_CPP}
                 -DVERSION=${INTERAX_PLUGIN_VERSION} -P ${CMAKE_CURRENT_SOURCE_DIR}/devtools/stamp_version.cmake)

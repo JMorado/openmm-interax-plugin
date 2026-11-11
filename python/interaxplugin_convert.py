@@ -19,8 +19,8 @@ import openmm
 import interaxplugin as ip
 
 def build_info():
-    """Return the version of the plugin and the git commit it was built from."""
-    return f"{ip.getPluginVersion()} ({ip.getPluginGitCommit()})"
+    """Return the version of the plugin and the git commit it was built from, e.g. "0.1.0 (v0.1.0)"."""
+    return f"{ip.__version__} ({ip.getPluginGitCommit()})"
 
 
 # The unit conversions of the InteraxFF export (interax/openmm.py).

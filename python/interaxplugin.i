@@ -321,3 +321,10 @@ CAST_HELPERS(InteraxExchangeForce)
 CAST_HELPERS(InteraxShortRangeForce)
 CAST_HELPERS(InteraxThreeBodyForce)
 CAST_HELPERS(InteraxMultipoleForce)
+
+/*
+ * The version of the plugin, as in other OpenMM Python packages.
+ */
+%pythoncode %{
+__version__ = getPluginVersion()
+%}
