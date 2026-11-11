@@ -11,8 +11,7 @@ forces:
   tests/data/<system>/reference.txt   the positions, the box, and the energy and forces of each term in the export
 
 The export uses the order-2 Slater Taylor scheme whatever the model's (ff.slater_taylor): the tests check that the
-plugin reproduces it to rounding in double precision. The order-6 export expands about the width of particle 1 of each
-pair, which OpenMM's neighbor list may swap, so with a cutoff it differs from the plugin's InteraxOrder6 by ~1e-5.
+plugin reproduces it to rounding in double precision.
 
 The tests (tests/TestInteraxExportValues.h on every platform, tests/python/test_export_values.py) load these files
 and need neither InteraxFF nor its model. Regenerate them when the model or the export changes:

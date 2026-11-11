@@ -10,10 +10,9 @@ interaxplugin_convert.convert_system, and compares the energy and the forces of 
 Usage: python compare_export.py [--platform Reference] [--precision double] [--overlap export] [--systems cluster box]
 
 By default the Slater overlap follows the Taylor scheme of the model (interax.openmm.CONVERT_OVERLAP[ff.slater_taylor]:
-"export" for order2, "exact" for order6). With --overlap export the plugin uses the InteraxFF Taylor scheme of the
-export and must reproduce it to rounding (the order-6 export in the box only to ~1e-5: it expands about the width of
-particle 1 of each pair, which OpenMM's neighbor list may swap); with --overlap exact it uses its accurate scheme,
-which differs from the export by the export's truncation error. The export builds the three-body dispersion as an InteraxThreeBodyForce
+"export" for order2, "exact" for order6). With --overlap export the plugin uses the method that reproduces the Taylor
+scheme of the export, and must reproduce it to rounding; with --overlap exact it uses its accurate scheme, which differs
+from the order-2 export by the export's truncation error and equals the order-6 export to rounding. The export builds the three-body dispersion as an InteraxThreeBodyForce
 already, which the conversion keeps: its row compares the platform with the Reference platform.
 Run with the interax environment; the plugin, InteraxFF and the model (INTERAX_MODEL) are found as plugin_path.py
 describes. The base force field's charges (intramolecular terms only) are AM1-BCC when AmberTools or OpenEye can

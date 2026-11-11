@@ -86,15 +86,22 @@ def _particle_values(force, index):
 
 def _overlap_method(force, plugin_class):
     """
-    The plugin overlap method that reproduces an exported force: the InteraxFF Taylor scheme of its switch
-    (interax.openmm._taylor_switch_expression), 'issame = step(0.2*s1 - abs(sdifflin))' for order 6 and an absolute
-    width difference for order 2.
+    The plugin overlap method that reproduces an exported force (interax.openmm.overlap_energy_expression): Exact for
+    the order-6 expansion about the smaller width ('l = min(s1, s2)'), which equals it to rounding in double
+    precision, and InteraxOrder2 for the order-2 expansion about s1 below an absolute width difference
+    ('issame = step(threshold - abs(sdifflin))').
     """
     expression = force.getEnergyFunction()
-    if "issame" not in expression:
-        raise ValueError("The force has no Taylor switch of the Slater overlap.")
-    switch = expression.split("issame = step(")[1].split("-")[0]
-    return plugin_class.InteraxOrder6 if "*s1" in switch else plugin_class.InteraxOrder2
+    if "l = min(s1, s2)" in expression:
+        return plugin_class.Exact
+    if "issame = step(" in expression:
+        switch = expression.split("issame = step(")[1].split(" - abs(sdifflin)")[0]
+        try:
+            float(switch)
+            return plugin_class.InteraxOrder2
+        except ValueError:
+            pass
+    raise ValueError("The force has no Slater overlap scheme that this converter knows.")
 
 
 def _is_active(values):
@@ -384,10 +391,10 @@ def convert_system(system, copy=True, overlap="exact", unwrap_multipoles=True):
     copy=False the System is converted in place, which avoids serializing the millions of triples of the exported
     three-body force.
 
-    The Slater overlap of the exchange repulsion and the short-range correction uses, with overlap="export", the
-    InteraxFF Taylor scheme of the export, evaluated as the export does (the converted forces reproduce it to
-    rounding), and with overlap="exact" the plugin's accurate scheme (the exact integral, which the export
-    approximates to ~1e-6 relative).
+    The Slater overlap of the exchange repulsion and the short-range correction uses, with overlap="exact", the
+    plugin's Exact method, and with overlap="export" the method that reproduces the Taylor scheme of the export to
+    rounding: Exact for the order-6 scheme (in double precision), InteraxOrder2 for the order-2 scheme, which the Exact
+    method differs from by up to ~1e-6 relative.
 
     By default (unwrap_multipoles=True) an InteraxMultipoleForce wrapped in a CustomCVForce whose energy is that force
     alone is put directly into the System with its own GPU kernel (see unwrap_multipoles()), which gives the same

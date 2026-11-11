@@ -211,8 +211,9 @@ from interax.openmm import create_system_from_topology
 system = interaxplugin_convert.convert_system(create_system_from_topology(topology, force_field), copy=False)
 ```
 
-With `overlap="exact"` (the default) the Slater overlaps are evaluated exactly; with `overlap="export"` they use the
-Taylor expansions of the InteraxFF implementation, which the converted forces then reproduce to rounding. With
+With `overlap="exact"` (the default) the Slater overlaps are evaluated exactly; with `overlap="export"` they are
+evaluated as the export evaluates them, which the converted forces then reproduce to rounding (the order-6 export of
+InteraxFF evaluates them exactly, the order-2 export with the Taylor expansion of MEDFF). With
 `copy=False` the System is converted in place.
 
 For alchemical decoupling, flag the solute's particles (and its three-body sites) as alchemical: the plugin forces then

@@ -63,14 +63,16 @@ Taylor expansion about a width l, with t = (b - l)/l (b the other width) and x =
 | Method | Order N | l | Taylor where | Use |
 |---|---|---|---|---|
 | `Exact` (default) | 6 | the smaller width | t < 0.2 and t x < 1.6 (single precision), t < 0.02 and t x < 0.3 (double) | the exact integral: ~1e-6 relative in single, ~1e-10 in double precision |
-| `InteraxOrder2` | 2 | width of the particle with the lower index | \|b - a\| < 0.01 bohr | the InteraxFF default (MEDFF); reproduces the export |
-| `InteraxOrder6` | 6 | width of the particle with the lower index | \|t\| < 0.2 | the InteraxFF order-6 scheme; reproduces the export |
+| `InteraxOrder2` | 2 | width of the particle with the lower index | \|b - a\| < 0.01 bohr | the InteraxFF order-2 scheme (MEDFF); reproduces its export |
+| `InteraxOrder6` | 6 | width of the particle with the lower index | \|t\| < 0.2 | an earlier order-6 scheme of InteraxFF; not used by the export |
 
-The InteraxFF schemes (`interax.geometry.SLATER_TAYLOR_SCHEMES`) are evaluated exactly as the export evaluates them on
-the Reference platform, where particle 1 of each pair is the one with the lower index, with the signed width
-difference. They carry the export's truncation errors: up to ~1e-6 relative to the exact integral (order 6 degrades as
-(t x)^7 at large distances), and in single precision the closed form close to the order-2 switch has relative errors
-up to ~3e-2. `convert_system(overlap="export")` picks the scheme of the export, `overlap="exact"` (the default) the
+The InteraxFF Slater schemes (`interax.geometry.SLATER_TAYLOR_SCHEMES`) are "order6", which is the `Exact` method,
+and "order2". The export writes the order-6 scheme about the smaller width with the double-precision switch, so that
+it is symmetric in the two particles of a pair and `Exact` reproduces it to rounding in double precision. The order-2
+scheme expands about particle 1 of each pair with the signed width difference; `InteraxOrder2` evaluates it as the
+export does on the Reference platform, where particle 1 is the one with the lower index, and carries its errors: up to
+~1e-6 relative to the exact integral, and in single precision up to ~3e-2 from the closed form close to the switch.
+`convert_system(overlap="export")` picks the method that reproduces the export, `overlap="exact"` (the default) the
 `Exact` method; the force field files use `Exact` unless they set `overlapMethod`. The CUDA kernels compare the original particle indices, which the context may reorder.
 
 The normalized overlap is `St(r) = 8 pi (a + b)^3 S(r; a, b)`, with `St(0) = 1`.
