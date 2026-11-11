@@ -40,8 +40,9 @@
  *   alchemical particles their multipoles and polarizabilities are multiplied by the alchemical parameter
  *
  * and the own GPU kernel against the default one. HIPPO is only compared where it is correct: not for forces on
- * particles with a ZOnly frame on the Reference and CPU platforms, nor with grids of different sizes in x and z on
- * the CUDA platform (docs/upstream).
+ * particles with a ZOnly frame on the Reference and CPU platforms (OpenMM 8.1 reads the position of the missing x
+ * atom, index -1, when it maps their torques to forces), nor with grids of different sizes in x and z on the CUDA
+ * platform (its PME convolution uses the B-spline moduli of x for z).
  */
 
 #include "InteraxTestUtilities.h"

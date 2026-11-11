@@ -129,7 +129,7 @@ and the alchemical flag. Global: cutoff `r_c` (every pair of a triple), a scale 
 
 Two forms are supported:
 
-* **Atomic** (InteraxFF's "atomic" mode, or `interaxplugin_convert.atomic_three_body`): one site per atom with its
+* **Atomic** (InteraxFF's "atomic" mode): one site per atom with its
   atomic oscillator, and the Tang-Toennies damping of each of the three dipole propagators (~ r^-3) of a triple,
   `f_ij = f_3(x)`, `x = beta 2 r_ij / (s_i + s_j)` (as in the dispersion), with the dispersion widths. Triples with two
   sites of the same molecule are excluded.
