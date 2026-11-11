@@ -72,14 +72,14 @@ def energies(system, positions, box, platform, precision, indices, lambdas):
     return results
 
 
-def check(name, topology, positions, periodic, platform, precision, ff, nagl):
-    export = create_system_from_topology(topology, ff, nagl, electrostatics="interax", nonbonded_cutoff=0.9, components=COMPONENTS)
+def check(name, topology, positions, periodic, platform, precision, ff):
+    export = create_system_from_topology(topology, ff, nonbonded_cutoff=0.9, components=COMPONENTS)
     box = export.getDefaultPeriodicBoxVectors() if periodic else None
     solute = first_molecule(topology)
     systems = {}
     for mode in ("on", "off", "alchemical"):
         system = interaxplugin_convert.convert_system(export)
-        indices = terms_by_kind(system, True)
+        indices = terms_by_kind(system)
         if mode != "on":
             for i in indices.values():
                 modify(system.getForce(i), solute, mode)
@@ -109,16 +109,16 @@ def main():
     parser.add_argument("--platform", default="Reference")
     parser.add_argument("--precision", default="double")
     args = parser.parse_args()
-    ff, nagl = load_model()
-    worst = check("cluster", *cluster_topology(), False, args.platform, args.precision, ff, nagl)
-    worst = max(worst, check("methanol box", *box_topology(), True, args.platform, args.precision, ff, nagl))
+    ff = load_model()
+    worst = check("cluster", *cluster_topology(), False, args.platform, args.precision, ff)
+    worst = max(worst, check("methanol box", *box_topology(), True, args.platform, args.precision, ff))
     print(f"\nlargest difference relative to the decoupling energy: {worst:.1e}")
 
 
 def test_alchemical_scaling():
-    ff, nagl = load_model()
-    worst = check("cluster", *cluster_topology(), False, "Reference", "double", ff, nagl)
-    worst = max(worst, check("methanol box", *box_topology(), True, "Reference", "double", ff, nagl))
+    ff = load_model()
+    worst = check("cluster", *cluster_topology(), False, "Reference", "double", ff)
+    worst = max(worst, check("methanol box", *box_topology(), True, "Reference", "double", ff))
     assert worst < 1e-8
 
 

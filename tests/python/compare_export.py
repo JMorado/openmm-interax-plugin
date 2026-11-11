@@ -1,8 +1,8 @@
 """
 Compare the plugin forces with the InteraxFF export they replace, term by term, on real InteraxFF systems.
 
-Builds the systems with interax.openmm.create_system_from_topology (model E1, examples/models_v3R4bfdE1), converts
-them with interaxplugin_convert.convert_system, and compares the energy and the forces of each term:
+Builds the systems with interax.openmm.create_system_from_topology, converts them with
+interaxplugin_convert.convert_system, and compares the energy and the forces of each term:
 
   cluster   a non-periodic cluster of H/C/N/O/S/Cl molecules (no cutoff)
   box       a periodic box of liquid methanol (0.9 nm cutoff, switching from 0.8 nm, dispersion long range correction)
@@ -10,11 +10,13 @@ them with interaxplugin_convert.convert_system, and compares the energy and the 
 Usage: python compare_export.py [--platform Reference] [--precision double] [--overlap export] [--systems cluster box]
 
 With --overlap export the plugin uses the InteraxFF Taylor scheme of the export and must reproduce it to rounding;
-with --overlap exact it uses its accurate scheme, which differs from the export by the export's truncation error.
-Run with the interax environment; the plugin, InteraxFF and the model are found as plugin_path.py describes
-(models with lone-pair virtual sites work too). The base force field's charges (intramolecular terms only) are AM1-BCC
-when AmberTools or OpenEye can compute them, else Gasteiger (INTERAX_BASE_CHARGES=am1bcc|gasteiger forces one);
-packmol is looked for on PATH, then next to the Python interpreter.
+with --overlap exact it uses its accurate scheme, which differs from the export by the export's truncation error. The
+export builds the three-body dispersion as an InteraxThreeBodyForce already, which the conversion keeps: its row
+compares the platform with the Reference platform.
+Run with the interax environment; the plugin, InteraxFF and the model (INTERAX_MODEL) are found as plugin_path.py
+describes. The base force field's charges (intramolecular terms only) are AM1-BCC when AmberTools or OpenEye can
+compute them, else Gasteiger (INTERAX_BASE_CHARGES=am1bcc|gasteiger forces one); packmol is looked for on PATH, then
+next to the Python interpreter.
 """
 import argparse
 import os
@@ -25,13 +27,12 @@ import warnings
 
 warnings.filterwarnings("ignore")
 import numpy as np  # noqa: E402
-import torch  # noqa: E402,F401  (load the env's libstdc++ before anything else)
+import torch  # noqa: E402  (load the env's libstdc++ before anything else)
 import openmm  # noqa: E402
 import openmm.unit as unit  # noqa: E402
 
-from plugin_path import INTERAX_REPO, model  # noqa: E402  (INTERAX_PLUGIN_PREFIX, INTERAX_REPO, INTERAX_MODEL)
+from plugin_path import INTERAX_MODEL  # noqa: E402  (INTERAX_PLUGIN_PREFIX, INTERAX_REPO, INTERAX_MODEL)
 
-MODEL = model("models_v3R4bfdE1")
 import interaxplugin  # noqa: E402
 import interaxplugin_convert  # noqa: E402
 from openff.interchange.components._packmol import UNIT_CUBE, pack_box  # noqa: E402
@@ -40,7 +41,7 @@ from openff.units import unit as off_unit  # noqa: E402
 
 from interax.force_field import ForceField  # noqa: E402
 from interax.models import NAGLModel, PerAtomicNumberModel  # noqa: E402
-from interax.openmm import create_system_from_topology, extend_positions_for_sites  # noqa: E402
+from interax.openmm import COMPONENTS, create_system_from_topology  # noqa: E402
 
 # packmol (pack_box) from the environment of this interpreter when it is not on PATH
 if shutil.which("packmol") is None:
@@ -75,12 +76,12 @@ if _base_charges() == "gasteiger":
 
     Interchange.from_smirnoff = classmethod(_with_gasteiger)
 
-COMPONENTS = ["E_static", "E_ind", "E_disp", "E_exrep", "E_src", "E_exind", "E_atm"]
+# Each term: the per-particle parameters of its CustomNonbondedForce in the export, and its plugin force
 KINDS = {
-    "dispersion": (lambda f: isinstance(f, openmm.CustomNonbondedForce) and "m1" in _names(f), interaxplugin.InteraxDispersionForce),
-    "exchange": (lambda f: isinstance(f, openmm.CustomNonbondedForce) and "A" in _names(f) and _nonzero_a(f), interaxplugin.InteraxExchangeForce),
-    "short_range": (lambda f: isinstance(f, openmm.CustomNonbondedForce) and "K" in _names(f) and "L" in _names(f), interaxplugin.InteraxShortRangeForce),
-    "three_body": (lambda f: isinstance(f, openmm.CustomCentroidBondForce), interaxplugin.InteraxThreeBodyForce),
+    "dispersion": ({"m1", "m2", "m3", "alpha", "s"}, interaxplugin.InteraxDispersionForce),
+    "exchange": ({"A", "s"}, interaxplugin.InteraxExchangeForce),
+    "short_range": ({"K", "L", "s"}, interaxplugin.InteraxShortRangeForce),
+    "three_body": (None, interaxplugin.InteraxThreeBodyForce),
 }
 
 
@@ -88,21 +89,14 @@ def _names(force):
     return {force.getPerParticleParameterName(k) for k in range(force.getNumPerParticleParameters())}
 
 
-def _nonzero_a(force):
-    k = [force.getPerParticleParameterName(j) for j in range(force.getNumPerParticleParameters())].index("A")
-    return any(force.getParticleParameters(i)[k] != 0 for i in range(force.getNumParticles()))
-
-
 def load_model(model=None):
-    """The force field and NAGL model in the directory model (default MODEL)."""
-    model = model or MODEL
+    """The force field in the directory model (default INTERAX_MODEL)."""
+    model = model or INTERAX_MODEL
     if model is None:
-        raise RuntimeError("no InteraxFF model: set INTERAX_MODEL (or INTERAX_REPO)")
-    nagl = NAGLModel.load(f"{model}/nagl_model.pt")
-    ff = ForceField(nagl, PerAtomicNumberModel.load(f"{model}/per_atomic_number_model.pt", device="cpu"))
-    ff.load_state_dict(torch.load(f"{model}/force_field_state.pt", map_location="cpu"), strict=False)
-    ff.eval()
-    return ff, nagl
+        raise RuntimeError("no InteraxFF model: set INTERAX_MODEL")
+    ff = ForceField(NAGLModel.load(f"{model}/nagl_model.pt"), PerAtomicNumberModel.load(f"{model}/per_atomic_number_model.pt", device="cpu"))
+    ff.load_state_dict(torch.load(f"{model}/force_field_state.pt", map_location="cpu"))
+    return ff.eval()
 
 
 def cluster_topology():
@@ -131,12 +125,13 @@ def box_topology():
     return topology, topology.get_positions().m_as(off_unit.nanometer)
 
 
-def terms_by_kind(system, plugin):
-    """Map each InteraxFF term to the index of its force (export or plugin version)."""
+def terms_by_kind(system):
+    """Map each InteraxFF term to the index of its force, in an export or a converted System."""
     found = {}
     for i, force in enumerate(system.getForces()):
-        for kind, (is_export, plugin_class) in KINDS.items():
-            if (plugin and plugin_class.isinstance(force)) or (not plugin and is_export(force)):
+        for kind, (names, plugin_class) in KINDS.items():
+            exported = names is not None and isinstance(force, openmm.CustomNonbondedForce) and names <= _names(force)
+            if exported or plugin_class.isinstance(force):
                 found[kind] = i
     return found
 
@@ -144,7 +139,7 @@ def terms_by_kind(system, plugin):
 def evaluate(system, positions, box, platform, indices, precision="double"):
     """Energy (kJ/mol) and forces (kJ/mol/nm) of each force in indices, each evaluated in its own group."""
     system = openmm.XmlSerializer.deserialize(openmm.XmlSerializer.serialize(system))
-    for i, force in enumerate(system.getForces()):
+    for force in system.getForces():
         force.setForceGroup(31)
     for group, i in enumerate(indices.values()):
         system.getForce(i).setForceGroup(group)
@@ -152,8 +147,7 @@ def evaluate(system, positions, box, platform, indices, precision="double"):
     context = openmm.Context(system, openmm.VerletIntegrator(0.001), openmm.Platform.getPlatformByName(platform), properties)
     if box is not None:
         context.setPeriodicBoxVectors(*box)
-    context.setPositions(extend_positions_for_sites(positions, system))
-    context.computeVirtualSites()
+    context.setPositions(positions)
     results = {}
     for group, kind in enumerate(indices):
         state = context.getState(getEnergy=True, getForces=True, groups={group})
@@ -162,12 +156,12 @@ def evaluate(system, positions, box, platform, indices, precision="double"):
     return results
 
 
-def compare(name, topology, positions, periodic, platform, precision, overlap, ff, nagl):
-    system = create_system_from_topology(topology, ff, nagl, electrostatics="interax", nonbonded_cutoff=0.9, components=COMPONENTS)
+def compare(name, topology, positions, periodic, platform, precision, overlap, ff):
+    system = create_system_from_topology(topology, ff, nonbonded_cutoff=0.9, components=COMPONENTS)
     box = system.getDefaultPeriodicBoxVectors() if periodic else None
     converted = interaxplugin_convert.convert_system(system, overlap=overlap)
-    export_terms, plugin_terms = terms_by_kind(system, False), terms_by_kind(converted, True)
-    assert set(export_terms) == set(plugin_terms), (export_terms, plugin_terms)
+    export_terms, plugin_terms = terms_by_kind(system), terms_by_kind(converted)
+    assert set(export_terms) == set(plugin_terms) == set(KINDS), (export_terms, plugin_terms)
     reference = evaluate(system, positions, box, "Reference", export_terms)
     test = evaluate(converted, positions, box, platform, plugin_terms, precision)
     print(f"\n{name}: {system.getNumParticles()} particles, plugin on {platform} ({precision}, {overlap} overlap) vs export on Reference")
@@ -191,12 +185,12 @@ def main():
     parser.add_argument("--overlap", default="export", choices=["export", "exact"])
     parser.add_argument("--systems", nargs="+", default=["cluster", "box"])
     args = parser.parse_args()
-    ff, nagl = load_model()
+    ff = load_model()
     worst = 0.0
     if "cluster" in args.systems:
-        worst = max(worst, compare("cluster", *cluster_topology(), False, args.platform, args.precision, args.overlap, ff, nagl))
+        worst = max(worst, compare("cluster", *cluster_topology(), False, args.platform, args.precision, args.overlap, ff))
     if "box" in args.systems:
-        worst = max(worst, compare("methanol box", *box_topology(), True, args.platform, args.precision, args.overlap, ff, nagl))
+        worst = max(worst, compare("methanol box", *box_topology(), True, args.platform, args.precision, args.overlap, ff))
     print(f"\nlargest relative difference: {worst:.1e}")
 
 

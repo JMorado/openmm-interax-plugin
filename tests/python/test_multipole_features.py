@@ -3,30 +3,27 @@ The InteraxFF options of InteraxMultipoleForce on a GPU platform against the Ref
 systems (electrostatics and polarization only):
 
   options        core damping, its range eta and the mutual damping scale kappa, together
-  intramolecular polarization="mutual-intra": the induced dipoles of a molecule couple (exceptions with dipole-dipole
-                 scale 1, 0 for bonded pairs)
   lambda         the first molecule alchemical, lambda_electrostatics = 0.3 and the end states (lambda = 0 against the
                  system without its multipoles and polarizabilities)
   serialization  an XML round trip of the force gives the same energy
   own kernel     setUseOwnKernel(True): the force alone, and in one context with a NonbondedForce (Lennard-Jones, same
                  exclusions) that uses the default nonbonded kernel, against the Reference platform
 
-Systems: the non-periodic cluster and the periodic methanol box of compare_export.py.
+Systems: the non-periodic cluster and the periodic methanol box of compare_export.py. The induced dipoles of a molecule
+couple in the export (exceptions with dipole-dipole scale 1, 0 for bonded pairs), so every check covers that coupling.
 Usage: python test_multipole_features.py [--platform CUDA] [--precision double], or python -m pytest
 test_multipole_features.py (CUDA in double precision; skipped without a CUDA device).
 """
 import argparse
 
-from compare_export import box_topology, cluster_topology, interaxplugin, interaxplugin_convert, load_model, np, openmm, unit  # noqa: E402
-from plugin_path import model  # noqa: E402
+from compare_export import box_topology, cluster_topology, interaxplugin, load_model, np, openmm, unit
+from plugin_path import available_platforms
 
-from interax.openmm import create_system_from_topology  # noqa: E402
-
-MODEL = model("models_v3R4bfdE1MQ")
+from interax.openmm import create_system_from_topology
 
 
 def multipoles_of(system):
-    """The InteraxMultipoleForce of an export (electrostatics="interax", wrapped in a CustomCVForce "E_hippo")."""
+    """The InteraxMultipoleForce of an export (wrapped in a CustomCVForce "E_hippo")."""
     for f in system.getForces():
         if isinstance(f, openmm.CustomCVForce):
             for k in range(f.getNumCollectiveVariables()):
@@ -37,8 +34,7 @@ def multipoles_of(system):
 
 
 def variant(base, core_damping=False, core_damping_scale=1.0, mutual_damping_scale=1.0, alchemical_particles=()):
-    """A copy of an exported InteraxMultipoleForce with the given options (the defaults are HIPPO's), as
-    convert_multipoles made from the HippoNonbondedForce before the export's HIPPO path was removed (2026-10-30).
+    """A copy of an exported InteraxMultipoleForce with the given options (the defaults are HIPPO's).
     Returns (force, typed view): add the force to a System, change it through the view."""
     force = openmm.XmlSerializer.deserialize(openmm.XmlSerializer.serialize(base))
     typed = interaxplugin.InteraxMultipoleForce.cast(force)
@@ -81,10 +77,10 @@ def report(label, test, ref, tolerance):
     return ok
 
 
-def run(name, topology, positions, platform, precision, ff, nagl, tolerance):
+def run(name, topology, positions, platform, precision, ff, tolerance):
     print(f"{name}: {topology.n_atoms} atoms, {platform} ({precision}) vs Reference")
     ok = True
-    system = create_system_from_topology(topology, ff, nagl, electrostatics="interax", nonbonded_cutoff=0.9, components=["E_static", "E_ind"])
+    system = create_system_from_topology(topology, ff, nonbonded_cutoff=0.9, components=["E_static", "E_ind"])
     base = multipoles_of(system)
     na = topology.molecule(0).n_atoms
 
@@ -92,12 +88,6 @@ def run(name, topology, positions, platform, precision, ff, nagl, tolerance):
     force, _ = variant(base, core_damping=True, core_damping_scale=0.6, mutual_damping_scale=0.8)
     s = single(system, force)
     ok &= report("core damping, eta 0.6, kappa 0.8", evaluate(s, positions, platform, precision), evaluate(s, positions, "Reference", "double"), tolerance)
-
-    # intramolecular coupling of the induced dipoles
-    intra = create_system_from_topology(topology, ff, nagl, electrostatics="interax", nonbonded_cutoff=0.9, components=["E_static", "E_ind"],
-                                        polarization="mutual-intra")
-    s = single(system, variant(multipoles_of(intra), core_damping=True)[0])
-    ok &= report("mutual-intra, core damping", evaluate(s, positions, platform, precision), evaluate(s, positions, "Reference", "double"), tolerance)
 
     # alchemical scaling
     alchemical = single(system, variant(base, core_damping=True, alchemical_particles=range(na))[0])
@@ -154,23 +144,21 @@ def main():
     parser.add_argument("--platform", default="CUDA")
     parser.add_argument("--precision", default="double")
     args = parser.parse_args()
-    ff, nagl = load_model(MODEL)
+    ff = load_model()
     tolerance = 1e-5 if args.precision == "double" else 2e-4
-    ok = run("cluster", *cluster_topology(), args.platform, args.precision, ff, nagl, tolerance)
-    ok &= run("methanol box", *box_topology(), args.platform, args.precision, ff, nagl, tolerance)
+    ok = run("cluster", *cluster_topology(), args.platform, args.precision, ff, tolerance)
+    ok &= run("methanol box", *box_topology(), args.platform, args.precision, ff, tolerance)
     print("all passed" if ok else "SOME FAILED")
 
 
 def test_multipole_features():
     import pytest
 
-    try:
-        openmm.Context(openmm.System(), openmm.VerletIntegrator(1.0), openmm.Platform.getPlatformByName("CUDA"))
-    except Exception:
+    if "CUDA" not in available_platforms():
         pytest.skip("no usable CUDA platform")
-    ff, nagl = load_model(MODEL)
-    ok = run("cluster", *cluster_topology(), "CUDA", "double", ff, nagl, 1e-5)
-    ok &= run("methanol box", *box_topology(), "CUDA", "double", ff, nagl, 1e-5)
+    ff = load_model()
+    ok = run("cluster", *cluster_topology(), "CUDA", "double", ff, 1e-5)
+    ok &= run("methanol box", *box_topology(), "CUDA", "double", ff, 1e-5)
     assert ok
 
 

@@ -11,9 +11,9 @@
 # Run it with the build tools on PATH (CMake, the compilers, the CUDA toolkit). Optional environment:
 #   PYTHON          the Python with OpenMM and pytest for the tests (default: python on PATH); the InteraxFF suite needs
 #                   InteraxFF's dependencies in it too
-#   INTERAX_REPO    an InteraxFF checkout: its test suite runs against this build, and the plugin's comparisons with the
-#                   InteraxFF export run (skipped without it)
-#   INTERAX_MODEL   the model of those comparisons (default: INTERAX_REPO/examples, see tests/python/plugin_path.py)
+#   INTERAX_REPO    an InteraxFF checkout: its test suite runs against this build
+#   INTERAX_MODEL   an InteraxFF model directory: with INTERAX_REPO, the plugin's comparisons with the InteraxFF export
+#                   run (skipped without them, see tests/python/plugin_path.py)
 #   SWIG_PYTHONPATH a pip-installed SWIG to put on PYTHONPATH for the build (one whose runtime matches OpenMM's module)
 #   NVRTC_PRELOAD   an NVRTC library to preload for the CUDA tests (when the toolkit's is newer than the driver)
 set -u

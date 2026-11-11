@@ -231,10 +231,14 @@ compare `InteraxMultipoleForce` with `HippoNonbondedForce` for HIPPO's options. 
 platform against energies and forces of the InteraxFF implementation stored in `tests/data`, and
 `serialization/tests/TestSerializeInterax<Force>.cpp` the serialization of every force.
 
-The Python tests in `tests/python` need the plugin to be installed and run with `pytest`. They find the plugin, InteraxFF
-and an InteraxFF model through the environment variables `INTERAX_PLUGIN_PREFIX` (unset: installed next to OpenMM),
-`INTERAX_REPO` and `INTERAX_MODEL` (`tests/python/plugin_path.py`); the comparisons with InteraxFF are left out when it
-is not available.
+The Python tests in `tests/python` need the plugin to be installed and run with `pytest`. They find the plugin through
+`INTERAX_PLUGIN_PREFIX` (unset: installed next to OpenMM), and InteraxFF and a model through `INTERAX_REPO` (an InteraxFF
+checkout) and `INTERAX_MODEL` (a model directory, with `nagl_model.pt`, `per_atomic_number_model.pt` and
+`force_field_state.pt`), as `tests/python/plugin_path.py` describes. The comparisons with InteraxFF run only when both
+are set:
+
+    export INTERAX_PLUGIN_PREFIX=/path/to/openmm-interax INTERAX_REPO=/path/to/InteraxFF INTERAX_MODEL=/path/to/model
+    cd tests/python && python -m pytest
 
 | Test | What it checks |
 |---|---|

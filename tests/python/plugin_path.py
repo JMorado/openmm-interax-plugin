@@ -3,9 +3,11 @@ Where the Python tests and scripts find the plugin, InteraxFF and an InteraxFF m
 
   INTERAX_PLUGIN_PREFIX  the plugin's install prefix (CMAKE_INSTALL_PREFIX: PREFIX/python, PREFIX/lib/plugins);
                          default OpenMM's own directory, the build's default install prefix
-  INTERAX_REPO           an InteraxFF checkout, put on sys.path (not needed when InteraxFF is installed)
-  INTERAX_MODEL          an InteraxFF model directory, for the comparisons on real systems; default
-                         INTERAX_REPO/examples/<the script's model> when INTERAX_REPO is set
+  INTERAX_REPO           an InteraxFF checkout, put on sys.path
+  INTERAX_MODEL          an InteraxFF model directory (nagl_model.pt, per_atomic_number_model.pt,
+                         force_field_state.pt), for the comparisons on real systems
+
+The tests that compare with InteraxFF run only when INTERAX_REPO and INTERAX_MODEL are both set (conftest.py).
 
 Importing this module puts the plugin's Python modules on sys.path and loads its platform libraries.
 """
@@ -17,6 +19,7 @@ import openmm.version
 
 PREFIX = os.environ.get("INTERAX_PLUGIN_PREFIX") or os.path.dirname(openmm.version.openmm_library_path)
 INTERAX_REPO = os.environ.get("INTERAX_REPO")
+INTERAX_MODEL = os.environ.get("INTERAX_MODEL")
 
 sys.path.insert(0, os.path.join(PREFIX, "python"))
 _plugins = os.path.join(PREFIX, "lib", "plugins")
@@ -25,13 +28,6 @@ if os.path.realpath(_plugins) != os.path.realpath(openmm.Platform.getDefaultPlug
     openmm.Platform.loadPluginsFromDirectory(_plugins)
 if INTERAX_REPO:
     sys.path.insert(0, INTERAX_REPO)
-
-
-def model(name):
-    """The model directory: INTERAX_MODEL, else INTERAX_REPO/examples/name, else None."""
-    if os.environ.get("INTERAX_MODEL"):
-        return os.environ["INTERAX_MODEL"]
-    return os.path.join(INTERAX_REPO, "examples", name) if INTERAX_REPO else None
 
 
 def available_platforms():
