@@ -3,18 +3,18 @@ Benchmark the plugin forces against the InteraxFF export they replace.
 
 For each system and platform, two measurements:
 
-  terms   time of one evaluation (energy and forces) of the replaced terms only: dispersion, exchange repulsion,
-          short-range correction and molecular three-body dispersion, export (Custom forces) vs plugin
-  md      speed of molecular dynamics with the complete system (HIPPO electrostatics and polarization, valence terms,
-          ...), export vs plugin; only on the CUDA and OpenCL platforms, where it takes seconds
+  terms   time of one evaluation (energy and forces) of the replaced terms only: dispersion, exchange repulsion and
+          short-range correction, export (Custom forces) vs plugin, and the three-body dispersion (a plugin force in both)
+  md      speed of molecular dynamics with the complete system (electrostatics and polarization, valence terms, ...),
+          export vs plugin; only on the CUDA and OpenCL platforms, where it takes seconds
 
-Systems (model E1, 0.9 nm cutoff, as studies/hfe/run_hfe.py and the liquid simulations):
+Systems (model INTERAX_MODEL, 0.9 nm cutoff):
 
   methanol   256 molecules of liquid methanol
   hfe        one ethanol in 500 waters, the hydration free energy box
 
 Usage: python benchmark.py [--platforms Reference CPU CUDA] [--systems methanol hfe] [--precision mixed]
-Run with the interax environment; the plugin is loaded from PLUGIN_PREFIX.
+Run with the interax environment; the plugin, InteraxFF and the model are found as plugin_path.py describes.
 """
 import argparse
 import tempfile
@@ -59,7 +59,7 @@ def mark_terms(system, plugin):
             is_term = any(cls.isinstance(force) for cls in _plugin_classes())
         else:
             is_term = (isinstance(force, openmm.CustomNonbondedForce) and interaxplugin_convert._classify(force) is not None) or (
-                isinstance(force, openmm.CustomCentroidBondForce) and "C9" in force.getEnergyFunction())
+                interaxplugin.InteraxThreeBodyForce.isinstance(force))
         force.setForceGroup(0 if is_term else 1)
         count += is_term
     return count
@@ -103,24 +103,20 @@ def main():
     parser.add_argument("--md-steps", type=int, default=500)
     parser.add_argument("--skip-reference-export", action="store_true", help="the export on Reference takes minutes per evaluation")
     args = parser.parse_args()
-    ff, nagl = load_model()
+    ff = load_model()
     rows = []
     for name in args.systems:
         topology, positions = build(name)
         start = time.perf_counter()
-        export = create_system_from_topology(topology, ff, nagl, electrostatics="interax", nonbonded_cutoff=0.9, components=COMPONENTS)
+        export = create_system_from_topology(topology, ff, nonbonded_cutoff=0.9, components=COMPONENTS)
         build_export = time.perf_counter() - start
-        triples = sum(f.getNumBonds() for f in export.getForces() if isinstance(f, openmm.CustomCentroidBondForce))
-        mark_terms(export, False)
-        # The plugin system is converted from a second copy of the export, built the same way (copying the export
-        # through XML would serialize all its triples).
-        plugin = create_system_from_topology(topology, ff, nagl, electrostatics="interax", nonbonded_cutoff=0.9, components=COMPONENTS)
         start = time.perf_counter()
-        plugin = interaxplugin_convert.convert_system(plugin, copy=False)
+        plugin = interaxplugin_convert.convert_system(export)
         convert = time.perf_counter() - start
+        mark_terms(export, False)
         mark_terms(plugin, True)
-        print(f"\n{name}: {export.getNumParticles()} particles, {triples} stored triples; "
-              f"export built in {build_export:.0f} s, converted in {convert:.1f} s", flush=True)
+        print(f"\n{name}: {export.getNumParticles()} particles; export built in {build_export:.0f} s, converted in {convert:.1f} s",
+              flush=True)
         for platform in args.platforms:
             for variant, system in (("export", export), ("plugin", plugin)):
                 if platform == "Reference" and variant == "export" and args.skip_reference_export:

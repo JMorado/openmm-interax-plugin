@@ -249,9 +249,9 @@ are set:
 | `test_alchemical.py` | the alchemical scaling against decoupled systems (needs InteraxFF) |
 | `test_multipole_features.py` | the options of `InteraxMultipoleForce` on every platform (needs InteraxFF) |
 
-The other scripts in `tests/python` compare the plugin with InteraxFF and with HIPPO (`compare_export.py`,
-`compare_multipole.py`, `check_multipole_lambda.py`), regenerate `tests/data` (`generate_export_values.py`), and
-benchmark the forces (`benchmark.py`, `benchmark_three_body.py`, `benchmark_multipole.py`).
+The other scripts in `tests/python` compare the plugin with InteraxFF (`compare_export.py`, `check_multipole_lambda.py`),
+regenerate `tests/data` (`generate_export_values.py`), and benchmark the forces (`benchmark.py`,
+`benchmark_three_body.py`).
 
 GitHub Actions (`.github/workflows/ci.yml`) builds the plugin against the current conda-forge OpenMM and runs the
 Reference, CPU and serialization tests and the Python tests on every push and pull request.

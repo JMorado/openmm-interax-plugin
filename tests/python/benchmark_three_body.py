@@ -1,8 +1,8 @@
 """
-Benchmark the atomic three-body dispersion against the molecular one of InteraxFF.
+Benchmark the atomic three-body dispersion at several cutoffs against the three-body dispersion of the export.
 
-For each system (benchmark.py), the plugin conversion of the export is run with its molecular ATM, and with the
-molecular ATM replaced by an atomic one (interaxplugin_convert.atomic_three_body: one site per atom, Tang-Toennies
+For each system (benchmark.py), the plugin conversion of the export is run with its ATM (in the mode of the model), and
+with the ATM replaced by an atomic one (interaxplugin_convert.atomic_three_body: one site per atom, Tang-Toennies
 damping, intramolecular triples excluded) at several cutoffs. Reported per variant: the ATM energy, the time of a
 molecular dynamics step with the three-body force alone and with the complete system, and the number of triples
 inside the cutoff.
@@ -85,10 +85,10 @@ def main():
     args = parser.parse_args()
     platform = openmm.Platform.getPlatformByName(args.platform)
     properties = {"Precision": args.precision} if args.platform in ("CUDA", "OpenCL") else {}
-    ff, nagl = load_model()
+    ff = load_model()
     for name in args.systems:
         topology, positions = build(name)
-        export = create_system_from_topology(topology, ff, nagl, electrostatics="interax", nonbonded_cutoff=0.9, components=COMPONENTS)
+        export = create_system_from_topology(topology, ff, nonbonded_cutoff=0.9, components=COMPONENTS)
         # A copy: converting the export in place deletes its dispersion force.
         dispersion = next(f for f in export.getForces()
                           if isinstance(f, openmm.CustomNonbondedForce) and interaxplugin_convert._classify(f) == "dispersion")
@@ -96,9 +96,9 @@ def main():
         plugin = interaxplugin_convert.convert_system(export, copy=False, overlap="exact")
         mark_terms(plugin, True)
         box = np.diag(np.array([v.value_in_unit(unit.nanometer) for v in plugin.getDefaultPeriodicBoxVectors()]))
-        molecular = next(f for f in plugin.getForces() if interaxplugin.InteraxThreeBodyForce.isinstance(f))
-        molecular = interaxplugin.InteraxThreeBodyForce.cast(molecular)
-        variants = [(f"molecular {molecular.getCutoffDistance():.1f} nm", molecular)]
+        exported = next(f for f in plugin.getForces() if interaxplugin.InteraxThreeBodyForce.isinstance(f))
+        exported = interaxplugin.InteraxThreeBodyForce.cast(exported)
+        variants = [(f"{ff.three_body:<9} {exported.getCutoffDistance():.1f} nm", exported)]
         for cutoff in args.cutoffs:
             variants.append((f"atomic    {cutoff:.1f} nm", interaxplugin_convert.atomic_three_body(dispersion, cutoff=cutoff)))
         print(f"\n{name}: {plugin.getNumParticles()} particles, {args.platform} ({args.precision})", flush=True)
