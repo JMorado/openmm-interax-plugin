@@ -274,7 +274,6 @@ void CommonCalcInteraxMultipoleForceKernel::initialize(const System& system, con
     // Create the kernels.
 
     map<string, string> defines = getPhysicsDefines();
-    defines["HIPPO"] = "1";
     if (useChirality)
         defines["USE_CHIRALITY"] = "1";
     defines["NUM_ATOMS"] = cc.intToString(numParticles);
@@ -395,7 +394,6 @@ void CommonCalcInteraxMultipoleForceKernel::initialize(const System& system, con
         // Create the PME kernels.
 
         map<string, string> pmeDefines;
-        pmeDefines["HIPPO"] = "1";
         pmeDefines["EWALD_ALPHA"] = cc.doubleToString(pmeAlpha);
         pmeDefines["PME_ORDER"] = cc.intToString(PmeOrder);
         pmeDefines["NUM_ATOMS"] = cc.intToString(numParticles);
@@ -477,7 +475,6 @@ void CommonCalcInteraxMultipoleForceKernel::initialize(const System& system, con
         for (int i = 0; i < 6; i++)
             pmeInducedPotentialKernel->addArg();
         pmeFixedForceKernel = program->createKernel("computeFixedMultipoleForceAndEnergy");
-        pmeFixedForceKernel->addArg(cc.getPosq());
         pmeFixedForceKernel->addArg(cc.getLongForceBuffer());
         pmeFixedForceKernel->addArg(torque);
         pmeFixedForceKernel->addArg(cc.getEnergyBuffer());
@@ -496,10 +493,8 @@ void CommonCalcInteraxMultipoleForceKernel::initialize(const System& system, con
         for (int i = 0; i < 3; i++)
             pmeFixedForceKernel->addArg();
         pmeInducedForceKernel = program->createKernel("computeInducedDipoleForceAndEnergy");
-        pmeInducedForceKernel->addArg(cc.getPosq());
         pmeInducedForceKernel->addArg(cc.getLongForceBuffer());
         pmeInducedForceKernel->addArg(torque);
-        pmeInducedForceKernel->addArg(cc.getEnergyBuffer());
         pmeInducedForceKernel->addArg(labDipoles);
         pmeInducedForceKernel->addArg(coreCharge);
         pmeInducedForceKernel->addArg(valenceCharge);
@@ -864,8 +859,8 @@ double CommonCalcInteraxMultipoleForceKernel::execute(ContextImpl& context, bool
                 pmeFixedPotentialKernel->setArg(8+i, recipBoxVectors[i]);
                 pmeInducedPotentialKernel->setArg(5+i, boxVectors[i]);
                 pmeInducedPotentialKernel->setArg(8+i, recipBoxVectors[i]);
-                pmeFixedForceKernel->setArg(16+i, recipBoxVectors[i]);
-                pmeInducedForceKernel->setArg(20+i, recipBoxVectors[i]);
+                pmeFixedForceKernel->setArg(15+i, recipBoxVectors[i]);
+                pmeInducedForceKernel->setArg(18+i, recipBoxVectors[i]);
                 pmeRecordInducedFieldDipolesKernel->setArg(3+i, recipBoxVectors[i]);
             }
         }
@@ -888,8 +883,8 @@ double CommonCalcInteraxMultipoleForceKernel::execute(ContextImpl& context, bool
                 pmeFixedPotentialKernel->setArg(8+i, recipBoxVectorsFloat[i]);
                 pmeInducedPotentialKernel->setArg(5+i, boxVectors[i]);
                 pmeInducedPotentialKernel->setArg(8+i, recipBoxVectorsFloat[i]);
-                pmeFixedForceKernel->setArg(16+i, recipBoxVectorsFloat[i]);
-                pmeInducedForceKernel->setArg(20+i, recipBoxVectorsFloat[i]);
+                pmeFixedForceKernel->setArg(15+i, recipBoxVectorsFloat[i]);
+                pmeInducedForceKernel->setArg(18+i, recipBoxVectorsFloat[i]);
                 pmeRecordInducedFieldDipolesKernel->setArg(3+i, recipBoxVectorsFloat[i]);
             }
         }
@@ -1172,7 +1167,7 @@ void CommonCalcInteraxMultipoleForceKernel::getPMEParameters(double& alpha, int&
 }
 
 void CommonCalcInteraxMultipoleForceKernel::addCoincidentPairConstants(map<string, string>& defines) const {
-    // InteraxFF: a fully excluded pair at the same position (a bond multipole site on its host atom) is an exception
+    // A fully excluded pair at the same position (a bond multipole site on its host atom) is an exception
     // whose real-space Ewald terms remove the reciprocal-space (erf) interaction, B_k(r) - (2k-1)!!/r^(2k+1) =
     // -erf_k(r). Each part diverges at r = 0 but the difference does not: erf_k(0) = 2^(k+1) alpha^(2k+1) /
     // ((2k+1) sqrt(pi)). The exception kernels then set the bare terms to zero and B_k to -COINCIDENT_Bk.
@@ -1331,8 +1326,8 @@ ComputeKernel& CommonCalcInteraxMultipoleForceKernel::getElectrostaticsKernel(bo
         kernel->addArg(nb.getBlockCenters());
         kernel->addArg(nb.getBlockBoundingBoxes());
         kernel->addArg(nb.getInteractingAtoms());
-        // The interaction does not support the separate pair list (as with HippoNonbondedForce, the nonbonded utilities
-        // then never use it), so the kernel does not read the single pairs.
+        // The kernel has the signature of OpenMM's nonbonded kernel, which the nonbonded utilities call with the single
+        // pairs when the force replaces its source. It never reads them: the interaction does not support them.
         kernel->addArg(0u);
         kernel->addArg(singlePairsPlaceholder);
     }

@@ -67,7 +67,7 @@ ReferenceInteraxMultipole::ReferenceInteraxMultipole(const InteraxMultipoleForce
         particleData[i].localQuadrupole[QYZ]      = quadrupoles[5];
         particleData[i].localQuadrupole[QZZ]      = quadrupoles[8];
 
-        // InteraxFF: keep the parameters before alchemical scaling (loadParticleData() scales them), and start the
+        // Keep the parameters before alchemical scaling (loadParticleData() scales them), and start the
         // lab frame moments of particles without an axis from zero.
 
         p.baseCoreCharge = p.coreCharge;
@@ -91,11 +91,11 @@ ReferenceInteraxMultipole::ReferenceInteraxMultipole(const InteraxMultipoleForce
     _nonbondedMethod = force.getNonbondedMethod();
     _cutoffDistance = force.getCutoffDistance();
     _cutoffDistanceSquared = _cutoffDistance*_cutoffDistance;
-    // InteraxFF: core damping and the mutual damping scale
+    // Core damping and the mutual damping scale
     _coreDamping = force.getCoreDamping();
     _coreDampingScale = force.getCoreDampingScale();
     _mutualDampingScale = force.getMutualDampingScale();
-    // InteraxFF: the chirality check needs the positions, so it is applied in loadParticleData() at every evaluation
+    // The chirality check needs the positions, so it is applied in loadParticleData() at every evaluation
     // (as on the GPU platforms), not once here
     _chiralityMode = force.getChiralityMode();
 }
@@ -133,7 +133,7 @@ void ReferenceInteraxMultipole::loadParticleData(const vector<Vec3>& particlePos
         MultipoleParticleData& p = particleData[i];
         p.position = particlePositions[i];
 
-        // InteraxFF: scale the charges, multipoles and polarizabilities of alchemical particles by lambda.
+        // Scale the charges, multipoles and polarizabilities of alchemical particles by lambda.
 
         double scale = (p.isAlchemical ? _lambda : 1.0);
         p.coreCharge = scale*p.baseCoreCharge;
@@ -161,7 +161,7 @@ void ReferenceInteraxMultipole::checkChiralCenterAtParticle(MultipoleParticleDat
     Vec3 deltaC    = deltaBD.cross(deltaCD);
     double volume = deltaC.dot(deltaAD);
 
-    // InteraxFF: flip the local moments, which applyRotationMatrix() then rotates (the lab frame moments that
+    // Flip the local moments, which applyRotationMatrix() then rotates (the lab frame moments that
     // HIPPO's Reference code flips here are overwritten by the rotation)
     if (volume < 0.0) {
         particleI.localDipole[1] *= -1.0; // pole(3,i)
@@ -309,7 +309,7 @@ void ReferenceInteraxMultipole::applyRotationMatrixToParticle( MultipoleParticle
 }
 
 void ReferenceInteraxMultipole::formQIRotationMatrix(const Vec3 &deltaR, double r, double (&rotationMatrix)[3][3]) const {
-    // InteraxFF: at r = 0 (a fully excluded pair at the same position, see coincidentEwaldLimit()) only rotation
+    // At r = 0 (a fully excluded pair at the same position, see coincidentEwaldLimit()) only rotation
     // invariant terms remain, so any frame will do.
     if (r < COINCIDENT_DISTANCE) {
         for (int i = 0; i < 3; i++)
@@ -388,7 +388,7 @@ void ReferenceInteraxMultipole::computeDirectFieldDampingFactors(const Multipole
 }
 
 void ReferenceInteraxMultipole::computeMutualFieldDampingFactors(const MultipoleParticleData& particleI, const MultipoleParticleData& particleJ, double r, double& fdamp3, double& fdamp5) const {
-    // InteraxFF: the exponents are scaled by the mutual damping scale kappa (HIPPO: kappa = 1), and the series of
+    // The exponents are scaled by the mutual damping scale kappa (HIPPO: kappa = 1), and the series of
     // computePairDampingFactors() is used when they are equal or nearly equal.
     double fdamp[6];
     computePairDampingFactors(_mutualDampingScale*particleI.alpha, _mutualDampingScale*particleJ.alpha, r, fdamp);
@@ -439,7 +439,7 @@ void ReferenceInteraxMultipole::computeOverlapDampingFactors(const MultipolePart
         fdampJ5 = 1 - (1 + arJ + arJ2*(1.0/2) + arJ3*(1.0/6))*expARJ;
         fdampJ7 = 1 - (1 + arJ + arJ2*(1.0/2) + arJ3*(1.0/6) + arJ4*(1.0/30))*expARJ;
         fdampJ9 = 1 - (1 + arJ + arJ2*(1.0/2) + arJ3*(1.0/6) + 4*arJ4*(1.0/105) + arJ5*(1.0/210))*expARJ;
-        // InteraxFF: computePairDampingFactors() switches to a series when the exponents are nearly equal.
+        // ComputePairDampingFactors() switches to a series when the exponents are nearly equal.
         double fdamp[6];
         computePairDampingFactors(particleI.alpha, particleJ.alpha, r, fdamp);
         fdampIJ1 = fdamp[0];
@@ -451,7 +451,7 @@ void ReferenceInteraxMultipole::computeOverlapDampingFactors(const MultipolePart
     }
 }
 
-// InteraxFF: the coefficients of the series of the overlap damping factors in t = (aJ-aI)/(aI+aJ), used when the two
+// The coefficients of the series of the overlap damping factors in t = (aJ-aI)/(aI+aJ), used when the two
 // exponents are nearly equal: f_n = 1 - exp(-x) sum_m t^(2m) sum_j PAIR_DAMPING_SERIES[n][m][j] x^j, where
 // n = 1, 3, 5, 7, 9, 11 (index 0..5), m = 0..3 and x = r (aI+aJ)/2.
 static const double PAIR_DAMPING_SERIES[6][4][15] = {
@@ -593,7 +593,7 @@ void ReferenceInteraxMultipole::calculateFixedMultipoleField() {
             if (i != j && !isFullyExcluded(i, j))
                 calculateFixedMultipoleFieldPairIxn(particleData[i], particleData[j]);
 
-    // InteraxFF: core damping of the fields.
+    // Core damping of the fields.
 
     if (_coreDamping)
         addCoreDampingFields();
@@ -681,7 +681,7 @@ void ReferenceInteraxMultipole::calculateInducedDipoles() {
 
     // initialize inducedDipoles
 
-    // InteraxFF: record the fields before multiplying by the polarizabilities, for the polarization energy.
+    // Record the fields before multiplying by the polarizabilities, for the polarization energy.
     _polarizingField = _fixedMultipoleField;
     for (int i = 0; i < _numParticles; i++)
         _fixedMultipoleField[i] *= particleData[i].polarizability;
@@ -862,7 +862,7 @@ void ReferenceInteraxMultipole::calculateInducedDipolePairIxn(const MultipolePar
     double rr7k = rr7*fdampK7*dmScale;
     double rr9k = rr9*fdampK9*dmScale;
     {
-        // InteraxFF: the couplings of the induced dipoles use the exponents scaled by the mutual damping scale.
+        // The couplings of the induced dipoles use the exponents scaled by the mutual damping scale.
         double fdampMutual[6];
         computePairDampingFactors(_mutualDampingScale*particleI.alpha, _mutualDampingScale*particleK.alpha, r, fdampMutual);
         fdampIK5 = fdampMutual[2];
@@ -982,7 +982,7 @@ void ReferenceInteraxMultipole::computeCoreDampingFactor(const MultipoleParticle
 Vec3 ReferenceInteraxMultipole::calculateDirectPairField(const MultipoleParticleData& particleI, const MultipoleParticleData& particleJ,
                                                         const Vec3& deltaR) const {
     double r = sqrt(deltaR.dot(deltaR));
-    double rInv = (r < COINCIDENT_DISTANCE ? 0.0 : 1/r);  // InteraxFF: see coincidentEwaldLimit()
+    double rInv = (r < COINCIDENT_DISTANCE ? 0.0 : 1/r);  // See coincidentEwaldLimit()
     double rInv3 = rInv*rInv*rInv;
     double rInv5 = rInv3*rInv*rInv;
     double rInv7 = rInv5*rInv*rInv;
@@ -1048,7 +1048,7 @@ void ReferenceInteraxMultipole::calculateCoreDampingPairIxn(const MultipoleParti
     double uir = ui[2]*r;
     double ukr = uk[2]*r;
 
-    double rInv = (r < COINCIDENT_DISTANCE ? 0.0 : 1/r);  // InteraxFF: see coincidentEwaldLimit()
+    double rInv = (r < COINCIDENT_DISTANCE ? 0.0 : 1/r);  // See coincidentEwaldLimit()
     double rInv2 = rInv*rInv;
     double rr3 = rInv*rInv2;
     double rr5 = 3*rr3*rInv2;
@@ -1158,7 +1158,7 @@ void ReferenceInteraxMultipole::mapTorqueToForceForParticle(const MultipoleParti
     norms[U] = normalizeVec3(vectorU);
     Vec3 vectorV;
     if (axisType == InteraxMultipoleForce::ZOnly) {
-        // InteraxFF: there is no x axis particle, so use the lab frame axis chosen by applyRotationMatrixToParticle().
+        // There is no x axis particle, so use the lab frame axis chosen by applyRotationMatrixToParticle().
         Vec3 vectorZ = -vectorU;
         vectorV = (fabs(vectorZ[0]) < 0.866 ? Vec3(1.0, 0.0, 0.0) : Vec3(0.0, 1.0, 0.0));
         norms[V] = 1.0;
@@ -1280,7 +1280,7 @@ void ReferenceInteraxMultipole::mapTorqueToForceForParticle(const MultipoleParti
 
     }
     else if (axisType == InteraxMultipoleForce::ThreeFold && particleW) {
-        // InteraxFF: the exact chain rule for the frame of applyRotationMatrixToParticle() (Tinker's 3-fold torque
+        // The exact chain rule for the frame of applyRotationMatrixToParticle() (Tinker's 3-fold torque
         // mapping is not the gradient of the energy). With a, b, c the unit vectors from this particle to the z, x and y axis
         // particles, s = a+b+c, z = s/|s|, x' = b-(b.z)z, x = x'/|x'| and y = z cross x, an infinitesimal change of
         // the frame is a rotation dtheta = z cross dz + (y.dx) z, dE = -torque.dtheta, and
@@ -1323,7 +1323,7 @@ void ReferenceInteraxMultipole::mapTorqueToForce(vector<Vec3>& torques,
     for (int ii = 0; ii < _numParticles; ii++) {
         MultipoleParticleData& p = particleData[ii];
         if (p.axisType != InteraxMultipoleForce::NoAxisType) {
-             // InteraxFF: Z-only particles have no x axis particle (mapTorqueToForceForParticle() does not use it).
+             // Z-only particles have no x axis particle (mapTorqueToForceForParticle() does not use it).
              mapTorqueToForceForParticle(p,
                                          particleData[p.multipoleAtomZ], particleData[p.multipoleAtomX >= 0 ? p.multipoleAtomX : p.multipoleAtomZ],
                                          p.multipoleAtomY > -1 ? &particleData[p.multipoleAtomY] : NULL,
@@ -1359,7 +1359,7 @@ double ReferenceInteraxMultipole::calculateInteractions(vector<Vec3>& torques, v
             Vec3 force, labForce, torqueI, torqueJ;
             energy += calculateElectrostaticPairIxn(particleData[i], particleData[j], r, force, torqueI, torqueJ);
             calculateInducedDipolePairIxn(particleData[i], particleData[j], deltaR, r, force, torqueI, torqueJ, labForce);
-            // InteraxFF: core damping of the fields that polarize the two particles.
+            // Core damping of the fields that polarize the two particles.
             if (_coreDamping)
                 calculateCoreDampingPairIxn(particleData[i], particleData[j], r, force, torqueI, torqueJ);
             force = rotateVectorFromQI(force, mat);
@@ -1372,7 +1372,7 @@ double ReferenceInteraxMultipole::calculateInteractions(vector<Vec3>& torques, v
         }
     }
     for (int i = 0; i < _numParticles; i++)
-        // InteraxFF: use the recorded fields, rather than dividing by the polarizability (which may be zero).
+        // Use the recorded fields, rather than dividing by the polarizability (which may be zero).
         energy -= 0.5*_electric*_polarizingField[i].dot(_inducedDipole[i]);
     
     return energy;
@@ -1452,19 +1452,6 @@ void ReferenceInteraxMultipolePme::getPmeGridDimensions(vector<int>& pmeGridDime
     pmeGridDimensions[0] = _pmeGridDimensions[0];
     pmeGridDimensions[1] = _pmeGridDimensions[1];
     pmeGridDimensions[2] = _pmeGridDimensions[2];
-};
-
-void ReferenceInteraxMultipolePme::setPmeGridDimensions(vector<int>& pmeGridDimensions) {
-    if ((pmeGridDimensions[0] == _pmeGridDimensions[0]) &&
-        (pmeGridDimensions[1] == _pmeGridDimensions[1]) &&
-        (pmeGridDimensions[2] == _pmeGridDimensions[2]))
-        return;
-
-    _pmeGridDimensions[0] = pmeGridDimensions[0];
-    _pmeGridDimensions[1] = pmeGridDimensions[1];
-    _pmeGridDimensions[2] = pmeGridDimensions[2];
-
-    initializeBSplineModuli();
 };
 
 void ReferenceInteraxMultipolePme::setPeriodicBoxSize(OpenMM::Vec3* vectors) {
@@ -1611,7 +1598,7 @@ void ReferenceInteraxMultipolePme::calculateFixedMultipoleFieldPairIxn(const Mul
     if (r2 > _cutoffDistanceSquared)
         return;
     double r = sqrt(r2);
-    double rInv = (r < COINCIDENT_DISTANCE ? 0.0 : 1/r);  // InteraxFF: see coincidentEwaldLimit()
+    double rInv = (r < COINCIDENT_DISTANCE ? 0.0 : 1/r);  // See coincidentEwaldLimit()
     double rInv2 = rInv*rInv;
     double rInv3 = rInv*rInv2;
     double rInv5 = rInv3*rInv2;
@@ -1630,7 +1617,7 @@ void ReferenceInteraxMultipolePme::calculateFixedMultipoleFieldPairIxn(const Mul
     double bn2 = (3*bn1+alsq2n*exp2a)*rInv2;
     alsq2n *= alsq2;
     double bn3 = (5*bn2+alsq2n*exp2a)*rInv2;
-    if (r < COINCIDENT_DISTANCE) {  // InteraxFF: a fully excluded pair at the same position
+    if (r < COINCIDENT_DISTANCE) {  // A fully excluded pair at the same position
         bn0 = -coincidentEwaldLimit(0);
         bn1 = -coincidentEwaldLimit(1);
         bn2 = -coincidentEwaldLimit(2);
@@ -2446,22 +2433,6 @@ void ReferenceInteraxMultipolePme::calculateInducedDipoleFields(const vector<Mul
         _inducedDipoleField[j] += _inducedDipole[j]*term;
 }
 
-void ReferenceInteraxMultipolePme::calculateDirectInducedDipolePairIxn(int iIndex, int jIndex,
-                                                                                double preFactor1, double preFactor2,
-                                                                                const Vec3& delta,
-                                                                                const vector<Vec3>& inducedDipole,
-                                                                                vector<Vec3>& field) const {
-    // field at i due induced dipole at j
-
-    double dur  = inducedDipole[jIndex].dot(delta);
-    field[iIndex]  += delta*(dur*preFactor2) + inducedDipole[jIndex]*preFactor1;
-
-    // field at j due induced dipole at i
-
-               dur  = inducedDipole[iIndex].dot(delta);
-    field[jIndex]  += delta*(dur*preFactor2) + inducedDipole[iIndex]*preFactor1;
-}
-
 void ReferenceInteraxMultipolePme::calculateDirectInducedDipolePairIxns(const MultipoleParticleData& particleI,
                                                                                  const MultipoleParticleData& particleJ) {
     int i = particleI.index;
@@ -2482,7 +2453,7 @@ void ReferenceInteraxMultipolePme::calculateDirectInducedDipolePairIxns(const Mu
         fdamp3 *= exception->second.dipoleDipoleScale;
         fdamp5 *= exception->second.dipoleDipoleScale;
     }
-    double rInv = (r < COINCIDENT_DISTANCE ? 0.0 : 1/r);  // InteraxFF: see coincidentEwaldLimit()
+    double rInv = (r < COINCIDENT_DISTANCE ? 0.0 : 1/r);  // See coincidentEwaldLimit()
     double rInv2 = rInv*rInv;
     double rInv3 = rInv*rInv2;
 
@@ -2497,7 +2468,7 @@ void ReferenceInteraxMultipolePme::calculateDirectInducedDipolePairIxns(const Mu
     double bn1 = (bn0+alsq2n*exp2a)*rInv2;
     alsq2n *= alsq2;
     double bn2 = (3*bn1+alsq2n*exp2a)*rInv2;
-    if (r < COINCIDENT_DISTANCE) {  // InteraxFF: a fully excluded pair at the same position
+    if (r < COINCIDENT_DISTANCE) {  // A fully excluded pair at the same position
         bn0 = -coincidentEwaldLimit(0);
         bn1 = -coincidentEwaldLimit(1);
         bn2 = -coincidentEwaldLimit(2);
@@ -2509,7 +2480,7 @@ void ReferenceInteraxMultipolePme::calculateDirectInducedDipolePairIxns(const Mu
 }
 
 double ReferenceInteraxMultipolePme::coincidentEwaldLimit(int k) const {
-    // InteraxFF: for a fully excluded pair the real-space Ewald term removes the reciprocal-space (erf) interaction,
+    // For a fully excluded pair the real-space Ewald term removes the reciprocal-space (erf) interaction,
     // B_k(r) - 1/r^(2k+1) (times (2k-1)!!) = -erf_k(r), which is finite at r = 0: erf_k(0) = 2^(k+1) alpha^(2k+1) /
     // ((2k+1) sqrt(pi)). The bare terms (1/r) are set to zero and the B_k to -erf_k(0), so that pairs at the same
     // position (InteraxFF's bond multipole sites on their host atom) give the exact limit. The pair forces of such a pair
@@ -2589,7 +2560,7 @@ double ReferenceInteraxMultipolePme::calculateElectrostaticPairIxn(const Multipo
 
     // Get reciprocal distance terms for this interaction.
 
-    double rInv = (r < COINCIDENT_DISTANCE ? 0.0 : 1/r);  // InteraxFF: see coincidentEwaldLimit()
+    double rInv = (r < COINCIDENT_DISTANCE ? 0.0 : 1/r);  // See coincidentEwaldLimit()
     double rInv2 = rInv*rInv;
     double rr1 = rInv;
     double rr3 = rr1*rInv2;
@@ -2615,7 +2586,7 @@ double ReferenceInteraxMultipolePme::calculateElectrostaticPairIxn(const Multipo
     double bn4 = (7*bn3+alsq2n*exp2a)*rInv2;
     alsq2n *= alsq2;
     double bn5 = (9*bn4+alsq2n*exp2a)*rInv2;
-    if (r < COINCIDENT_DISTANCE) {  // InteraxFF: a fully excluded pair at the same position
+    if (r < COINCIDENT_DISTANCE) {  // A fully excluded pair at the same position
         bn0 = -coincidentEwaldLimit(0);
         bn1 = -coincidentEwaldLimit(1);
         bn2 = -coincidentEwaldLimit(2);
@@ -2716,7 +2687,7 @@ void ReferenceInteraxMultipolePme::calculateInducedDipolePairIxn(const Multipole
 
     // Get reciprocal distance terms for this interaction.
 
-    double rInv = (r < COINCIDENT_DISTANCE ? 0.0 : 1/r);  // InteraxFF: see coincidentEwaldLimit()
+    double rInv = (r < COINCIDENT_DISTANCE ? 0.0 : 1/r);  // See coincidentEwaldLimit()
     double rInv2 = rInv*rInv;
     double rr1 = rInv;
     double rr3 = rr1*rInv2;
@@ -2739,7 +2710,7 @@ void ReferenceInteraxMultipolePme::calculateInducedDipolePairIxn(const Multipole
     double bn3 = (5*bn2+alsq2n*exp2a)*rInv2;
     alsq2n *= alsq2;
     double bn4 = (7*bn3+alsq2n*exp2a)*rInv2;
-    if (r < COINCIDENT_DISTANCE) {  // InteraxFF: a fully excluded pair at the same position
+    if (r < COINCIDENT_DISTANCE) {  // A fully excluded pair at the same position
         bn0 = -coincidentEwaldLimit(0);
         bn1 = -coincidentEwaldLimit(1);
         bn2 = -coincidentEwaldLimit(2);
@@ -2771,7 +2742,7 @@ void ReferenceInteraxMultipolePme::calculateInducedDipolePairIxn(const Multipole
     double rr7k = _electric*(bn3 - (1-dipoleMultipoleScale*fdampK7)*rr7);
     double rr9k = _electric*(bn4 - (1-dipoleMultipoleScale*fdampK9)*rr9);
     {
-        // InteraxFF: the couplings of the induced dipoles use the exponents scaled by the mutual damping scale.
+        // The couplings of the induced dipoles use the exponents scaled by the mutual damping scale.
         double fdampMutual[6];
         computePairDampingFactors(_mutualDampingScale*particleI.alpha, _mutualDampingScale*particleK.alpha, r, fdampMutual);
         fdampIK5 = fdampMutual[2];

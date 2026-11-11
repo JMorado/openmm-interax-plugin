@@ -1,9 +1,5 @@
 // OpenMM's common kernels define ATOMIC_ADD but not ATOMIC_MAX.
-#ifdef __CUDACC__
-    #define ATOMIC_MAX(dest, value) atomicMax(dest, value)
-#else
-    #define ATOMIC_MAX(dest, value) atomic_max(dest, value)
-#endif
+#define ATOMIC_MAX(dest, value) atomicMax(dest, value)
 
 /**
  * Compute the position of each site: the unweighted centroid of its particles. This also clears the largest number
@@ -57,7 +53,7 @@ KERNEL void findNeighbors(int numSites, int maxNeighbors, GLOBAL const real4* RE
         GLOBAL real4* RESTRICT sitesAtBuild, GLOBAL const int* RESTRICT rebuildFlag, real4 periodicBoxSize,
         real4 invPeriodicBoxSize, real4 periodicBoxVecX, real4 periodicBoxVecY, real4 periodicBoxVecZ) {
     const bool rebuild = (*rebuildFlag != 0);
-#if defined(__CUDACC__) && defined(__CUDA_ARCH__) && __CUDA_ARCH__ >= 700
+#if defined(__CUDA_ARCH__) && __CUDA_ARCH__ >= 700
     // A warp per site: the candidates b > a are scanned 32 at a time. The list is the same, in the same order, as the
     // serial version below: within a bucket, the lanes with the same bucket are ranked by lane (__match_any_sync), and the
     // batches come in increasing b.
@@ -205,18 +201,12 @@ KERNEL void compactNeighbors(int numSites, int maxNeighbors, GLOBAL const real4*
         GLOBAL real4* RESTRICT tileBoxes, real4 periodicBoxSize, real4 invPeriodicBoxSize, real4 periodicBoxVecX, real4 periodicBoxVecY,
         real4 periodicBoxVecZ) {
     const int maxTiles = (maxNeighbors+TILE_SIZE-1)/TILE_SIZE;
-#ifdef __CUDACC__
     const int lane = LOCAL_ID%32;
     const int firstWarp = GLOBAL_ID/32, numWarps = GLOBAL_SIZE/32;
-#else
-    const int firstWarp = GLOBAL_ID, numWarps = GLOBAL_SIZE;
-#endif
     for (int a = firstWarp; a < numSites; a += numWarps) {
         const int count = numNeighbors[a];
         if (count > maxNeighbors) {
-#ifdef __CUDACC__
             if (lane == 0)
-#endif
                 numActive[a] = -1;
             continue;
         }
@@ -224,7 +214,6 @@ KERNEL void compactNeighbors(int numSites, int maxNeighbors, GLOBAL const real4*
         GLOBAL const int* list = &neighbors[a*maxNeighbors];
         GLOBAL int* active = &activeNeighbors[a*maxNeighbors];
         int n = 0;
-#ifdef __CUDACC__
         for (int base = 0; base < count; base += 32) {
             const int i = base+lane;
             int b = 0;
@@ -270,33 +259,6 @@ KERNEL void compactNeighbors(int numSites, int maxNeighbors, GLOBAL const real4*
         }
         if (lane == 0)
             numActive[a] = n;
-#else
-        real3 lo = make_real3((real) 1e30), hi = make_real3((real) -1e30);
-        for (int i = 0; i < count; i++) {
-            const int b = list[i];
-            const real4 siteB = sites[b];
-            real3 delta = make_real3(siteB.x-siteA.x, siteB.y-siteA.y, siteB.z-siteA.z);
-#ifdef USE_PERIODIC
-            APPLY_PERIODIC_TO_DELTA(delta)
-#endif
-            if (dot(delta, delta) >= CUTOFF_SQUARED)
-                continue;
-            lo = make_real3(min(lo.x, delta.x), min(lo.y, delta.y), min(lo.z, delta.z));
-            hi = make_real3(max(hi.x, delta.x), max(hi.y, delta.y), max(hi.z, delta.z));
-            active[n++] = b;
-            if (n%TILE_SIZE == 0) {
-                tileBoxes[2*(a*maxTiles+n/TILE_SIZE-1)] = make_real4(lo.x, lo.y, lo.z, 0);
-                tileBoxes[2*(a*maxTiles+n/TILE_SIZE-1)+1] = make_real4(hi.x, hi.y, hi.z, 0);
-                lo = make_real3((real) 1e30);
-                hi = make_real3((real) -1e30);
-            }
-        }
-        if (n%TILE_SIZE != 0) {
-            tileBoxes[2*(a*maxTiles+n/TILE_SIZE)] = make_real4(lo.x, lo.y, lo.z, 0);
-            tileBoxes[2*(a*maxTiles+n/TILE_SIZE)+1] = make_real4(hi.x, hi.y, hi.z, 0);
-        }
-        numActive[a] = n;
-#endif
     }
 }
 
@@ -445,11 +407,9 @@ KERNEL void computeTriples(int numSites, int maxNeighbors, GLOBAL const real4* R
     LOCAL real4 tileDeltaJ[TILE_SIZE], tileDeltaK[TILE_SIZE], tileParamsJ[TILE_SIZE], tileParamsK[TILE_SIZE];
     LOCAL int tileMoleculeJ[TILE_SIZE], tileMoleculeK[TILE_SIZE], tileSiteJ[TILE_SIZE], tileSiteK[TILE_SIZE];
     LOCAL real2 tileDampJ[TILE_SIZE], tileDampK[TILE_SIZE];
-#ifdef __CUDACC__
     // The forces on the B and C sites of the tiles are accumulated here (shared-memory atomics) and added to the site
     // forces once per tile pair, instead of six global atomic additions per triple.
     LOCAL real tileForceJ[3*TILE_SIZE], tileForceK[3*TILE_SIZE];
-#endif
     LOCAL real3 reduction[TRIPLE_BLOCK_SIZE];
     LOCAL mixed energyReduction[TRIPLE_BLOCK_SIZE];
     // findNeighbors() has run: the next step starts without a rebuild request.
@@ -506,19 +466,16 @@ KERNEL void computeTriples(int numSites, int maxNeighbors, GLOBAL const real4* R
                                 &tileDeltaK[i], &tileParamsK[i], &tileMoleculeK[i], &tileSiteK[i], &tileDampK[i], dampingScale, invDampingRadius,
                                 periodicBoxSize, invPeriodicBoxSize, periodicBoxVecX, periodicBoxVecY, periodicBoxVecZ);
                 }
-#ifdef __CUDACC__
                 for (int i = LOCAL_ID; i < 3*TILE_SIZE; i += LOCAL_SIZE) {
                     tileForceJ[i] = 0;
                     tileForceK[i] = 0;
                 }
-#endif
                 SYNC_THREADS;
 
                 // Compute the triples of the pairs (B, C) with B in the first tile and C after it in the second.
 
                 const real wA = paramsA.y;
                 const real cA = scaleFactor*(real) 1.5*paramsA.x*wA;
-#ifdef __CUDACC__
                 // Each warp takes rows j (the B sites) and its 32 threads the columns k = lane + 32 kk (the C sites). The
                 // values of B are read once per row; the force on B accumulates in registers over the row and is summed
                 // over the warp once per row. A thread always has the same columns, so the force on each of its C sites
@@ -642,63 +599,6 @@ KERNEL void computeTriples(int numSites, int maxNeighbors, GLOBAL const real4* R
                         ATOMIC_ADD(&siteForce[site+2*numSites], (mm_ulong) realToFixedPoint(tileForceK[3*i+2]));
                     }
                 }
-#else
-                // Each thread takes pairs (j, k) in turn and adds the forces on B and C to the site forces atomically.
-                for (int pair = LOCAL_ID; pair < sizeJ*sizeK; pair += LOCAL_SIZE) {
-                    const int j = pair/sizeK, k = pair%sizeK;
-                    if (startK+k <= startJ+j || tileMoleculeJ[j] == NOT_A_NEIGHBOR || tileMoleculeK[k] == NOT_A_NEIGHBOR ||
-                            tileMoleculeJ[j] == tileMoleculeK[k])
-                        continue;
-                    const real4 deltaJ = tileDeltaJ[j], deltaK = tileDeltaK[k];
-                    const real3 a = trimTo3(deltaJ);
-                    const real3 b = trimTo3(deltaK);
-                    real3 c = b-a;
-    #ifdef USE_PERIODIC
-                    APPLY_PERIODIC_TO_DELTA(c)
-    #endif
-                    const real w = dot(c, c);
-                    const real4 paramsB = tileParamsJ[j], paramsC = tileParamsK[k];
-                    const real wBC = paramsB.y+paramsC.y;
-                    real c9 = cA*paramsB.x*paramsC.x*(wA+wBC)/wBC;
-                    if (alchemicalA || paramsB.w != 0 || paramsC.w != 0)
-                        c9 *= lambda;
-                    if (w >= CUTOFF_SQUARED || c9 == 0)
-                        continue;
-                    const real u = deltaJ.w, v = deltaK.w;
-                    const real p = dot(a, b), q = dot(a, c), s = dot(b, c);
-                    const real invP = 1/(u*v*w);
-                    const real invP32 = invP*SQRT(invP);
-                    const real invP52 = invP32*invP;
-                    const real pqs = p*q*s;
-                    real tripleEnergy = c9*(invP32 - 3*pqs*invP52);
-                    const real radial = c9*(-3*invP32 + 15*pqs*invP52);
-                    const real cross = -3*c9*invP52;
-                    real3 dEda = a*(radial/u) + (b*(q*s) + c*(p*s))*cross;
-                    real3 dEdb = b*(radial/v) + (a*(q*s) + c*(p*q))*cross;
-                    real3 dEdc = c*(radial/w) + (a*(p*s) + b*(p*q))*cross;
-    #if defined(USE_DAMPING) || defined(USE_CENTROID_DAMPING)
-                    const real2 dampA = tileDampJ[j], dampB = tileDampK[k];
-                    real dC;
-                    const real fC = pairDamping(SQRT(w), paramsB.z+paramsC.z, dampingScale, invDampingRadius, &dC);
-                    const real fA = dampA.x, fB = dampB.x;
-                    const real damping = fA*fB*fC;
-                    dEda = dEda*damping + a*(tripleEnergy*dampA.y*fB*fC);
-                    dEdb = dEdb*damping + b*(tripleEnergy*fA*dampB.y*fC);
-                    dEdc = dEdc*damping + c*(tripleEnergy*fA*fB*dC);
-                    tripleEnergy *= damping;
-    #endif
-                    energy += tripleEnergy;
-                    forceA += dEda + dEdb;
-                    const real3 forceB = dEdc-dEda, forceC = -(dEdb+dEdc);
-                    const int siteB = tileSiteJ[j], siteC = tileSiteK[k];
-                    ATOMIC_ADD(&siteForce[siteB], (mm_ulong) realToFixedPoint(forceB.x));
-                    ATOMIC_ADD(&siteForce[siteB+numSites], (mm_ulong) realToFixedPoint(forceB.y));
-                    ATOMIC_ADD(&siteForce[siteB+2*numSites], (mm_ulong) realToFixedPoint(forceB.z));
-                    ATOMIC_ADD(&siteForce[siteC], (mm_ulong) realToFixedPoint(forceC.x));
-                    ATOMIC_ADD(&siteForce[siteC+numSites], (mm_ulong) realToFixedPoint(forceC.y));
-                    ATOMIC_ADD(&siteForce[siteC+2*numSites], (mm_ulong) realToFixedPoint(forceC.z));
-                }
-#endif
             }
         }
 

@@ -3,7 +3,7 @@ unsigned int includeInteraction = (!isExcluded && r2 < CUTOFF_SQUARED);
 #else
 unsigned int includeInteraction = (!isExcluded);
 #endif
-// InteraxFF: skip the pairs of a particle without moments (see isInertParticle()).
+// Skip the pairs of a particle without moments (see isInertParticle()).
 includeInteraction = includeInteraction && !isInertParticle(coreCharge1, valenceCharge1, dipole1, qXX1, qXY1, qXZ1, qYY1, qYZ1, inducedDipole1)
                      && !isInertParticle(coreCharge2, valenceCharge2, dipole2, qXX2, qXY2, qXZ2, qYY2, qYZ2, inducedDipole2);
 
@@ -13,7 +13,7 @@ real mat[3][3];
 formQIRotationMatrix(delta, rInv, mat);
 #ifdef COMPUTING_EXCEPTIONS
 if (coincident) {
-    // InteraxFF: at r = 0 only rotation invariant terms remain, so any frame will do
+    // At r = 0 only rotation invariant terms remain, so any frame will do
     for (int i = 0; i < 3; i++)
         for (int j = 0; j < 3; j++)
             mat[i][j] = (i == j ? 1 : 0);
@@ -102,7 +102,7 @@ alsq2n *= alsq2;
 real bn5 = (9*bn4+alsq2n*exp2a)*rInv2;
 #ifdef COMPUTING_EXCEPTIONS
 if (coincident) {
-    // InteraxFF: r = 0 limits of the Ewald terms of a fully excluded pair (see addCoincidentPairConstants())
+    // R = 0 limits of the Ewald terms of a fully excluded pair (see addCoincidentPairConstants())
     bn0 = -COINCIDENT_B0;
     bn1 = -COINCIDENT_B1;
     bn2 = -COINCIDENT_B2;

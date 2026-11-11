@@ -1,6 +1,6 @@
 // Functions called by the InteraxMultipoleForce interaction kernels (from OpenMM's HIPPO kernels, hippoInteractionHeader.cc).
 
-// InteraxFF: whether a particle has no charge, multipole or induced dipole (an alchemical particle at lambda = 0).
+// Whether a particle has no charge, multipole or induced dipole (an alchemical particle at lambda = 0).
 // Every pair term contains a moment of each particle, so the pairs of such a particle are skipped: they are exactly
 // zero, but the inverse powers of r overflow in single precision when it overlaps another particle (rr11 below
 // ~0.001 nm, which a decoupled solute allows), and zero times infinity is not zero.

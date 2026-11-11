@@ -19,11 +19,6 @@ typedef struct {
 #endif
 
 #ifdef ENABLE_SHUFFLE
-#if defined(USE_HIP)
-
-#define real_shfl SHFL
-
-#else
 
 //support for 64 bit shuffles
 static __inline__ __device__ float real_shfl(float var, int srcLane) {
@@ -49,7 +44,6 @@ static __inline__ __device__ mm_long real_shfl(mm_long var, int srcLane) {
 }
 
 #endif
-#endif
 
 KERNEL void computeNonbonded(
         GLOBAL mm_ulong* RESTRICT forceBuffers, GLOBAL mixed* RESTRICT energyBuffer, GLOBAL const real4* RESTRICT posq, GLOBAL const unsigned int* RESTRICT exclusions,
@@ -58,9 +52,7 @@ KERNEL void computeNonbonded(
         , GLOBAL const int* RESTRICT tiles, GLOBAL const unsigned int* RESTRICT interactionCount, real4 periodicBoxSize, real4 invPeriodicBoxSize, 
         real4 periodicBoxVecX, real4 periodicBoxVecY, real4 periodicBoxVecZ, unsigned int maxTiles, GLOBAL const real4* RESTRICT blockCenter,
         GLOBAL const real4* RESTRICT blockSize, GLOBAL const unsigned int* RESTRICT interactingAtoms
-#if defined(__CUDA_ARCH__) || defined(USE_HIP)
         , unsigned int maxSinglePairs, GLOBAL const int2* RESTRICT singlePairs
-#endif
 #endif
         PARAMETER_ARGUMENTS) {
     const unsigned int totalWarps = (GLOBAL_SIZE)/TILE_SIZE;
