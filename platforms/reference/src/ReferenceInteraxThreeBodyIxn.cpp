@@ -68,10 +68,10 @@ void ReferenceInteraxThreeBodyIxn::setParameters(const InteraxThreeBodyForce& fo
     }
     scaleFactor = force.getScaleFactor();
     dampingScale = force.getDampingScale();
-    dampingRadius = force.getCentroidDampingRadius();
+    centroidDampingRadius = force.getCentroidDampingRadius();
 }
 
-Vec3 ReferenceInteraxThreeBodyIxn::getDelta(const Vec3& from, const Vec3& to, const Vec3* boxVectors) const {
+Vec3 ReferenceInteraxThreeBodyIxn::computeDelta(const Vec3& from, const Vec3& to, const Vec3* boxVectors) const {
     Vec3 delta = to-from;
     if (periodic) {
         delta -= boxVectors[2]*floor(delta[2]/boxVectors[2][2]+0.5);
@@ -98,7 +98,7 @@ double ReferenceInteraxThreeBodyIxn::calculateIxn(const vector<Vec3>& positions,
     vector<vector<bool> > isNeighbor(numSites, vector<bool>(numSites, false));
     for (int i = 0; i < numSites; i++)
         for (int j = i+1; j < numSites; j++) {
-            Vec3 delta = getDelta(sites[i], sites[j], boxVectors);
+            Vec3 delta = computeDelta(sites[i], sites[j], boxVectors);
             isNeighbor[i][j] = isNeighbor[j][i] = (molecule[i] != molecule[j] && delta.dot(delta) < cutoff2);
         }
 
@@ -119,8 +119,8 @@ double ReferenceInteraxThreeBodyIxn::calculateIxn(const vector<Vec3>& positions,
                 if (c9 == 0)
                     continue;  // a switched-off triple: exactly zero, and its 1/r^9 terms may overflow when sites coincide
                 double rates[3] = {2*dampingScale/(width[i]+width[j]), 2*dampingScale/(width[i]+width[k]), 2*dampingScale/(width[j]+width[k])};
-                energy += InteraxThreeBodyTerms::computeTriple(getDelta(sites[i], sites[j], boxVectors), getDelta(sites[i], sites[k], boxVectors),
-                        getDelta(sites[j], sites[k], boxVectors), c9, useDamping ? rates : NULL, siteForces[i], siteForces[j], siteForces[k], dampingRadius);
+                energy += InteraxThreeBodyTerms::computeTriple(computeDelta(sites[i], sites[j], boxVectors), computeDelta(sites[i], sites[k], boxVectors),
+                        computeDelta(sites[j], sites[k], boxVectors), c9, useDamping ? rates : NULL, siteForces[i], siteForces[j], siteForces[k], centroidDampingRadius);
             }
         }
 

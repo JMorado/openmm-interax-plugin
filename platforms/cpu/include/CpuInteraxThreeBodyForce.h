@@ -76,7 +76,7 @@ private:
     std::vector<int> molecule;
     std::vector<double> alpha, frequency, width;
     std::vector<bool> isAlchemical;
-    double cutoff, scaleFactor, dampingScale, dampingRadius;
+    double cutoff, scaleFactor, dampingScale, centroidDampingRadius;
     bool periodic, useDamping;
     OpenMM::ThreadPool& threads;
     std::vector<OpenMM::Vec3> sites;

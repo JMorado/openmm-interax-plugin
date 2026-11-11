@@ -68,12 +68,12 @@ private:
     /**
      * Get the displacement between two positions, applying periodic boundary conditions if the force uses them.
      */
-    OpenMM::Vec3 getDelta(const OpenMM::Vec3& from, const OpenMM::Vec3& to, const OpenMM::Vec3* boxVectors) const;
+    OpenMM::Vec3 computeDelta(const OpenMM::Vec3& from, const OpenMM::Vec3& to, const OpenMM::Vec3* boxVectors) const;
     std::vector<std::vector<int> > siteParticles;
     std::vector<int> molecule;
     std::vector<double> alpha, frequency, width;
     std::vector<bool> isAlchemical;
-    double cutoff, scaleFactor, dampingScale, dampingRadius;
+    double cutoff, scaleFactor, dampingScale, centroidDampingRadius;
     bool periodic, useDamping;
 };
 
