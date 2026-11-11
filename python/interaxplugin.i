@@ -77,9 +77,10 @@ import openmm.unit as unit
  * The reference parameters of the get...Parameters() methods are output values.  Marking them as such
  * will cause swig to return a tuple.
  */
-%apply double& OUTPUT {double& m1, double& m2, double& m3, double& alpha, double& width, double& amplitude, double& k, double& l, double& frequency};
+%apply double& OUTPUT {double& m1, double& m2, double& m3, double& alpha, double& width, double& amplitude, double& k, double& l, double& frequency,
+                       double& multipoleMultipoleScale, double& dipoleMultipoleScale, double& dipoleDipoleScale};
 %apply bool& OUTPUT {bool& isAlchemical};
-%apply int& OUTPUT {int& particle1, int& particle2, int& molecule};
+%apply int& OUTPUT {int& particle1, int& particle2, int& molecule, int& nx, int& ny, int& nz};
 /*
  * getSiteParameters() returns the particles of the site as a tuple.
  */
@@ -92,6 +93,30 @@ import openmm.unit as unit
         PyTuple_SET_ITEM(list, i, PyLong_FromLong((*$1)[i]));
     %append_output(list);
 }
+
+/*
+ * Docstrings: the signature of every method, and a description of every class (the C++ headers document each method).
+ */
+%feature("autodoc", "0");
+%feature("docstring") InteraxPlugin::InteraxPairForce "The abstract base class of the InteraxFF pair forces: the
+cutoff, switching function, exclusions and alchemical scaling that InteraxDispersionForce, InteraxExchangeForce and
+InteraxShortRangeForce have in common. Lengths are in nm and energies in kJ/mol.";
+%feature("docstring") InteraxPlugin::InteraxDispersionForce "Tang-Toennies damped C6/C8/C10 pair dispersion, with the
+coefficients combined from the XDM moments m1, m2, m3 (kJ/mol nm^3, nm^5, nm^7), the polarizability alpha (nm^3) and
+the Slater width (nm) of each particle, and an optional long range correction.";
+%feature("docstring") InteraxPlugin::InteraxExchangeForce "Exchange repulsion E = sum_ij A_i A_j S(r; s_i, s_j), with S
+the overlap integral (nm^-3) of the normalized Slater densities of widths s (nm), and amplitudes A in
+sqrt(kJ/mol nm^3).";
+%feature("docstring") InteraxPlugin::InteraxShortRangeForce "Short-range correction
+E = sum_ij [(K_i + K_j)/2 St + (L_i + L_j)/2 St^2], with St = 8 pi (s_i + s_j)^3 S(r; s_i, s_j) the normalized Slater
+overlap, K and L in kJ/mol and widths s in nm.";
+%feature("docstring") InteraxPlugin::InteraxThreeBodyForce "Axilrod-Teller-Muto three-body dispersion between sites,
+the centroids of sets of particles, each with a polarizability (nm^3), a single-pole frequency (kJ/mol), a width (nm)
+and a molecule; triples within the cutoff (nm) of each other interact, optionally damped.";
+%feature("docstring") InteraxPlugin::InteraxMultipoleForce "Electrostatics and polarization of InteraxFF: point core
+charges, Slater valence charges, dipoles and quadrupoles in local frames, and induced dipoles from atomic
+polarizabilities, as in HippoNonbondedForce, with core damping, a mutual damping scale and alchemical scaling. Charges
+are in e, dipoles in e nm, quadrupoles in e nm^2, exponents in nm^-1 and polarizabilities in nm^3.";
 
 namespace InteraxPlugin {
 
@@ -222,7 +247,9 @@ public:
     void setCutoffDistance(double distance);
     const std::vector<double>& getExtrapolationCoefficients() const;
     void setExtrapolationCoefficients(const std::vector<double>& coefficients);
+    void getPMEParameters(double& alpha, int& nx, int& ny, int& nz) const;
     void setPMEParameters(double alpha, int nx, int ny, int nz);
+    void getPMEParametersInContext(const OpenMM::Context& context, double& alpha, int& nx, int& ny, int& nz) const;
     int addParticle(double charge, const std::vector<double>& dipole, const std::vector<double>& quadrupole, double coreCharge,
                     double alpha, double polarizability, int axisType, int multipoleAtomZ, int multipoleAtomX, int multipoleAtomY,
                     bool isAlchemical=false);
@@ -231,6 +258,10 @@ public:
                                bool isAlchemical=false);
     int addException(int particle1, int particle2, double multipoleMultipoleScale, double dipoleMultipoleScale, double dipoleDipoleScale,
                      bool replace=false);
+    void getExceptionParameters(int index, int& particle1, int& particle2, double& multipoleMultipoleScale, double& dipoleMultipoleScale,
+                                double& dipoleDipoleScale) const;
+    void setExceptionParameters(int index, int particle1, int particle2, double multipoleMultipoleScale, double dipoleMultipoleScale,
+                                double dipoleDipoleScale);
     double getEwaldErrorTolerance() const;
     void setEwaldErrorTolerance(double tol);
     bool getCoreDamping() const;
@@ -250,9 +281,9 @@ public:
 };
 
 /*
- * Methods with vector or multiple output arguments are wrapped as methods that return flat lists: the particle
- * parameters as [charge, dipole (3), quadrupole (9), coreCharge, alpha, polarizability, axisType, z, x, y,
- * isAlchemical], the dipoles as [x0, y0, z0, x1, ...] (e nm), and the PME parameters as [alpha, nx, ny, nz].
+ * Methods with vector output arguments are wrapped as methods that return flat lists: the particle parameters as
+ * [charge, dipole (3), quadrupole (9), coreCharge, alpha, polarizability, axisType, z, x, y, isAlchemical], and the
+ * dipoles as [x0, y0, z0, x1, ...] (e nm).
  */
 %extend InteraxMultipoleForce {
     std::vector<double> getParticleParametersList(int index) const {
@@ -289,12 +320,6 @@ public:
             out.push_back(v[2]);
         }
         return out;
-    }
-    std::vector<double> getPMEParametersInContextList(const OpenMM::Context& context) const {
-        double alpha;
-        int nx, ny, nz;
-        self->getPMEParametersInContext(context, alpha, nx, ny, nz);
-        return {alpha, (double) nx, (double) ny, (double) nz};
     }
 }
 
