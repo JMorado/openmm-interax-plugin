@@ -42,8 +42,8 @@ InteraxThreeBodyForceProxy::InteraxThreeBodyForceProxy() : SerializationProxy("I
 
 void InteraxThreeBodyForceProxy::serialize(const void* object, SerializationNode& node) const {
     const InteraxThreeBodyForce& force = *reinterpret_cast<const InteraxThreeBodyForce*>(object);
-    // Version 3 adds the centroid damping radius. Without centroid damping version 2 is written, so that older builds
-    // still read the force (and refuse a damped one).
+    // Version 3 adds the centroid damping radius. Without centroid damping version 2 is written, which builds that
+    // predate the centroid damping can read.
     bool centroidDamping = (force.getCentroidDampingRadius() != 0.0);
     node.setIntProperty("version", centroidDamping ? 3 : 2);
     node.setIntProperty("forceGroup", force.getForceGroup());
@@ -84,7 +84,7 @@ void* InteraxThreeBodyForceProxy::deserialize(const SerializationNode& node) con
         force->setUsesPeriodicBoundaryConditions(node.getBoolProperty("usesPeriodic"));
         force->setAlchemicalParameterName(node.getStringProperty("alchemicalParameter"));
         if (version == 1) {
-            // Version 1 had one site per molecule, without damping.
+            // Version 1: one site per molecule, without damping.
             for (auto& molecule : node.getChildNode("Molecules").getChildren()) {
                 vector<int> particles;
                 for (auto& particle : molecule.getChildren())

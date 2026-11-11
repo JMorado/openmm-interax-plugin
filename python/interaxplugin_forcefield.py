@@ -96,7 +96,7 @@ def _periodic(nonbondedMethod):
 
 
 def _setup_pair_force(force, nonbondedMethod, nonbondedCutoff, args, molecules):
-    """Cutoff, switching and the exclusion of every intramolecular pair, as the InteraxFF export sets them."""
+    """Set the cutoff, the switching function and the exclusion of every intramolecular pair of a pair force."""
     cutoff = nonbondedCutoff.value_in_unit(openmm.unit.nanometer) if hasattr(nonbondedCutoff, "value_in_unit") else float(nonbondedCutoff)
     if _periodic(nonbondedMethod):
         force.setNonbondedMethod(ip.InteraxPairForce.CutoffPeriodic)
@@ -136,7 +136,7 @@ class _PairGenerator:
     def createForce(self, sys, data, nonbondedMethod, nonbondedCutoff, args):
         force = self.makeForce()
         for atom in data.atoms:
-            self.addParticle(force, [float(v) for v in self.params.getAtomParameters(atom, data)])
+            force.addParticle(*[float(v) for v in self.params.getAtomParameters(atom, data)])
         _, molecules = _molecules(sys, data)
         _setup_pair_force(force, nonbondedMethod, nonbondedCutoff, args, molecules)
         self.finish(force, nonbondedMethod)
@@ -162,9 +162,6 @@ class InteraxDispersionGenerator(_PairGenerator):
         force.setDampingScale(float(self.settings["dampingScale"]))
         return force
 
-    def addParticle(self, force, p):
-        force.addParticle(*p)
-
     def finish(self, force, nonbondedMethod):
         force.setUseLongRangeCorrection(_periodic(nonbondedMethod) and _bool(self.settings["useLongRangeCorrection"]))
 
@@ -181,9 +178,6 @@ class InteraxExchangeGenerator(_PairGenerator):
         force.setOverlapMethod(getattr(ip.InteraxExchangeForce, _OVERLAP[self.settings["overlapMethod"]]))
         return force
 
-    def addParticle(self, force, p):
-        force.addParticle(*p)
-
 
 class InteraxShortRangeGenerator(_PairGenerator):
     """Constructs an InteraxShortRangeForce (short-range correction)."""
@@ -196,9 +190,6 @@ class InteraxShortRangeGenerator(_PairGenerator):
         force = ip.InteraxShortRangeForce()
         force.setOverlapMethod(getattr(ip.InteraxShortRangeForce, _OVERLAP[self.settings["overlapMethod"]]))
         return force
-
-    def addParticle(self, force, p):
-        force.addParticle(*p)
 
 
 class InteraxThreeBodyGenerator:

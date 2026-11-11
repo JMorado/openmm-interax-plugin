@@ -16,7 +16,6 @@
 #   INTERAX_MODEL   the model of those comparisons (default: INTERAX_REPO/examples, see tests/python/plugin_path.py)
 #   SWIG_PYTHONPATH a pip-installed SWIG to put on PYTHONPATH for the build (one whose runtime matches OpenMM's module)
 #   NVRTC_PRELOAD   an NVRTC library to preload for the CUDA tests (when the toolkit's is newer than the driver)
-# For a scheduled run, prefer a time when no GPU jobs run on the node.
 set -u
 BUILD_DIR=${1:?usage: run_all_tests.sh BUILD_DIR PREFIX [GPU_INDEX]}
 PREFIX=${2:?usage: run_all_tests.sh BUILD_DIR PREFIX [GPU_INDEX]}

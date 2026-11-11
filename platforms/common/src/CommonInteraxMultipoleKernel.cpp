@@ -995,7 +995,7 @@ void CommonCalcInteraxMultipoleForceKernel::computeExtrapolatedDipoles() {
     recordInducedDipolesKernel->execute(cc.getNumAtoms());
     initExtrapolatedKernel->execute(extrapolatedDipole.getSize());
 
-    // Recursively apply alpha.Tau to the µ_(n) components to generate µ_(n+1), and store the result
+    // Recursively apply alpha.Tau to the mu_(n) components to generate mu_(n+1), and store the result
 
     for (int order = 1; order < maxExtrapolationOrder; ++order) {
         computeInducedField(order-1);
@@ -1003,7 +1003,7 @@ void CommonCalcInteraxMultipoleForceKernel::computeExtrapolatedDipoles() {
         iterateExtrapolatedKernel->execute(extrapolatedDipole.getSize());
     }
     
-    // Take a linear combination of the µ_(n) components to form the total dipole
+    // Take a linear combination of the mu_(n) components to form the total dipole
 
     computeExtrapolatedKernel->execute(extrapolatedDipole.getSize());
     computeInducedField(maxExtrapolationOrder-1);

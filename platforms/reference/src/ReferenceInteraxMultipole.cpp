@@ -652,7 +652,7 @@ void ReferenceInteraxMultipole::convergeInduceDipolesByExtrapolation(const vecto
     for (int atom = 0; atom < _numParticles; ++atom)
         _ptDipoleD[0][atom] = _inducedDipole[atom];
 
-    // Recursively apply alpha.Tau to the µ_(n) components to generate µ_(n+1), and store the result
+    // Recursively apply alpha.Tau to the mu_(n) components to generate mu_(n+1), and store the result
 
     vector<double> zeros(6, 0.0);
     for (int order = 1; order < _maxPTOrder; ++order) {
@@ -664,7 +664,7 @@ void ReferenceInteraxMultipole::convergeInduceDipolesByExtrapolation(const vecto
         }
     }
 
-    // Take a linear combination of the µ_(n) components to form the total dipole
+    // Take a linear combination of the mu_(n) components to form the total dipole
     
     _inducedDipole = vector<Vec3>(_numParticles, Vec3());
     for (int order = 0; order < _maxPTOrder; ++order)

@@ -18,17 +18,10 @@ import openmm
 
 import interaxplugin as ip
 
-# InteraxMultipoleForce handles particles at the same position that are fully excluded from each other (all scale
-# factors zero), with and without PME: the r = 0 limits of the excluded-pair Ewald terms. InteraxFF's bond-vector
-# multipole sites sit on their host atom and need it.
-COINCIDENT_PAIRS_WITH_PME = True
-
-
 def build_info():
-    """The plugin version and git commit, e.g. "0.2.0 (341c9aa1b2c3)"; "unstamped" for builds before the stamp."""
-    if not hasattr(ip, "getPluginVersion"):
-        return "unstamped"
+    """Return the version of the plugin and the git commit it was built from."""
     return f"{ip.getPluginVersion()} ({ip.getPluginGitCommit()})"
+
 
 # The unit conversions of the InteraxFF export (interax/openmm.py).
 HARTREE_TO_KJ_MOL = 2625.4996394799
@@ -46,8 +39,8 @@ def _global_parameters(force):
 
 def _require_known_globals(force, known, term):
     """
-    Refuse an exported force with global parameters this converter does not know: a newer export may have added a
-    term (as the ATM centroid damping radius once was), and converting without it would silently drop that term.
+    Refuse an exported force with global parameters this converter does not know: they may define a term that
+    converting without them would silently drop.
     """
     unknown = sorted(set(_global_parameters(force)) - set(known))
     if unknown:
@@ -246,8 +239,8 @@ def convert_three_body(force, dispersion):
     Create an InteraxThreeBodyForce from the molecular ATM CustomCentroidBondForce of an exported InteraxFF System.
     The export stores only the C9 of every triple, so the molecular polarizabilities and frequencies are recomputed
     from the atomic dispersion parameters (the dispersion CustomNonbondedForce of the same System), exactly as the
-    export computes them, and checked against the stored C9 values.  The centroid damping radius of the export
-    (global parameter atm_damping_r0, if present) becomes the plugin's centroid damping radius.
+    export computes them, and checked against the stored C9 values of the first 1000 triples.  The centroid damping
+    radius of the export (global parameter atm_damping_r0, if present) becomes the plugin's centroid damping radius.
     """
     expression = force.getEnergyFunction()
     if force.getNumGroupsPerBond() != 3 or "C9" not in expression:
@@ -273,7 +266,7 @@ def convert_three_body(force, dispersion):
     plugin.setCutoffDistance(cutoff)
     plugin.setUsesPeriodicBoundaryConditions(force.usesPeriodicBoundaryConditions())
     for g in range(force.getNumGroups()):
-        particles, weights = force.getGroupParameters(g)
+        particles, _ = force.getGroupParameters(g)
         plugin.addSite(list(particles), *molecular[g])
 
     # The scale factor is the ratio of a stored C9 to the recomputed one; every triple must agree with it.

@@ -1,8 +1,9 @@
 #---------------------------------------------------
 # OpenMM InteraxFF Plugin Common Compute Kernels
 #
-# The kernels in src/kernels are shared by the CUDA and OpenCL platforms. They are encoded into the C++ class
-# CommonInteraxKernelSources, which the platform libraries compile together with src/CommonInteraxKernels.cpp.
+# The kernels in src/kernels are written for OpenMM's common compute framework and built for the CUDA platform. They
+# are encoded into the C++ class CommonInteraxKernelSources, which the platform library compiles together with
+# src/CommonInteraxKernels.cpp.
 #----------------------------------------------------
 
 SET(KERNEL_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src)
