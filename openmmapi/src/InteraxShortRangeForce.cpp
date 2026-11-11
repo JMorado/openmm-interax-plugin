@@ -44,7 +44,7 @@ InteraxShortRangeForce::OverlapMethod InteraxShortRangeForce::getOverlapMethod()
 }
 
 void InteraxShortRangeForce::setOverlapMethod(OverlapMethod method) {
-    if (method != Exact && method != InteraxOrder2 && method != InteraxOrder6)
+    if (method != Exact && method != InteraxOrder2)
         throw OpenMMException("InteraxShortRangeForce: Illegal value for overlap method");
     overlapMethod = method;
 }

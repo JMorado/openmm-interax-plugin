@@ -138,7 +138,6 @@ int main() {
     try {
         testSerialization(InteraxExchangeForce::Exact);
         testSerialization(InteraxExchangeForce::InteraxOrder2);
-        testSerialization(InteraxExchangeForce::InteraxOrder6);
         testDefaults();
         testUnsupportedVersion();
     }

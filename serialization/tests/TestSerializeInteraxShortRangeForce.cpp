@@ -139,7 +139,6 @@ int main() {
     try {
         testSerialization(InteraxShortRangeForce::Exact);
         testSerialization(InteraxShortRangeForce::InteraxOrder2);
-        testSerialization(InteraxShortRangeForce::InteraxOrder6);
         testDefaults();
         testUnsupportedVersion();
     }

@@ -147,8 +147,7 @@ class InteraxExchangeForce : public InteraxPairForce {
 public:
     enum OverlapMethod {
         Exact = 0,
-        InteraxOrder2 = 2,
-        InteraxOrder6 = 6
+        InteraxOrder2 = 2
     };
     InteraxExchangeForce();
     int getNumParticles() const;
@@ -165,8 +164,7 @@ class InteraxShortRangeForce : public InteraxPairForce {
 public:
     enum OverlapMethod {
         Exact = 0,
-        InteraxOrder2 = 2,
-        InteraxOrder6 = 6
+        InteraxOrder2 = 2
     };
     InteraxShortRangeForce();
     int getNumParticles() const;

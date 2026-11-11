@@ -573,9 +573,8 @@ void testIllegalSettings() {
  * Exact is the exact integral to ~1e-10 in double precision and ~1e-6 in single precision (docs/SPEC.md: the
  * energies are compared to 3e-5, since the short-range correction amplifies the error); in single precision the
  * closed form loses more below about one width (up to 2e-4 at r = 0.1 width just above the switch to
- * it at t = 0.2), which is not tested. The InteraxFF schemes carry the truncation errors of the export: they are
- * compared where they are accurate (order 6 where t x < 1, to 1e-6; order 2 where it uses its expansion and
- * t x < 0.12, to 1e-5) and exact elsewhere.
+ * it at t = 0.2), which is not tested. InteraxOrder2 carries the truncation errors of the export: it is compared
+ * where it is accurate (where it uses its expansion and t x < 0.12, to 1e-5) and exact elsewhere.
  */
 template <class Model>
 void testOverlapMethods() {
@@ -583,7 +582,7 @@ void testOverlapMethods() {
     const double width = 0.02;
     const double relativeDifferences[] = {0.0, 2e-4, 1e-3, 0.005, 0.01, 0.05, 0.12, 0.3, 0.5};
     const double distances[] = {0.01, 0.03, 0.06, 0.1, 0.15, 0.2, 0.3};
-    const int methods[] = {0, 2, 6};
+    const int methods[] = {0, 2};
     for (int method : methods)
         for (double difference : relativeDifferences) {
             // Particle 0 is the narrower one in half of the cases, so that the scheme expands about either width.
@@ -599,13 +598,11 @@ void testOverlapMethods() {
                 VerletIntegrator integrator(0.001);
                 Context context(system, integrator, platform);
                 for (double r : distances) {
-                    // The InteraxFF schemes expand about the width of particle 0.
+                    // InteraxOrder2 expands about the width of particle 0.
                     Real t = fabs(widths[1-order]-widths[order])/widths[order], x = r/widths[order];
                     double tolerance;
                     if (method == 0)
                         tolerance = (doublePrecision ? 1e-9 : (r > 0.025 ? 3e-5 : -1));
-                    else if (method == 6 && t < 0.2)
-                        tolerance = (t*x < 1 ? 1e-6 : -1);
                     else if (method == 2 && t*widths[order] < 0.01*0.0529177210903)
                         tolerance = (t*x < 0.12 ? 1e-5 : -1);
                     else
@@ -635,8 +632,7 @@ void testOverlapMethods() {
 /**
  * Test, on a platform other than Reference, that each overlap method gives the same results as on the Reference
  * platform, in a periodic system of identical molecules with nearly equal widths. The platform may reorder the
- * molecules, and the InteraxFF schemes must still expand about the width of the particle with the lower original
- * index.
+ * molecules, and InteraxOrder2 must still expand about the width of the particle with the lower original index.
  */
 template <class Model>
 void testOverlapMethodsAgainstReference() {
@@ -663,7 +659,7 @@ void testOverlapMethodsAgainstReference() {
         if (accepted)
             positions.insert(positions.end(), molecule.begin(), molecule.end());
     }
-    for (int method : {0, 2, 6}) {
+    for (int method : {0, 2}) {
         if (!doublePrecision && method == 2)
             continue;
         System system;

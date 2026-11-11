@@ -158,7 +158,7 @@ void testChangingOverlapMethod() {
     system.addForce(force);
     VerletIntegrator integrator(0.001);
     Context context(system, integrator, platform);
-    force->setOverlapMethod(InteraxExchangeForce::InteraxOrder6);
+    force->setOverlapMethod(InteraxExchangeForce::InteraxOrder2);
     bool failed = false;
     try {
         force->updateParametersInContext(context);

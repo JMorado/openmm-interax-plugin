@@ -1,8 +1,8 @@
 // Overlap integral S(r; a, b) of two normalized Slater densities exp(-r/s)/(8 pi s^3) of widths OVERLAP_WIDTH1 and
 // OVERLAP_WIDTH2 at distance r, and its derivative with respect to r (docs/SPEC.md). This snippet is inserted into
 // the pair interaction code with the placeholders replaced. Nearly equal widths use the Taylor expansion of order
-// TAYLOR_ORDER (InteraxPairTerms::SlaterTaylorScheme) about the width l, the smaller width or, for the InteraxFF
-// schemes, that of the particle with the lower index: where the widths differ by less than TAYLOR_MAX_DELTA, or
+// TAYLOR_ORDER (InteraxPairTerms::SlaterTaylorScheme) about the width l, the smaller width or, for InteraxOrder2,
+// that of the particle with the lower index: where the widths differ by less than TAYLOR_MAX_DELTA, or
 // where t = (other width - l)/l and x = r/l satisfy |t| < TAYLOR_MAX_T and |t| x < TAYLOR_MAX_TX.
 real OVERLAP, OVERLAP_DERIV;
 {

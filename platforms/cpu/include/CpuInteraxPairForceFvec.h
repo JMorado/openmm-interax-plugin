@@ -348,7 +348,7 @@ void CpuInteraxPairForceFvec<FVEC, BLOCK_SIZE, Term>::calculateBlockIxn(int bloc
         }
         FVEC pairEnergy, dEdR;
         if (orderByIndex) {
-            // The InteraxFF Taylor schemes of the Slater overlap expand about the width of the particle with the
+            // InteraxOrder2 expands the Slater overlap about the width of the particle with the
             // lower index, so put that particle first in each lane.
             FVEC blockFirst = blockAtomIndex < (float) atom;
             FVEC first[Term::NUM_PARAMETERS], second[Term::NUM_PARAMETERS];

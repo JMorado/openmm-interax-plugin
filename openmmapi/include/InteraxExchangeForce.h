@@ -75,12 +75,7 @@ public:
          * implementation, including its truncation errors.  In single precision the closed form has relative errors
          * up to ~3e-2 just outside the switch.
          */
-        InteraxOrder2 = 2,
-        /**
-         * The order 6 expansion of the InteraxFF reference implementation, about the width of the particle with the
-         * lower index, used where the widths differ by less than 20%.
-         */
-        InteraxOrder6 = 6
+        InteraxOrder2 = 2
     };
     /**
      * Create an InteraxExchangeForce.

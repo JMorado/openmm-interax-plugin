@@ -180,7 +180,7 @@ void CommonInteraxPairForceKernel::addInteraction(const System& system, const In
         overlap["TAYLOR_ABOUT_SMALLER_WIDTH"] = (taylorScheme.aboutSmallerWidth ? "1" : "0");
         overlap["TAYLOR_MAX_DELTA"] = cc.doubleToString(taylorScheme.maxDelta);
         overlap["TAYLOR_MAX_T"] = cc.doubleToString(taylorScheme.maxT);
-        overlap["TAYLOR_MAX_TX"] = cc.doubleToString(min(taylorScheme.maxTX, 1e30)); // No bound for the InteraxFF schemes
+        overlap["TAYLOR_MAX_TX"] = cc.doubleToString(min(taylorScheme.maxTX, 1e30)); // No bound for InteraxOrder2
         overlap["ATOM_INDEX"] = prefix+"atomIndex";
         snippets["SLATER_OVERLAP"] = cc.replaceStrings(CommonInteraxKernelSources::interaxSlaterOverlap, overlap);
     }
@@ -211,7 +211,7 @@ void CommonInteraxPairForceKernel::addInteraction(const System& system, const In
     if (extra.isInitialized())
         nonbonded.addParameter(ComputeParameterInfo(extra, prefix+"extra", getParameterType(cc), 2));
     if (!overlapWidths.empty() && !taylorScheme.aboutSmallerWidth) {
-        // The InteraxFF Taylor schemes need the original indices of the atoms, which the context may reorder.
+        // InteraxOrder2 needs the original indices of the atoms, which the context may reorder.
         nonbonded.addArgument(ComputeParameterInfo(cc.getAtomIndexArray(), prefix+"atomIndex", "int", 1));
     }
     initializeParameters(cc, globals, 2, 1, "interaxGlobals");

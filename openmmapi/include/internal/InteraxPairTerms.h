@@ -119,15 +119,15 @@ static const double OVERLAP_TAYLOR_DERIV[MAX_TAYLOR_ORDER+1][TAYLOR_TERMS] = {
  *
  *   |other width - l| < maxDelta   or   (|t| < maxT  and  |t| x < maxTX)
  *
- * Two kinds of scheme are provided:
+ * Two schemes are provided:
  *
  *   accurate(doublePrecision)  order 6 about the smaller width, with a switch chosen for the precision: the
  *                              integral is exact to ~1e-6 relative in single precision and ~1e-10 in double
  *                              precision over the whole range of distances
- *   interax(order)             the schemes of the InteraxFF reference implementation, evaluated as it evaluates
- *                              them: the expansion is about the width of the particle with the lower index, order 2
- *                              below a difference of 0.01 bohr, order 6 below 20% of l.  They reproduce it, including
- *                              its truncation errors (up to ~1e-6 relative to the exact integral).
+ *   interaxOrder2()            the order 2 scheme of the InteraxFF export (MEDFF), evaluated as the export evaluates
+ *                              it: about the width of the particle with the lower index, below a difference of
+ *                              0.01 bohr.  It reproduces the export, including its truncation errors (up to ~1e-6
+ *                              relative to the exact integral).
  */
 struct SlaterTaylorScheme {
     int order;
@@ -146,14 +146,14 @@ struct SlaterTaylorScheme {
         return scheme;
     }
     /**
-     * The InteraxFF scheme of a Taylor order (2 or 6).
+     * The order 2 scheme of the InteraxFF export.
      */
-    static SlaterTaylorScheme interax(int order) {
+    static SlaterTaylorScheme interaxOrder2() {
         SlaterTaylorScheme scheme;
-        scheme.order = order;
+        scheme.order = 2;
         scheme.aboutSmallerWidth = false;
-        scheme.maxDelta = (order == 2 ? 0.01*0.0529177210903 : 0.0);
-        scheme.maxT = (order == 6 ? 0.2 : 0.0);
+        scheme.maxDelta = 0.01*0.0529177210903;
+        scheme.maxT = 0.0;
         scheme.maxTX = HUGE_VAL;
         return scheme;
     }
@@ -161,8 +161,8 @@ struct SlaterTaylorScheme {
 
 /**
  * Compute the overlap integral S(r; a, b) of two normalized Slater densities exp(-r/s)/(8 pi s^3) of widths a and b
- * at distance r, and its derivative with respect to r. For the InteraxFF schemes, a must be the width of the particle
- * with the lower index.
+ * at distance r, and its derivative with respect to r. For the InteraxFF order 2 scheme, a must be the width of the
+ * particle with the lower index.
  */
 template <class T>
 inline void slaterOverlap(T r, T a, T b, const SlaterTaylorScheme& scheme, T& overlap, T& dOverlapdR) {

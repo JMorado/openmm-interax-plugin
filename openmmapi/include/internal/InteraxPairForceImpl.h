@@ -156,7 +156,7 @@ template <class ForceType>
 InteraxPairTerms::SlaterTaylorScheme getSlaterTaylorScheme(const ForceType& force, bool doublePrecision) {
     if (force.getOverlapMethod() == ForceType::Exact)
         return InteraxPairTerms::SlaterTaylorScheme::accurate(doublePrecision);
-    return InteraxPairTerms::SlaterTaylorScheme::interax((int) force.getOverlapMethod());
+    return InteraxPairTerms::SlaterTaylorScheme::interaxOrder2();
 }
 
 } // namespace InteraxPlugin

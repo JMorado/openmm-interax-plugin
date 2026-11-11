@@ -129,7 +129,7 @@ double ReferenceCalcInteraxExchangeForceKernel::execute(ContextImpl& context, bo
     double lambda = getAlchemicalParameter(context, hasAlchemicalParticles, alchemicalParameter);
     return ixn->calculatePairIxn(extractPositions(context), extractBoxVectors(context), lambda, extractForces(context),
             [&] (int i, int j, double r, double& pairEnergy, double& dEdR) {
-        // The InteraxFF Taylor schemes expand about the width of the particle with the lower index.
+        // InteraxOrder2 expands about the width of the particle with the lower index.
         const ParticleParameters& p1 = particles[min(i, j)];
         const ParticleParameters& p2 = particles[max(i, j)];
         if (p1.width*p2.width == 0)
@@ -172,7 +172,7 @@ double ReferenceCalcInteraxShortRangeForceKernel::execute(ContextImpl& context, 
     double lambda = getAlchemicalParameter(context, hasAlchemicalParticles, alchemicalParameter);
     return ixn->calculatePairIxn(extractPositions(context), extractBoxVectors(context), lambda, extractForces(context),
             [&] (int i, int j, double r, double& pairEnergy, double& dEdR) {
-        // The InteraxFF Taylor schemes expand about the width of the particle with the lower index.
+        // InteraxOrder2 expands about the width of the particle with the lower index.
         const ParticleParameters& p1 = particles[min(i, j)];
         const ParticleParameters& p2 = particles[max(i, j)];
         if (p1.width*p2.width == 0)

@@ -33,7 +33,7 @@ Force-level attributes (defaults in brackets):
                             intramolecularDipoleDipoleScale [0]; useOwnKernel [true]
     InteraxDispersionForce  dampingScale [1]; useLongRangeCorrection [true, periodic only]
     InteraxExchangeForce,
-    InteraxShortRangeForce  overlapMethod ("exact" | "order2" | "order6") [exact]
+    InteraxShortRangeForce  overlapMethod ("exact" | "order2") [exact]
     InteraxThreeBodyForce   scaleFactor [1]; cutoff (nm) [1.2]; centroidDampingRadius (nm) [0]
 
 The pair forces use the createSystem() cutoff with periodic boxes (switching from switchDistance, else from
@@ -147,7 +147,7 @@ class _PairGenerator:
         pass
 
 
-_OVERLAP = {"exact": "Exact", "order2": "InteraxOrder2", "order6": "InteraxOrder6"}
+_OVERLAP = {"exact": "Exact", "order2": "InteraxOrder2"}
 
 
 class InteraxDispersionGenerator(_PairGenerator):

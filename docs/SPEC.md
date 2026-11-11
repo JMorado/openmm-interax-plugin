@@ -64,7 +64,6 @@ Taylor expansion about a width l, with t = (b - l)/l (b the other width) and x =
 |---|---|---|---|---|
 | `Exact` (default) | 6 | the smaller width | t < 0.2 and t x < 1.6 (single precision), t < 0.02 and t x < 0.3 (double) | the exact integral: ~1e-6 relative in single, ~1e-10 in double precision |
 | `InteraxOrder2` | 2 | width of the particle with the lower index | \|b - a\| < 0.01 bohr | the InteraxFF order-2 scheme (MEDFF); reproduces its export |
-| `InteraxOrder6` | 6 | width of the particle with the lower index | \|t\| < 0.2 | an earlier order-6 scheme of InteraxFF; not used by the export |
 
 The InteraxFF Slater schemes (`interax.geometry.SLATER_TAYLOR_SCHEMES`) are "order6", which is the `Exact` method,
 and "order2". The export writes the order-6 scheme about the smaller width with the double-precision switch, so that
