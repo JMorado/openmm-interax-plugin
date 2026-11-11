@@ -201,8 +201,10 @@ private:
 
 /**
  * This kernel is invoked by InteraxThreeBodyForce to calculate the forces acting on the system and the energy of
- * the system. It computes the sites, a neighbor list of the sites, the triples (each from its three sites, without
- * atomic additions per triple), and then distributes the site forces to the particles.
+ * the system. It computes the sites, half neighbor lists of the sites with a skin (rebuilt when a site has moved by
+ * more than half the skin), at every evaluation the compact lists of the neighbors within the cutoff (with the
+ * bounding box of each tile of them), the triples (each once, from its lowest site, adding the forces on the other two
+ * atomically), and then distributes the site forces to the particles.
  */
 class CommonCalcInteraxThreeBodyForceKernel : public CalcInteraxThreeBodyForceKernel {
 public:
@@ -235,9 +237,15 @@ public:
 private:
     class ForceInfo;
     class NeighborListPostComputation;
-    // The triples kernel runs one block of TripleBlockSize threads per site, over tiles of TileSize neighbors.
-    static const int TripleBlockSize = 128;
-    static const int TileSize = 64;
+    // The triples kernel runs one block of tripleBlockSize threads per site, over tiles of tileSize neighbors (defaults
+    // below; the environment variables INTERAX_ATM_BLOCK and INTERAX_ATM_TILE override them, for benchmarking only).
+    static const int DefaultTripleBlockSize = 256;
+    static const int DefaultTileSize = 128;
+    int tripleBlockSize, tileSize;
+    bool forceRebuild;
+    // The skin (nm) of the neighbor lists: they hold the sites within the cutoff plus the skin, rebuilt when a site has
+    // moved by more than half of it.
+    static constexpr double NeighborSkin = 0.1;
     void setParameters(const InteraxThreeBodyForce& force);
     void checkNeighborListSize();
     OpenMM::ComputeContext& cc;
@@ -245,9 +253,9 @@ private:
     bool periodic, hasAlchemicalSites, hasComputed, useCentroidDamping;
     double scaleFactor, dampingScale, centroidDampingRadius, lastLambda;
     std::string alchemicalParameter;
-    OpenMM::ComputeArray siteOffsets, siteParticles, siteMolecules, siteParams, sites, neighbors, neighborDeltas, numNeighbors, maxNeighborCount,
-            siteForce, globals;
-    OpenMM::ComputeKernel sitesKernel, neighborsKernel, triplesKernel, applyForcesKernel;
+    OpenMM::ComputeArray siteOffsets, siteParticles, siteMolecules, siteParams, sites, neighbors, numNeighbors, maxNeighborCount,
+            siteForce, globals, sitesAtBuild, rebuildFlag, tileBoxes, activeNeighbors, numActive;
+    OpenMM::ComputeKernel sitesKernel, neighborsKernel, compactKernel, triplesKernel, applyForcesKernel;
 };
 
 } // namespace InteraxPlugin

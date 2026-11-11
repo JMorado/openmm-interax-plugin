@@ -141,8 +141,10 @@ def test_platform_matches_reference(atomic, centroid_r0, platform, precision):
     tolerance = 1e-10 if precision == "double" else 2e-5
     assert abs(energy - reference_energy) <= tolerance * magnitude, (energy, reference_energy, magnitude)
     rms = np.sqrt((reference_forces ** 2).mean())
-    # CUDA accumulates forces in 2^-32 fixed point: an absolute floor of ~4 quanta (the damped variants have small forces)
-    assert np.abs(forces - reference_forces).max() <= max(10 * tolerance * rms, 1e-9)
+    # CUDA accumulates forces in 2^-32 fixed point (2.3e-10 per conversion). Each triple is computed once, so a site
+    # receives the forces of the blocks of all its lower neighbors, each converted once per tile pair: an absolute
+    # floor of ~100 quanta (the damped variants have small forces, ~1e-2 here, against ~1e2-1e3 in liquids)
+    assert np.abs(forces - reference_forces).max() <= max(10 * tolerance * rms, 2e-8)
 
 
 def test_neighbor_list_growth():

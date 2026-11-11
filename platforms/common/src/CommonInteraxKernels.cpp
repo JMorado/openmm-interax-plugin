@@ -36,6 +36,7 @@
 #include "openmm/common/ContextSelector.h"
 #include "openmm/common/NonbondedUtilities.h"
 #include "openmm/internal/ContextImpl.h"
+#include <cstdlib>
 #include <map>
 
 using namespace InteraxPlugin;
@@ -472,11 +473,30 @@ void CommonCalcInteraxThreeBodyForceKernel::initialize(const System& system, con
     // (checkNeighborListSize()).
 
     maxNeighbors = min(numSites, 64);
+    tripleBlockSize = DefaultTripleBlockSize;
+    tileSize = DefaultTileSize;
+    if (getenv("INTERAX_ATM_BLOCK") != NULL)
+        tripleBlockSize = atoi(getenv("INTERAX_ATM_BLOCK"));
+    if (getenv("INTERAX_ATM_TILE") != NULL)
+        tileSize = atoi(getenv("INTERAX_ATM_TILE"));
+    // Benchmarking only: rebuild the neighbor lists at every evaluation (their cost is otherwise invisible at fixed positions).
+    forceRebuild = (getenv("INTERAX_ATM_FORCE_REBUILD") != NULL);
+    if (tripleBlockSize < 32 || tripleBlockSize > 1024 || tripleBlockSize%32 != 0 || (tripleBlockSize & (tripleBlockSize-1)) != 0 ||
+            tileSize < 32 || tileSize%32 != 0)
+        throw OpenMMException("InteraxThreeBodyForce: INTERAX_ATM_BLOCK must be a power of 2 from 32 to 1024 and INTERAX_ATM_TILE a multiple of 32");
     int elementSize = (cc.getUseDoublePrecision() ? sizeof(mm_double4) : sizeof(mm_float4));
     sites.initialize(cc, numSites, elementSize, "interaxSites");
     neighbors.initialize<int>(cc, numSites*maxNeighbors, "interaxNeighbors");
-    neighborDeltas.initialize(cc, numSites*maxNeighbors, elementSize, "interaxNeighborDeltas");
     numNeighbors.initialize<int>(cc, numSites, "interaxNumNeighbors");
+    numNeighbors.upload(vector<int>(numSites, 0));
+    // The lists hold the neighbors within the cutoff plus a skin and are rebuilt when a site has moved by more than
+    // half the skin since the last build (computeSites() sets rebuildFlag); the first evaluation always builds them.
+    sitesAtBuild.initialize(cc, numSites, elementSize, "interaxSitesAtBuild");
+    rebuildFlag.initialize<int>(cc, 1, "interaxRebuildFlag");
+    rebuildFlag.upload(vector<int>(1, 1));
+    tileBoxes.initialize(cc, 2*numSites*((maxNeighbors+tileSize-1)/tileSize), elementSize, "interaxTileBoxes");
+    activeNeighbors.initialize<int>(cc, numSites*maxNeighbors, "interaxActiveNeighbors");
+    numActive.initialize<int>(cc, numSites, "interaxNumActive");
     maxNeighborCount.initialize<int>(cc, 1, "interaxMaxNeighborCount");
     siteForce.initialize<long long>(cc, 3*numSites, "interaxSiteForce");
     siteForce.upload(vector<long long>(3*numSites, 0));
@@ -484,7 +504,17 @@ void CommonCalcInteraxThreeBodyForceKernel::initialize(const System& system, con
     // Create the kernels.
 
     map<string, string> defines;
-    defines["CUTOFF_SQUARED"] = cc.doubleToString(force.getCutoffDistance()*force.getCutoffDistance());
+    const double cutoff = force.getCutoffDistance();
+    defines["CUTOFF_SQUARED"] = cc.doubleToString(cutoff*cutoff);
+    defines["CUTOFF"] = cc.doubleToString(cutoff);
+    // Tile pairs are skipped when their boxes are this far apart: the cutoff plus a margin far above the
+    // rounding of the vectors, so that no triple within the cutoff is ever skipped.
+    defines["PRUNE_SQUARED"] = cc.doubleToString((cutoff+1e-4)*(cutoff+1e-4));
+    defines["LIST_CUTOFF_SQUARED"] = cc.doubleToString((cutoff+NeighborSkin)*(cutoff+NeighborSkin));
+    defines["LIST_CUTOFF"] = cc.doubleToString(cutoff+NeighborSkin);
+    defines["HALF_SKIN_SQUARED"] = cc.doubleToString(0.25*NeighborSkin*NeighborSkin);
+    // Above this argument the Tang-Toennies f_3 is 1 to the working precision (exp(-x) x^3/3! below its rounding)
+    defines["TT_SKIP"] = (cc.getUseDoublePrecision() ? "45" : "26");
     defines["PADDED_NUM_ATOMS"] = cc.intToString(cc.getPaddedNumAtoms());
     if (periodic)
         defines["USE_PERIODIC"] = "1";
@@ -493,8 +523,9 @@ void CommonCalcInteraxThreeBodyForceKernel::initialize(const System& system, con
     useCentroidDamping = (force.getCentroidDampingRadius() > 0);
     if (useCentroidDamping)
         defines["USE_CENTROID_DAMPING"] = "1";
-    defines["TILE_SIZE"] = cc.intToString(TileSize);
-    defines["TRIPLE_BLOCK_SIZE"] = cc.intToString(TripleBlockSize);
+    defines["TILE_SIZE"] = cc.intToString(tileSize);
+    defines["TRIPLE_BLOCK_SIZE"] = cc.intToString(tripleBlockSize);
+    defines["NEIGHBOR_BLOCK_SIZE"] = "128";
     ComputeProgram program = cc.compileProgram(CommonInteraxKernelSources::interaxThreeBody, defines);
     sitesKernel = program->createKernel("computeSites");
     sitesKernel->addArg(numSites);
@@ -503,29 +534,44 @@ void CommonCalcInteraxThreeBodyForceKernel::initialize(const System& system, con
     sitesKernel->addArg(siteParticles);
     sitesKernel->addArg(sites);
     sitesKernel->addArg(maxNeighborCount);
+    sitesKernel->addArg(sitesAtBuild);
+    sitesKernel->addArg(rebuildFlag);
     neighborsKernel = program->createKernel("findNeighbors");
     neighborsKernel->addArg(numSites);
     neighborsKernel->addArg(maxNeighbors);
     neighborsKernel->addArg(sites);
     neighborsKernel->addArg(siteMolecules);
     neighborsKernel->addArg(neighbors);
-    neighborsKernel->addArg(neighborDeltas);
     neighborsKernel->addArg(numNeighbors);
     neighborsKernel->addArg(maxNeighborCount);
+    neighborsKernel->addArg(sitesAtBuild);
+    neighborsKernel->addArg(rebuildFlag);
     for (int i = 0; i < 5; i++)
         neighborsKernel->addArg(); // Periodic box size arguments are set when the kernel is executed.
+    compactKernel = program->createKernel("compactNeighbors");
+    compactKernel->addArg(numSites);
+    compactKernel->addArg(maxNeighbors);
+    compactKernel->addArg(sites);
+    compactKernel->addArg(neighbors);
+    compactKernel->addArg(numNeighbors);
+    compactKernel->addArg(activeNeighbors);
+    compactKernel->addArg(numActive);
+    compactKernel->addArg(tileBoxes);
+    for (int i = 0; i < 5; i++)
+        compactKernel->addArg(); // Periodic box size arguments are set when the kernel is executed.
     triplesKernel = program->createKernel("computeTriples");
     triplesKernel->addArg(numSites);
     triplesKernel->addArg(maxNeighbors);
     triplesKernel->addArg(sites);
     triplesKernel->addArg(siteParams);
     triplesKernel->addArg(siteMolecules);
-    triplesKernel->addArg(neighbors);
-    triplesKernel->addArg(neighborDeltas);
-    triplesKernel->addArg(numNeighbors);
+    triplesKernel->addArg(activeNeighbors);
+    triplesKernel->addArg(numActive);
     triplesKernel->addArg(siteForce);
     triplesKernel->addArg(cc.getEnergyBuffer());
     triplesKernel->addArg(globals);
+    triplesKernel->addArg(rebuildFlag);
+    triplesKernel->addArg(tileBoxes);
     for (int i = 0; i < 5; i++)
         triplesKernel->addArg(); // Periodic box size arguments are set when the kernel is executed.
     applyForcesKernel = program->createKernel("applySiteForces");
@@ -547,11 +593,15 @@ double CommonCalcInteraxThreeBodyForceKernel::execute(ContextImpl& context, bool
         globals.upload(values, true);
         lastLambda = lambda;
     }
-    setPeriodicBoxArgs(cc, neighborsKernel, 8);
-    setPeriodicBoxArgs(cc, triplesKernel, 11);
+    setPeriodicBoxArgs(cc, neighborsKernel, 9);
+    setPeriodicBoxArgs(cc, compactKernel, 8);
+    setPeriodicBoxArgs(cc, triplesKernel, 12);
+    if (forceRebuild)
+        rebuildFlag.upload(vector<int>(1, 1));
     sitesKernel->execute(numSites);
-    neighborsKernel->execute(numSites);
-    triplesKernel->execute(numSites*TripleBlockSize, TripleBlockSize);
+    neighborsKernel->execute(32*numSites, 128);  // a warp per site (a thread per site on GPUs before sm_70)
+    compactKernel->execute(32*numSites, 128);  // a warp per site
+    triplesKernel->execute(numSites*tripleBlockSize, tripleBlockSize);
     applyForcesKernel->execute(numSites);
     hasComputed = true;
     return 0.0;
@@ -566,13 +616,18 @@ void CommonCalcInteraxThreeBodyForceKernel::checkNeighborListSize() {
         return;
     maxNeighbors = min(numSites, (int) (1.2*count[0])+16);
     neighbors.resize(numSites*maxNeighbors);
-    neighborDeltas.resize(numSites*maxNeighbors);
+    tileBoxes.resize(2*numSites*((maxNeighbors+tileSize-1)/tileSize));
+    activeNeighbors.resize(numSites*maxNeighbors);
     neighborsKernel->setArg(1, maxNeighbors);
     neighborsKernel->setArg(4, neighbors);
-    neighborsKernel->setArg(5, neighborDeltas);
+    compactKernel->setArg(1, maxNeighbors);
+    compactKernel->setArg(3, neighbors);
+    compactKernel->setArg(5, activeNeighbors);
+    compactKernel->setArg(7, tileBoxes);
     triplesKernel->setArg(1, maxNeighbors);
-    triplesKernel->setArg(5, neighbors);
-    triplesKernel->setArg(6, neighborDeltas);
+    triplesKernel->setArg(5, activeNeighbors);
+    triplesKernel->setArg(11, tileBoxes);
+    rebuildFlag.upload(vector<int>(1, 1)); // the enlarged lists are empty
 }
 
 void CommonCalcInteraxThreeBodyForceKernel::copyParametersToContext(ContextImpl& context, const InteraxThreeBodyForce& force) {
@@ -581,8 +636,10 @@ void CommonCalcInteraxThreeBodyForceKernel::copyParametersToContext(ContextImpl&
         throw OpenMMException("updateParametersInContext: The number of sites has changed");
     if (numSites > 0 && (force.getCentroidDampingRadius() > 0) != useCentroidDamping)
         throw OpenMMException("updateParametersInContext: The centroid damping cannot be switched on or off");
-    if (numSites > 0)
+    if (numSites > 0) {
         setParameters(force);
+        rebuildFlag.upload(vector<int>(1, 1));
+    }
     cc.invalidateMolecules();
 }
 
