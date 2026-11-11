@@ -32,15 +32,6 @@ KERNEL void computeSites(int numSites, GLOBAL const real4* RESTRICT posq, GLOBAL
 }
 
 /**
- * For each site A, list in increasing order the sites B > A of other molecules within the cutoff plus the skin (a
- * half list: each triple is then found once, from its lowest site). The lists are rebuilt only when computeSites()
- * flagged a move larger than half the skin; otherwise they are kept, and the triples recompute every distance from the
- * current positions and apply the exact cutoff. At most maxNeighbors are stored, but numNeighbors holds the full count:
- * computeTriples() scans all the higher sites for a site whose list overflowed, so the result never depends on the
- * size of the lists. The largest count is recorded in maxNeighborCount, which the host reads now and then to enlarge
- * the lists.
- */
-/**
  * The bucket of a neighbor at vector d from site A: a 4x4x4 grid over the cube of side 2 LIST_CUTOFF centered on A, in
  * Morton (Z) order, so that consecutive buckets are adjacent in space.
  */
@@ -52,6 +43,15 @@ DEVICE int neighborBucket(real3 d) {
     return (ix&1) | ((iy&1)<<1) | ((iz&1)<<2) | ((ix&2)<<2) | ((iy&2)<<3) | ((iz&2)<<4);
 }
 
+/**
+ * For each site A, list the sites B > A of other molecules within the cutoff plus the skin (a half list: each triple
+ * is then found once, from its lowest site), bucket by bucket (neighborBucket()), each bucket in increasing order. The lists are rebuilt only when computeSites()
+ * flagged a move larger than half the skin; otherwise they are kept, and the triples recompute every distance from the
+ * current positions and apply the exact cutoff. At most maxNeighbors are stored, but numNeighbors holds the full count:
+ * computeTriples() scans all the higher sites for a site whose list overflowed, so the result never depends on the
+ * size of the lists. The largest count is recorded in maxNeighborCount, which the host reads now and then to enlarge
+ * the lists.
+ */
 KERNEL void findNeighbors(int numSites, int maxNeighbors, GLOBAL const real4* RESTRICT sites, GLOBAL const int* RESTRICT siteMolecules,
         GLOBAL int* RESTRICT neighbors, GLOBAL int* RESTRICT numNeighbors, GLOBAL int* RESTRICT maxNeighborCount,
         GLOBAL real4* RESTRICT sitesAtBuild, GLOBAL const int* RESTRICT rebuildFlag, real4 periodicBoxSize,
@@ -301,8 +301,9 @@ KERNEL void compactNeighbors(int numSites, int maxNeighbors, GLOBAL const real4*
 }
 
 /**
- * The smallest distance along one axis between the intervals [lo1, hi1] and [lo2, hi2] (+ any periodic image of the
- * second within one box length L, which is all the minimum image of a vector between them can reach when L >= 2 CUTOFF and the vectors are within the cutoff).
+ * The smallest distance along one axis between the intervals [lo1, hi1] and [lo2, hi2], or the images of the second
+ * shifted by one box length L. When L >= 2 CUTOFF and the vectors are within the cutoff, these are all the images the
+ * minimum image of a vector between them can reach.
  */
 DEVICE real intervalGap(real lo1, real hi1, real lo2, real hi2, real L, bool periodic) {
     real g = max((real) 0, max(lo2-hi1, lo1-hi2));
@@ -571,7 +572,7 @@ KERNEL void computeTriples(int numSites, int maxNeighbors, GLOBAL const real4* R
                         if (alchemicalAB || paramsC.w != 0)
                             c9 *= lambda;
                         // A switched-off triple is exactly zero; skip it, as 1/(u v w)^(5/2) overflows in single
-                        // precision when two of its sites nearly coincide (a decoupled solute lets water through).
+                        // precision when two of its sites nearly coincide (possible for a decoupled site).
                         if (c9 == 0)
                             continue;
                         const real v = deltaK.w;

@@ -36,7 +36,6 @@
 #include "openmm/common/ContextSelector.h"
 #include "openmm/common/NonbondedUtilities.h"
 #include "openmm/internal/ContextImpl.h"
-#include <cstdlib>
 #include <map>
 
 using namespace InteraxPlugin;
@@ -469,21 +468,9 @@ void CommonCalcInteraxThreeBodyForceKernel::initialize(const System& system, con
     initializeParameters(cc, globals, 4, 1, "interaxThreeBodyGlobals");
     setParameters(force);
 
-    // The neighbor lists (each site lists all its neighbors) start small and grow when they overflow
-    // (checkNeighborListSize()).
+    // The neighbor lists start small and grow when they overflow (checkNeighborListSize()).
 
     maxNeighbors = min(numSites, 64);
-    tripleBlockSize = DefaultTripleBlockSize;
-    tileSize = DefaultTileSize;
-    if (getenv("INTERAX_ATM_BLOCK") != NULL)
-        tripleBlockSize = atoi(getenv("INTERAX_ATM_BLOCK"));
-    if (getenv("INTERAX_ATM_TILE") != NULL)
-        tileSize = atoi(getenv("INTERAX_ATM_TILE"));
-    // Benchmarking only: rebuild the neighbor lists at every evaluation (their cost is otherwise invisible at fixed positions).
-    forceRebuild = (getenv("INTERAX_ATM_FORCE_REBUILD") != NULL);
-    if (tripleBlockSize < 32 || tripleBlockSize > 1024 || tripleBlockSize%32 != 0 || (tripleBlockSize & (tripleBlockSize-1)) != 0 ||
-            tileSize < 32 || tileSize%32 != 0)
-        throw OpenMMException("InteraxThreeBodyForce: INTERAX_ATM_BLOCK must be a power of 2 from 32 to 1024 and INTERAX_ATM_TILE a multiple of 32");
     int elementSize = (cc.getUseDoublePrecision() ? sizeof(mm_double4) : sizeof(mm_float4));
     sites.initialize(cc, numSites, elementSize, "interaxSites");
     neighbors.initialize<int>(cc, numSites*maxNeighbors, "interaxNeighbors");
@@ -494,7 +481,7 @@ void CommonCalcInteraxThreeBodyForceKernel::initialize(const System& system, con
     sitesAtBuild.initialize(cc, numSites, elementSize, "interaxSitesAtBuild");
     rebuildFlag.initialize<int>(cc, 1, "interaxRebuildFlag");
     rebuildFlag.upload(vector<int>(1, 1));
-    tileBoxes.initialize(cc, 2*numSites*((maxNeighbors+tileSize-1)/tileSize), elementSize, "interaxTileBoxes");
+    tileBoxes.initialize(cc, 2*numSites*((maxNeighbors+TileSize-1)/TileSize), elementSize, "interaxTileBoxes");
     activeNeighbors.initialize<int>(cc, numSites*maxNeighbors, "interaxActiveNeighbors");
     numActive.initialize<int>(cc, numSites, "interaxNumActive");
     maxNeighborCount.initialize<int>(cc, 1, "interaxMaxNeighborCount");
@@ -523,9 +510,9 @@ void CommonCalcInteraxThreeBodyForceKernel::initialize(const System& system, con
     useCentroidDamping = (force.getCentroidDampingRadius() > 0);
     if (useCentroidDamping)
         defines["USE_CENTROID_DAMPING"] = "1";
-    defines["TILE_SIZE"] = cc.intToString(tileSize);
-    defines["TRIPLE_BLOCK_SIZE"] = cc.intToString(tripleBlockSize);
-    defines["NEIGHBOR_BLOCK_SIZE"] = "128";
+    defines["TILE_SIZE"] = cc.intToString(TileSize);
+    defines["TRIPLE_BLOCK_SIZE"] = cc.intToString(TripleBlockSize);
+    defines["NEIGHBOR_BLOCK_SIZE"] = cc.intToString(NeighborBlockSize);
     ComputeProgram program = cc.compileProgram(CommonInteraxKernelSources::interaxThreeBody, defines);
     sitesKernel = program->createKernel("computeSites");
     sitesKernel->addArg(numSites);
@@ -596,12 +583,10 @@ double CommonCalcInteraxThreeBodyForceKernel::execute(ContextImpl& context, bool
     setPeriodicBoxArgs(cc, neighborsKernel, 9);
     setPeriodicBoxArgs(cc, compactKernel, 8);
     setPeriodicBoxArgs(cc, triplesKernel, 12);
-    if (forceRebuild)
-        rebuildFlag.upload(vector<int>(1, 1));
     sitesKernel->execute(numSites);
-    neighborsKernel->execute(32*numSites, 128);  // a warp per site (a thread per site on GPUs before sm_70)
-    compactKernel->execute(32*numSites, 128);  // a warp per site
-    triplesKernel->execute(numSites*tripleBlockSize, tripleBlockSize);
+    neighborsKernel->execute(32*numSites, NeighborBlockSize); // a warp per site (a thread per site before sm_70)
+    compactKernel->execute(32*numSites, NeighborBlockSize); // a warp per site
+    triplesKernel->execute(numSites*TripleBlockSize, TripleBlockSize);
     applyForcesKernel->execute(numSites);
     hasComputed = true;
     return 0.0;
@@ -616,7 +601,7 @@ void CommonCalcInteraxThreeBodyForceKernel::checkNeighborListSize() {
         return;
     maxNeighbors = min(numSites, (int) (1.2*count[0])+16);
     neighbors.resize(numSites*maxNeighbors);
-    tileBoxes.resize(2*numSites*((maxNeighbors+tileSize-1)/tileSize));
+    tileBoxes.resize(2*numSites*((maxNeighbors+TileSize-1)/TileSize));
     activeNeighbors.resize(numSites*maxNeighbors);
     neighborsKernel->setArg(1, maxNeighbors);
     neighborsKernel->setArg(4, neighbors);
@@ -627,7 +612,7 @@ void CommonCalcInteraxThreeBodyForceKernel::checkNeighborListSize() {
     triplesKernel->setArg(1, maxNeighbors);
     triplesKernel->setArg(5, activeNeighbors);
     triplesKernel->setArg(11, tileBoxes);
-    rebuildFlag.upload(vector<int>(1, 1)); // the enlarged lists are empty
+    rebuildFlag.upload(vector<int>(1, 1)); // The enlarged lists are empty.
 }
 
 void CommonCalcInteraxThreeBodyForceKernel::copyParametersToContext(ContextImpl& context, const InteraxThreeBodyForce& force) {

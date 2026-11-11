@@ -40,7 +40,7 @@
 namespace InteraxPlugin {
 
 /**
- * This is the common (CUDA and OpenCL) implementation of the InteraxFF pair forces. Each force adds its interaction
+ * This is the common compute implementation of the InteraxFF pair forces. Each force adds its interaction
  * to the nonbonded kernel of the context (NonbondedUtilities), so all pair forces with the same cutoff and
  * exclusions are evaluated together, in one pass over the neighbor list.
  */
@@ -237,12 +237,11 @@ public:
 private:
     class ForceInfo;
     class NeighborListPostComputation;
-    // The triples kernel runs one block of tripleBlockSize threads per site, over tiles of tileSize neighbors (defaults
-    // below; the environment variables INTERAX_ATM_BLOCK and INTERAX_ATM_TILE override them, for benchmarking only).
-    static const int DefaultTripleBlockSize = 256;
-    static const int DefaultTileSize = 128;
-    int tripleBlockSize, tileSize;
-    bool forceRebuild;
+    // The triples kernel runs one block of TripleBlockSize threads per site, over tiles of TileSize neighbors.
+    static const int TripleBlockSize = 256;
+    static const int TileSize = 128;
+    // The neighbor list kernels run blocks of NeighborBlockSize threads, a warp per site.
+    static const int NeighborBlockSize = 128;
     // The skin (nm) of the neighbor lists: they hold the sites within the cutoff plus the skin, rebuilt when a site has
     // moved by more than half of it.
     static constexpr double NeighborSkin = 0.1;
