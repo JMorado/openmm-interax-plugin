@@ -287,5 +287,5 @@ Reference platform only.
 License
 =======
 
-The plugin is distributed under the MIT license, stated in the header of each source file; the files derived from
-OpenMM keep OpenMM's copyright notices. `third_party/pocketfft` is distributed under the BSD license.
+The plugin is distributed under the MIT license (`LICENSE`), also stated in the header of each source file; the files
+derived from OpenMM keep OpenMM's copyright notices. `third_party/pocketfft` is distributed under the BSD license.
