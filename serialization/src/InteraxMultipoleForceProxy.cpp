@@ -40,7 +40,7 @@ InteraxMultipoleForceProxy::InteraxMultipoleForceProxy() : SerializationProxy("I
 }
 
 void InteraxMultipoleForceProxy::serialize(const void* object, SerializationNode& node) const {
-    node.setIntProperty("version", 2);  // 2: chiralityMode
+    node.setIntProperty("version", 1);
     const InteraxMultipoleForce& force = *reinterpret_cast<const InteraxMultipoleForce*>(object);
     node.setIntProperty("forceGroup", force.getForceGroup());
     node.setStringProperty("name", force.getName());
@@ -88,8 +88,7 @@ void InteraxMultipoleForceProxy::serialize(const void* object, SerializationNode
 }
 
 void* InteraxMultipoleForceProxy::deserialize(const SerializationNode& node) const {
-    int version = node.getIntProperty("version");
-    if (version < 1 || version > 2)
+    if (node.getIntProperty("version") != 1)
         throw OpenMMException("Unsupported version number");
     InteraxMultipoleForce* force = new InteraxMultipoleForce();
     try {
@@ -100,10 +99,10 @@ void* InteraxMultipoleForceProxy::deserialize(const SerializationNode& node) con
         force->setEwaldErrorTolerance(node.getDoubleProperty("ewaldErrorTolerance"));
         force->setPMEParameters(node.getDoubleProperty("pmeAlpha"), node.getIntProperty("pmeNx"), node.getIntProperty("pmeNy"), node.getIntProperty("pmeNz"));
         force->setCoreDamping(node.getBoolProperty("coreDamping"));
-        force->setUseOwnKernel(node.getBoolProperty("useOwnKernel", false));
-        force->setChiralityMode((InteraxMultipoleForce::ChiralityMode) node.getIntProperty("chiralityMode", InteraxMultipoleForce::AmoebaChirality));
+        force->setUseOwnKernel(node.getBoolProperty("useOwnKernel"));
+        force->setChiralityMode((InteraxMultipoleForce::ChiralityMode) node.getIntProperty("chiralityMode"));
         force->setMutualDampingScale(node.getDoubleProperty("mutualDampingScale"));
-        force->setCoreDampingScale(node.getDoubleProperty("coreDampingScale", 1.0));
+        force->setCoreDampingScale(node.getDoubleProperty("coreDampingScale"));
         force->setAlchemicalParameterName(node.getStringProperty("alchemicalParameter"));
         vector<double> coefficients;
         for (auto& c : node.getChildNode("ExtrapolationCoefficients").getChildren())

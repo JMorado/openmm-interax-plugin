@@ -90,11 +90,6 @@ void testSerialization(double centroidDampingRadius) {
     unique_ptr<InteraxThreeBodyForce> copy(XmlSerializer::deserialize<InteraxThreeBodyForce>(buffer));
     compareForces(force, *copy);
 
-    // Without centroid damping version 2 is written (readable by older builds), with it version 3.
-
-    string expectedVersion = (centroidDampingRadius == 0 ? "version=\"2\"" : "version=\"3\"");
-    ASSERT(buffer.str().find(expectedVersion) != string::npos);
-
     // Serializing the copy gives the same XML.
 
     stringstream buffer2;
@@ -102,36 +97,12 @@ void testSerialization(double centroidDampingRadius) {
     ASSERT_EQUAL(buffer.str(), buffer2.str());
 }
 
-void testVersion1() {
-    // Version 1 had one site per molecule (the centroid of its particles), without damping.
-
-    string xml = "<?xml version=\"1.0\" ?>\n"
-        "<Force alchemicalParameter=\"lambda_sterics\" cutoff=\"1.2\" forceGroup=\"3\" name=\"CustomCentroidBondForce\" scaleFactor=\"1.5\" "
-        "type=\"InteraxThreeBodyForce\" usesPeriodic=\"1\" version=\"1\">\n"
-        "<Molecules>\n"
-        "<Molecule alchemical=\"0\" alpha=\".004087456746801944\" frequency=\"911.0681141195369\"><Particle index=\"0\"/><Particle index=\"1\"/></Molecule>\n"
-        "<Molecule alchemical=\"1\" alpha=\".0016246535729804365\" frequency=\"1262.664320774599\"><Particle index=\"2\"/></Molecule>\n"
-        "</Molecules>\n"
-        "</Force>\n";
-    stringstream buffer(xml);
-    unique_ptr<InteraxThreeBodyForce> force(XmlSerializer::deserialize<InteraxThreeBodyForce>(buffer));
-    InteraxThreeBodyForce expected;
-    expected.setForceGroup(3);
-    expected.setName("CustomCentroidBondForce");
-    expected.setCutoffDistance(1.2);
-    expected.setScaleFactor(1.5);
-    expected.setUsesPeriodicBoundaryConditions(true);
-    expected.addSite({0, 1}, 0.004087456746801944, 911.0681141195369, 0.0, -1, false);
-    expected.addSite({2}, 0.0016246535729804365, 1262.664320774599, 0.0, -1, true);
-    compareForces(expected, *force);
-}
-
 void testUnsupportedVersion() {
     InteraxThreeBodyForce force;
     stringstream buffer;
     XmlSerializer::serialize<InteraxThreeBodyForce>(&force, "Force", buffer);
     string xml = buffer.str();
-    xml.replace(xml.find("version=\"2\""), 11, "version=\"4\"");
+    xml.replace(xml.find("version=\"1\""), 11, "version=\"2\"");
     stringstream modified(xml);
     bool failed = false;
     try {
@@ -147,7 +118,6 @@ int main() {
     try {
         testSerialization(0.0);
         testSerialization(0.25);
-        testVersion1();
         testUnsupportedVersion();
     }
     catch(const exception& e) {

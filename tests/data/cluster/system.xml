@@ -53,7 +53,7 @@
 	</Particles>
 	<Constraints/>
 	<Forces>
-		<Force alchemicalParameter="lambda_sterics" cutoff="1" dampingScale=".7155241370201111" forceGroup="0" method="0" name="CustomNonbondedForce" switchingDistance="-1" type="InteraxDispersionForce" useLongRangeCorrection="0" useSwitchingFunction="0" version="1">
+		<Force alchemicalParameter="lambda_sterics" cutoff="1" dampingScale=".7155241370201111" forceGroup="0" method="0" name="CustomNonbondedForce" softcoreRadius="0" switchingDistance="-1" type="InteraxDispersionForce" useLongRangeCorrection="0" useSwitchingFunction="0" version="1">
 			<Particles>
 				<Particle alchemical="0" alpha=".0020393931939312773" m1="2.0412491330659432" m2=".07991696226413432" m3=".003917538949072952" width=".026844933830306183"/>
 				<Particle alchemical="0" alpha=".0012613225562556841" m1="2.179116829570064" m2=".05077216863583387" m3=".001421435052885423" width=".021090413137365274"/>
@@ -267,7 +267,7 @@
 				<Exclusion p1="42" p2="43"/>
 			</Exclusions>
 		</Force>
-		<Force alchemicalParameter="lambda_sterics" cutoff="1" forceGroup="1" method="0" name="CustomNonbondedForce" overlapMethod="2" switchingDistance="-1" type="InteraxExchangeForce" useSwitchingFunction="0" version="1">
+		<Force alchemicalParameter="lambda_sterics" cutoff="1" forceGroup="1" method="0" name="CustomNonbondedForce" overlapMethod="2" softcoreRadius="0" switchingDistance="-1" type="InteraxExchangeForce" useSwitchingFunction="0" version="1">
 			<Particles>
 				<Particle alchemical="0" amplitude="4.338506393097467" width=".02738393253463454"/>
 				<Particle alchemical="0" amplitude="8.70182875573623" width=".0229607720122067"/>
@@ -481,7 +481,7 @@
 				<Exclusion p1="42" p2="43"/>
 			</Exclusions>
 		</Force>
-		<Force alchemicalParameter="lambda_sterics" cutoff="1" forceGroup="2" method="0" name="CustomNonbondedForce" overlapMethod="2" switchingDistance="-1" type="InteraxShortRangeForce" useSwitchingFunction="0" version="1">
+		<Force alchemicalParameter="lambda_sterics" cutoff="1" forceGroup="2" method="0" name="CustomNonbondedForce" overlapMethod="2" softcoreRadius="0" switchingDistance="-1" type="InteraxShortRangeForce" useSwitchingFunction="0" version="1">
 			<Particles>
 				<Particle alchemical="0" k="1726.692841685559" l="188224.77974552507" width=".026844933830306183"/>
 				<Particle alchemical="0" k="-3045.6001511016634" l="17851.56396330975" width=".021090413137365274"/>
@@ -695,41 +695,41 @@
 				<Exclusion p1="42" p2="43"/>
 			</Exclusions>
 		</Force>
-		<Force alchemicalParameter="lambda_sterics" cutoff="1.2" forceGroup="3" name="CustomCentroidBondForce" scaleFactor="1.0000000000000009" type="InteraxThreeBodyForce" usesPeriodic="0" version="1">
-			<Molecules>
-				<Molecule alchemical="0" alpha=".004087456746801944" frequency="911.0681141195369">
+		<Force alchemicalParameter="lambda_sterics" centroidDampingRadius="0" cutoff="1.2" dampingMethod="0" dampingScale="1" forceGroup="3" name="CustomCentroidBondForce" scaleFactor="1.0000000000000009" type="InteraxThreeBodyForce" usesPeriodic="0" version="1">
+			<Sites>
+				<Site alchemical="0" alpha=".004087456746801944" frequency="911.0681141195369" molecule="-1" width="0">
 					<Particle index="0"/>
 					<Particle index="1"/>
-				</Molecule>
-				<Molecule alchemical="0" alpha=".0016246535729804365" frequency="1262.664320774599">
+				</Site>
+				<Site alchemical="0" alpha=".0016246535729804365" frequency="1262.664320774599" molecule="-1" width="0">
 					<Particle index="6"/>
-				</Molecule>
-				<Molecule alchemical="0" alpha=".008817709933796472" frequency="747.5256543931184">
+				</Site>
+				<Site alchemical="0" alpha=".008817709933796472" frequency="747.5256543931184" molecule="-1" width="0">
 					<Particle index="9"/>
 					<Particle index="10"/>
 					<Particle index="11"/>
 					<Particle index="12"/>
-				</Molecule>
-				<Molecule alchemical="0" alpha=".012423454999358104" frequency="702.9782289776065">
+				</Site>
+				<Site alchemical="0" alpha=".012423454999358104" frequency="702.9782289776065" molecule="-1" width="0">
 					<Particle index="19"/>
 					<Particle index="20"/>
 					<Particle index="21"/>
 					<Particle index="22"/>
 					<Particle index="23"/>
 					<Particle index="24"/>
-				</Molecule>
-				<Molecule alchemical="0" alpha=".010210128757427384" frequency="670.9747933235909">
+				</Site>
+				<Site alchemical="0" alpha=".010210128757427384" frequency="670.9747933235909" molecule="-1" width="0">
 					<Particle index="30"/>
 					<Particle index="31"/>
 					<Particle index="32"/>
-				</Molecule>
-				<Molecule alchemical="0" alpha=".01091894724777136" frequency="805.1370181246539">
+				</Site>
+				<Site alchemical="0" alpha=".01091894724777136" frequency="805.1370181246539" molecule="-1" width="0">
 					<Particle index="39"/>
 					<Particle index="40"/>
 					<Particle index="41"/>
 					<Particle index="42"/>
-				</Molecule>
-			</Molecules>
+				</Site>
+			</Sites>
 		</Force>
 	</Forces>
 </System>

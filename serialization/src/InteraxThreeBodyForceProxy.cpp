@@ -41,11 +41,8 @@ InteraxThreeBodyForceProxy::InteraxThreeBodyForceProxy() : SerializationProxy("I
 }
 
 void InteraxThreeBodyForceProxy::serialize(const void* object, SerializationNode& node) const {
+    node.setIntProperty("version", 1);
     const InteraxThreeBodyForce& force = *reinterpret_cast<const InteraxThreeBodyForce*>(object);
-    // Version 3 adds the centroid damping radius. Without centroid damping version 2 is written, which builds that
-    // predate the centroid damping can read.
-    bool centroidDamping = (force.getCentroidDampingRadius() != 0.0);
-    node.setIntProperty("version", centroidDamping ? 3 : 2);
     node.setIntProperty("forceGroup", force.getForceGroup());
     node.setStringProperty("name", force.getName());
     node.setDoubleProperty("cutoff", force.getCutoffDistance());
@@ -54,8 +51,7 @@ void InteraxThreeBodyForceProxy::serialize(const void* object, SerializationNode
     node.setStringProperty("alchemicalParameter", force.getAlchemicalParameterName());
     node.setIntProperty("dampingMethod", (int) force.getDampingMethod());
     node.setDoubleProperty("dampingScale", force.getDampingScale());
-    if (centroidDamping)
-        node.setDoubleProperty("centroidDampingRadius", force.getCentroidDampingRadius());
+    node.setDoubleProperty("centroidDampingRadius", force.getCentroidDampingRadius());
     SerializationNode& sites = node.createChildNode("Sites");
     for (int i = 0; i < force.getNumSites(); i++) {
         vector<int> particles;
@@ -72,8 +68,7 @@ void InteraxThreeBodyForceProxy::serialize(const void* object, SerializationNode
 }
 
 void* InteraxThreeBodyForceProxy::deserialize(const SerializationNode& node) const {
-    int version = node.getIntProperty("version");
-    if (version < 1 || version > 3)
+    if (node.getIntProperty("version") != 1)
         throw OpenMMException("Unsupported version number");
     InteraxThreeBodyForce* force = new InteraxThreeBodyForce();
     try {
@@ -83,21 +78,9 @@ void* InteraxThreeBodyForceProxy::deserialize(const SerializationNode& node) con
         force->setScaleFactor(node.getDoubleProperty("scaleFactor"));
         force->setUsesPeriodicBoundaryConditions(node.getBoolProperty("usesPeriodic"));
         force->setAlchemicalParameterName(node.getStringProperty("alchemicalParameter"));
-        if (version == 1) {
-            // Version 1: one site per molecule, without damping.
-            for (auto& molecule : node.getChildNode("Molecules").getChildren()) {
-                vector<int> particles;
-                for (auto& particle : molecule.getChildren())
-                    particles.push_back(particle.getIntProperty("index"));
-                force->addSite(particles, molecule.getDoubleProperty("alpha"), molecule.getDoubleProperty("frequency"), 0.0, -1,
-                        molecule.getBoolProperty("alchemical"));
-            }
-            return force;
-        }
         force->setDampingMethod((InteraxThreeBodyForce::DampingMethod) node.getIntProperty("dampingMethod"));
         force->setDampingScale(node.getDoubleProperty("dampingScale"));
-        if (version >= 3)
-            force->setCentroidDampingRadius(node.getDoubleProperty("centroidDampingRadius"));
+        force->setCentroidDampingRadius(node.getDoubleProperty("centroidDampingRadius"));
         const SerializationNode& sites = node.getChildNode("Sites");
         for (auto& site : sites.getChildren()) {
             vector<int> particles;

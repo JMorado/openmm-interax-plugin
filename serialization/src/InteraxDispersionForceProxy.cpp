@@ -80,7 +80,7 @@ void* InteraxDispersionForceProxy::deserialize(const SerializationNode& node) co
         force->setUseSwitchingFunction(node.getBoolProperty("useSwitchingFunction"));
         force->setSwitchingDistance(node.getDoubleProperty("switchingDistance"));
         force->setAlchemicalParameterName(node.getStringProperty("alchemicalParameter"));
-        force->setSoftcoreRadius(node.getDoubleProperty("softcoreRadius", 0.0));
+        force->setSoftcoreRadius(node.getDoubleProperty("softcoreRadius"));
         force->setDampingScale(node.getDoubleProperty("dampingScale"));
         force->setUseLongRangeCorrection(node.getBoolProperty("useLongRangeCorrection"));
         const SerializationNode& particles = node.getChildNode("Particles");

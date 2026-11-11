@@ -181,8 +181,6 @@ def test_centroid_damping_off_is_unchanged():
 def test_serialization(centroid_r0):
     system, force, positions = make_system(True, centroid_r0=centroid_r0)
     xml = openmm.XmlSerializer.serialize(force)
-    # Without centroid damping the version 2 format is written (readable by older builds)
-    assert ('version="2"' in xml) == (centroid_r0 == 0.0) and ("centroidDampingRadius" in xml) == (centroid_r0 != 0.0)
     deserialized = openmm.XmlSerializer.deserialize(xml)
     copy = ip.InteraxThreeBodyForce.cast(deserialized)  # deserialized keeps ownership of the force
     assert copy.getNumSites() == force.getNumSites()

@@ -169,27 +169,12 @@ void testDefaults() {
     ASSERT_EQUAL(string("lambda_electrostatics"), copy->getAlchemicalParameterName());
 }
 
-void testVersion1() {
-    // A force serialized before the chirality mode (version 1) gets the default, AmoebaChirality.
-
-    InteraxMultipoleForce force;
-    force.setChiralityMode(InteraxMultipoleForce::NoChirality);
-    stringstream buffer;
-    XmlSerializer::serialize<InteraxMultipoleForce>(&force, "Force", buffer);
-    string xml = buffer.str();
-    xml.replace(xml.find("version=\"2\""), 11, "version=\"1\"");
-    xml.replace(xml.find(" chiralityMode=\"0\""), 18, "");
-    stringstream modified(xml);
-    unique_ptr<InteraxMultipoleForce> copy(XmlSerializer::deserialize<InteraxMultipoleForce>(modified));
-    ASSERT_EQUAL(InteraxMultipoleForce::AmoebaChirality, copy->getChiralityMode());
-}
-
 void testUnsupportedVersion() {
     InteraxMultipoleForce force;
     stringstream buffer;
     XmlSerializer::serialize<InteraxMultipoleForce>(&force, "Force", buffer);
     string xml = buffer.str();
-    xml.replace(xml.find("version=\"2\""), 11, "version=\"3\"");
+    xml.replace(xml.find("version=\"1\""), 11, "version=\"2\"");
     stringstream modified(xml);
     bool failed = false;
     try {
@@ -205,7 +190,6 @@ int main() {
     try {
         testSerialization();
         testDefaults();
-        testVersion1();
         testUnsupportedVersion();
     }
     catch(const exception& e) {

@@ -76,11 +76,11 @@ void* InteraxExchangeForceProxy::deserialize(const SerializationNode& node) cons
         force->setName(node.getStringProperty("name", force->getName()));
         force->setNonbondedMethod((InteraxPairForce::NonbondedMethod) node.getIntProperty("method"));
         force->setCutoffDistance(node.getDoubleProperty("cutoff"));
-        force->setOverlapMethod((InteraxExchangeForce::OverlapMethod) node.getIntProperty("overlapMethod", 0));
+        force->setOverlapMethod((InteraxExchangeForce::OverlapMethod) node.getIntProperty("overlapMethod"));
         force->setUseSwitchingFunction(node.getBoolProperty("useSwitchingFunction"));
         force->setSwitchingDistance(node.getDoubleProperty("switchingDistance"));
         force->setAlchemicalParameterName(node.getStringProperty("alchemicalParameter"));
-        force->setSoftcoreRadius(node.getDoubleProperty("softcoreRadius", 0.0));
+        force->setSoftcoreRadius(node.getDoubleProperty("softcoreRadius"));
         const SerializationNode& particles = node.getChildNode("Particles");
         for (auto& particle : particles.getChildren())
             force->addParticle(particle.getDoubleProperty("amplitude"), particle.getDoubleProperty("width"), particle.getBoolProperty("alchemical"));
