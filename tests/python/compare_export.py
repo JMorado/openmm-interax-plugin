@@ -20,6 +20,7 @@ import argparse
 import os
 import shutil
 import sys
+import tempfile
 import warnings
 
 warnings.filterwarnings("ignore")
@@ -122,8 +123,11 @@ def cluster_topology():
 def box_topology():
     mol = Molecule.from_smiles("CO")
     mol.generate_conformers(n_conformers=1)
-    topology = pack_box(molecules=[mol], number_of_copies=[140], target_density=0.79 * off_unit.gram / off_unit.milliliter,
-                        box_shape=UNIT_CUBE)
+    # packmol works in a temporary directory, removed afterwards even if it fails
+    with tempfile.TemporaryDirectory() as directory:
+        topology = pack_box(molecules=[mol], number_of_copies=[140], target_density=0.79 * off_unit.gram / off_unit.milliliter,
+                            box_shape=UNIT_CUBE,
+                            working_directory=directory)
     return topology, topology.get_positions().m_as(off_unit.nanometer)
 
 

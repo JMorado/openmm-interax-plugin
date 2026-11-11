@@ -17,6 +17,7 @@ Usage: python benchmark.py [--platforms Reference CPU CUDA] [--systems methanol 
 Run with the interax environment; the plugin is loaded from PLUGIN_PREFIX.
 """
 import argparse
+import tempfile
 import time
 
 from compare_export import COMPONENTS, interaxplugin, interaxplugin_convert, load_model, openmm
@@ -38,8 +39,11 @@ def build(name):
         molecules, counts, density = [Molecule.from_smiles("CCO"), Molecule.from_smiles("O")], [1, 500], 1.0
     for molecule in molecules:
         molecule.generate_conformers(n_conformers=1)
-    topology = pack_box(molecules=molecules, number_of_copies=counts, target_density=density * off_unit.gram / off_unit.milliliter,
-                        box_shape=UNIT_CUBE)
+    # packmol works in a temporary directory, removed afterwards even if it fails
+    with tempfile.TemporaryDirectory() as directory:
+        topology = pack_box(molecules=molecules, number_of_copies=counts, target_density=density * off_unit.gram / off_unit.milliliter,
+                            box_shape=UNIT_CUBE,
+                            working_directory=directory)
     return topology, topology.get_positions().m_as(off_unit.nanometer)
 
 
