@@ -1,10 +1,14 @@
+# Part of the OpenMM InteraxFF plugin. Copyright (c) 2026 the Authors. MIT license, see LICENSE.
+
 #---------------------------------------------------
-# OpenMM Example Plugin
+# OpenMM InteraxFF Plugin
 #----------------------------------------------------
 
 CMAKE_MINIMUM_REQUIRED(VERSION 3.17)
 
-PROJECT(OpenMMExamplePlugin)
+# The version number is set here and copied to anywhere it is needed (the library, the Python package).
+PROJECT(OpenMMInteraxPlugin VERSION 0.1.0)
+SET(INTERAX_PLUGIN_VERSION ${PROJECT_VERSION})
 
 # We need to know where OpenMM is installed so we can access the headers and libraries.
 SET(OPENMM_DIR "/usr/local/openmm" CACHE PATH "Where OpenMM is installed")
@@ -12,30 +16,36 @@ INCLUDE_DIRECTORIES("${OPENMM_DIR}/include")
 LINK_DIRECTORIES("${OPENMM_DIR}/lib" "${OPENMM_DIR}/lib/plugins")
 
 # Specify the C++ version we are building for.
-SET (CMAKE_CXX_STANDARD 11)
+SET(CMAKE_CXX_STANDARD 11)
+IF(NOT CMAKE_BUILD_TYPE)
+    SET(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
+ENDIF(NOT CMAKE_BUILD_TYPE)
 
 # Set flags for linking on mac
 IF(APPLE)
-    SET (CMAKE_INSTALL_NAME_DIR "@rpath")
+    SET(CMAKE_INSTALL_NAME_DIR "@rpath")
     SET(EXTRA_COMPILE_FLAGS "-msse2 -stdlib=libc++")
 ENDIF(APPLE)
 
 # Select where to install
 IF(${CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT})
-    IF(WIN32)
-        SET(CMAKE_INSTALL_PREFIX "$ENV{ProgramFiles}/OpenMM" CACHE PATH "Where to install the plugin" FORCE)
-    ELSE(WIN32)
-        SET(CMAKE_INSTALL_PREFIX "/usr/local/openmm" CACHE PATH "Where to install the plugin" FORCE)
-    ENDIF(WIN32)
+    SET(CMAKE_INSTALL_PREFIX ${OPENMM_DIR} CACHE PATH "Where to install the plugin" FORCE)
 ENDIF(${CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT})
+
+# Libraries find the core plugin library and OpenMM where they are installed.
+SET(CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/lib;${OPENMM_DIR}/lib")
+# The test executables link OpenMM's platform libraries, whose own dependencies (e.g. nvrtc) are next to OpenMM.
+IF(NOT APPLE)
+    SET(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,-rpath-link,${OPENMM_DIR}/lib -Wl,-rpath,${OPENMM_DIR}/lib")
+ENDIF(NOT APPLE)
 
 # The source is organized into subdirectories, but we handle them all from
 # this CMakeLists file rather than letting CMake visit them as SUBDIRS.
-SET(EXAMPLE_PLUGIN_SOURCE_SUBDIRS openmmapi serialization)
+SET(INTERAX_PLUGIN_SOURCE_SUBDIRS openmmapi serialization)
 
 # Set the library name
-SET(EXAMPLE_LIBRARY_NAME ExamplePlugin)
-SET(SHARED_EXAMPLE_TARGET ${EXAMPLE_LIBRARY_NAME})
+SET(INTERAX_LIBRARY_NAME InteraxPlugin)
+SET(SHARED_INTERAX_TARGET ${INTERAX_LIBRARY_NAME})
 
 # These are all the places to search for header files which are to be part of the API.
 SET(API_INCLUDE_DIRS "openmmapi/include" "openmmapi/include/internal")
@@ -50,7 +60,7 @@ ENDFOREACH(dir)
 # Collect up source files
 SET(SOURCE_FILES) # empty
 SET(SOURCE_INCLUDE_FILES)
-FOREACH(subdir ${EXAMPLE_PLUGIN_SOURCE_SUBDIRS})
+FOREACH(subdir ${INTERAX_PLUGIN_SOURCE_SUBDIRS})
     FILE(GLOB src_files  ${CMAKE_CURRENT_SOURCE_DIR}/${subdir}/src/*.cpp)
     FILE(GLOB incl_files ${CMAKE_CURRENT_SOURCE_DIR}/${subdir}/src/*.h)
     SET(SOURCE_FILES         ${SOURCE_FILES}         ${src_files})   #append
@@ -61,62 +71,75 @@ FOREACH(subdir ${EXAMPLE_PLUGIN_SOURCE_SUBDIRS})
     INCLUDE_DIRECTORIES(BEFORE ${CMAKE_CURRENT_SOURCE_DIR}/${subdir}/include)
 ENDFOREACH(subdir)
 
+# Build stamp: the plugin version and the git commit of the source ("-dirty" with uncommitted changes), returned by
+# InteraxPlugin::getPluginVersion() and getPluginGitCommit(). Written at configure time and refreshed before every build
+# (devtools/stamp_version.cmake), so a rebuild without re-running CMake still records the current commit.
+SET(INTERAX_VERSION_CPP ${CMAKE_CURRENT_BINARY_DIR}/InteraxPluginVersion.cpp)
+EXECUTE_PROCESS(COMMAND ${CMAKE_COMMAND} -DSOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR} -DOUTPUT=${INTERAX_VERSION_CPP}
+                -DVERSION=${INTERAX_PLUGIN_VERSION} -P ${CMAKE_CURRENT_SOURCE_DIR}/devtools/stamp_version.cmake)
+ADD_CUSTOM_TARGET(InteraxPluginVersionStamp
+    COMMAND ${CMAKE_COMMAND} -DSOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR} -DOUTPUT=${INTERAX_VERSION_CPP}
+            -DVERSION=${INTERAX_PLUGIN_VERSION} -P ${CMAKE_CURRENT_SOURCE_DIR}/devtools/stamp_version.cmake
+    BYPRODUCTS ${INTERAX_VERSION_CPP}
+    COMMENT "Stamping the InteraxFF plugin build")
+SET(SOURCE_FILES ${SOURCE_FILES} ${INTERAX_VERSION_CPP})
+
 # Create the library.
 
-ADD_LIBRARY(${SHARED_EXAMPLE_TARGET} SHARED ${SOURCE_FILES} ${SOURCE_INCLUDE_FILES} ${API_INCLUDE_FILES})
-SET_TARGET_PROPERTIES(${SHARED_EXAMPLE_TARGET}
-    PROPERTIES COMPILE_FLAGS "-DEXAMPLE_BUILDING_SHARED_LIBRARY ${EXTRA_COMPILE_FLAGS}"
+ADD_LIBRARY(${SHARED_INTERAX_TARGET} SHARED ${SOURCE_FILES} ${SOURCE_INCLUDE_FILES} ${API_INCLUDE_FILES})
+SET_TARGET_PROPERTIES(${SHARED_INTERAX_TARGET}
+    PROPERTIES COMPILE_FLAGS "-DINTERAX_BUILDING_SHARED_LIBRARY ${EXTRA_COMPILE_FLAGS}"
     LINK_FLAGS "${EXTRA_COMPILE_FLAGS}")
-TARGET_LINK_LIBRARIES(${SHARED_EXAMPLE_TARGET} OpenMM)
-INSTALL_TARGETS(/lib RUNTIME_DIRECTORY /lib ${SHARED_EXAMPLE_TARGET})
+TARGET_LINK_LIBRARIES(${SHARED_INTERAX_TARGET} OpenMM)
+ADD_DEPENDENCIES(${SHARED_INTERAX_TARGET} InteraxPluginVersionStamp)
+INSTALL(TARGETS ${SHARED_INTERAX_TARGET} DESTINATION lib)
 
 # install headers
 FILE(GLOB API_ONLY_INCLUDE_FILES "openmmapi/include/*.h")
-INSTALL (FILES ${API_ONLY_INCLUDE_FILES} DESTINATION include)
+INSTALL(FILES ${API_ONLY_INCLUDE_FILES} DESTINATION include)
 FILE(GLOB API_ONLY_INCLUDE_FILES_INTERNAL "openmmapi/include/internal/*.h")
-INSTALL (FILES ${API_ONLY_INCLUDE_FILES_INTERNAL} DESTINATION include/internal)
+INSTALL(FILES ${API_ONLY_INCLUDE_FILES_INTERNAL} DESTINATION include/internal)
 
 # Enable testing
 
 ENABLE_TESTING()
 ADD_SUBDIRECTORY(serialization/tests)
+# The platform tests share the test headers in tests.
+INCLUDE_DIRECTORIES(${CMAKE_CURRENT_SOURCE_DIR}/tests)
 
 # Build the implementations for different platforms
 
 ADD_SUBDIRECTORY(platforms/reference)
-ADD_SUBDIRECTORY(platforms/common)
-
-SET(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}")
-FIND_PACKAGE(OPENCL QUIET)
-IF(OPENCL_FOUND)
-    SET(EXAMPLE_BUILD_OPENCL_LIB ON CACHE BOOL "Build implementation for OpenCL")
-ELSE(OPENCL_FOUND)
-    SET(EXAMPLE_BUILD_OPENCL_LIB OFF CACHE BOOL "Build implementation for OpenCL")
-ENDIF(OPENCL_FOUND)
-IF(EXAMPLE_BUILD_OPENCL_LIB)
-    ADD_SUBDIRECTORY(platforms/opencl)
-ENDIF(EXAMPLE_BUILD_OPENCL_LIB)
-
-FIND_PACKAGE(CUDA QUIET)
-IF(CUDA_FOUND)
-    SET(EXAMPLE_BUILD_CUDA_LIB ON CACHE BOOL "Build implementation for CUDA")
-ELSE(CUDA_FOUND)
-    SET(EXAMPLE_BUILD_CUDA_LIB OFF CACHE BOOL "Build implementation for CUDA")
-ENDIF(CUDA_FOUND)
-IF(EXAMPLE_BUILD_CUDA_LIB)
-    ADD_SUBDIRECTORY(platforms/cuda)
-ENDIF(EXAMPLE_BUILD_CUDA_LIB)
 
 # Build the Python API
 
 FIND_PROGRAM(PYTHON_EXECUTABLE python)
 FIND_PROGRAM(SWIG_EXECUTABLE swig)
 IF(PYTHON_EXECUTABLE AND SWIG_EXECUTABLE)
-    SET(EXAMPLE_BUILD_PYTHON_WRAPPERS ON CACHE BOOL "Build wrappers for Python")
+    SET(INTERAX_BUILD_PYTHON_WRAPPERS ON CACHE BOOL "Build wrappers for Python")
 ELSE(PYTHON_EXECUTABLE AND SWIG_EXECUTABLE)
-    SET(EXAMPLE_BUILD_PYTHON_WRAPPERS OFF CACHE BOOL "Build wrappers for Python")
+    SET(INTERAX_BUILD_PYTHON_WRAPPERS OFF CACHE BOOL "Build wrappers for Python")
 ENDIF(PYTHON_EXECUTABLE AND SWIG_EXECUTABLE)
-IF(EXAMPLE_BUILD_PYTHON_WRAPPERS)
+IF(INTERAX_BUILD_PYTHON_WRAPPERS)
+    # The plugin's module must use the SWIG runtime version of OpenMM's Python module (devtools/openmm_swig_runtime.py):
+    # otherwise its forces are not OpenMM Forces to OpenMM's Python API. SWIG 4.0-4.2 generate runtime 4, 4.3+ runtime 5.
+    FILE(WRITE ${CMAKE_BINARY_DIR}/swig_runtime_check.i "%module swig_runtime_check\n")
+    EXECUTE_PROCESS(COMMAND ${SWIG_EXECUTABLE} -python -c++ -o ${CMAKE_BINARY_DIR}/swig_runtime_check.cpp ${CMAKE_BINARY_DIR}/swig_runtime_check.i
+                    RESULT_VARIABLE SWIG_CHECK_RESULT OUTPUT_QUIET ERROR_QUIET)
+    EXECUTE_PROCESS(COMMAND ${PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/devtools/openmm_swig_runtime.py
+                    OUTPUT_VARIABLE OPENMM_SWIG_RUNTIME OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
+    IF(SWIG_CHECK_RESULT EQUAL 0 AND OPENMM_SWIG_RUNTIME)
+        FILE(STRINGS ${CMAKE_BINARY_DIR}/swig_runtime_check.cpp SWIG_RUNTIME_LINE REGEX "define SWIG_RUNTIME_VERSION")
+        STRING(REGEX MATCH "\"([0-9]+)\"" SWIG_RUNTIME_MATCH "${SWIG_RUNTIME_LINE}")
+        SET(PLUGIN_SWIG_RUNTIME ${CMAKE_MATCH_1})
+        IF(NOT PLUGIN_SWIG_RUNTIME STREQUAL OPENMM_SWIG_RUNTIME)
+            MESSAGE(FATAL_ERROR "${SWIG_EXECUTABLE} generates SWIG runtime ${PLUGIN_SWIG_RUNTIME} but OpenMM's Python module uses "
+                    "runtime ${OPENMM_SWIG_RUNTIME}: the plugin's forces would not work with OpenMM's Python API. Use a SWIG with "
+                    "runtime ${OPENMM_SWIG_RUNTIME} (SWIG 4.0-4.2 for runtime 4, 4.3 or later for runtime 5): set SWIG_EXECUTABLE.")
+        ENDIF()
+        MESSAGE(STATUS "SWIG runtime ${PLUGIN_SWIG_RUNTIME}, the same as OpenMM's Python module")
+    ELSE()
+        MESSAGE(WARNING "Could not compare the SWIG runtime version with OpenMM's Python module (SWIG 4.0-4.2 for runtime 4, 4.3 or later for runtime 5).")
+    ENDIF()
     ADD_SUBDIRECTORY(python)
-ENDIF(EXAMPLE_BUILD_PYTHON_WRAPPERS)
-
+ENDIF(INTERAX_BUILD_PYTHON_WRAPPERS)
