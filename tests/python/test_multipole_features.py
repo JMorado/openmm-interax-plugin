@@ -1,3 +1,4 @@
+# Part of the OpenMM InteraxFF plugin. Copyright (c) 2026 the Authors. MIT license, see LICENSE.
 """
 The InteraxFF options of InteraxMultipoleForce on a GPU platform against the Reference platform, on real InteraxFF
 systems (electrostatics and polarization only):

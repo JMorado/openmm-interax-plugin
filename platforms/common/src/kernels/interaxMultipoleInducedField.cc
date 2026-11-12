@@ -1,3 +1,6 @@
+// Part of the OpenMM InteraxFF plugin. Copyright (c) 2026 the Authors. MIT license, see LICENSE.
+// Derived from the HIPPO kernels of OpenMM, portions copyright (c) 2008-2021 Stanford University and the Authors.
+
 KERNEL void initExtrapolatedDipoles(GLOBAL real* RESTRICT inducedDipole, GLOBAL real* RESTRICT extrapolatedDipole) {
     for (int index = GLOBAL_ID; index < 3*NUM_ATOMS; index += GLOBAL_SIZE) {
         extrapolatedDipole[index] = inducedDipole[index];

@@ -1,3 +1,4 @@
+# Part of the OpenMM InteraxFF plugin. Copyright (c) 2026 the Authors. MIT license, see LICENSE.
 """
 Where the Python tests and scripts find the plugin, InteraxFF and an InteraxFF model, from the environment only:
 

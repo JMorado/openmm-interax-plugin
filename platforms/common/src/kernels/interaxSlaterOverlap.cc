@@ -1,3 +1,5 @@
+// Part of the OpenMM InteraxFF plugin. Copyright (c) 2026 the Authors. MIT license, see LICENSE.
+
 // Overlap integral S(r; a, b) of two normalized Slater densities exp(-r/s)/(8 pi s^3) of widths OVERLAP_WIDTH1 and
 // OVERLAP_WIDTH2 at distance r, and its derivative with respect to r (docs/SPEC.md). This snippet is inserted into
 // the pair interaction code with the placeholders replaced. Nearly equal widths use the Taylor expansion of order

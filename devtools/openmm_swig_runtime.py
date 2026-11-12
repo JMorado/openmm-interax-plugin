@@ -1,3 +1,4 @@
+# Part of the OpenMM InteraxFF plugin. Copyright (c) 2026 the Authors. MIT license, see LICENSE.
 """Print the SWIG runtime version of OpenMM's Python module (the N of swig_runtime_data<N>), or nothing if unknown.
 
 The plugin's Python module must be generated with a SWIG of the same runtime version: SWIG keeps its type tables per

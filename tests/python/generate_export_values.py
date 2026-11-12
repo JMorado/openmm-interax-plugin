@@ -1,3 +1,4 @@
+# Part of the OpenMM InteraxFF plugin. Copyright (c) 2026 the Authors. MIT license, see LICENSE.
 """
 Generate the reference values of the plugin tests (tests/data) from the InteraxFF export.
 

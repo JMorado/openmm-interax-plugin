@@ -1,3 +1,5 @@
+# Part of the OpenMM InteraxFF plugin. Copyright (c) 2026 the Authors. MIT license, see LICENSE.
+
 set(WRAP_FILE InteraxPluginWrapper.cpp)
 set(MODULE_NAME interaxplugin)
 

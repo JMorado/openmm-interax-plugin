@@ -1,3 +1,4 @@
+# Part of the OpenMM InteraxFF plugin. Copyright (c) 2026 the Authors. MIT license, see LICENSE.
 """
 Benchmark the plugin forces against the InteraxFF export they replace.
 

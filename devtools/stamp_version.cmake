@@ -1,3 +1,5 @@
+# Part of the OpenMM InteraxFF plugin. Copyright (c) 2026 the Authors. MIT license, see LICENSE.
+
 # Write the build stamp of the plugin (openmmapi/src/InteraxPluginVersion.cpp.in -> OUTPUT): VERSION and the
 # "git describe --always --dirty" of SOURCE_DIR. Run at configure time and before every build of the library;
 # configure_file() rewrites OUTPUT only when its content changes, so an unchanged commit does not trigger a rebuild.

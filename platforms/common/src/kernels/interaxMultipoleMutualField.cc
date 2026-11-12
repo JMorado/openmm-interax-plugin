@@ -1,3 +1,6 @@
+// Part of the OpenMM InteraxFF plugin. Copyright (c) 2026 the Authors. MIT license, see LICENSE.
+// Derived from the HIPPO kernels of OpenMM, portions copyright (c) 2008-2021 Stanford University and the Authors.
+
 real fdamp3, fdamp5;
 computeMutualFieldDampingFactors(alpha1, alpha2, r, &fdamp3, &fdamp5);
 #ifdef COMPUTING_EXCEPTIONS

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# Part of the OpenMM InteraxFF plugin. Copyright (c) 2026 the Authors. MIT license, see LICENSE.
 # Build the plugin in BUILD_DIR, install it to PREFIX, and run every test suite: the C++ tests (ctest: Reference, CPU,
 # CUDA single/mixed/double), the plugin's Python tests, and InteraxFF's tests (which use the plugin through
 # INTERAX_PLUGIN_PREFIX). Prints one summary line per suite and exits non-zero if any failed.

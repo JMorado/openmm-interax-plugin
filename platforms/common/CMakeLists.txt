@@ -1,3 +1,5 @@
+# Part of the OpenMM InteraxFF plugin. Copyright (c) 2026 the Authors. MIT license, see LICENSE.
+
 #---------------------------------------------------
 # OpenMM InteraxFF Plugin Common Compute Kernels
 #

@@ -1,3 +1,4 @@
+# Part of the OpenMM InteraxFF plugin. Copyright (c) 2026 the Authors. MIT license, see LICENSE.
 """
 Test InteraxThreeBodyForce on its own, without InteraxFF: random sites in a periodic box, in the molecular form (one
 site per molecule, the centroid of several particles, no damping) and the atomic form (one site per atom, triples

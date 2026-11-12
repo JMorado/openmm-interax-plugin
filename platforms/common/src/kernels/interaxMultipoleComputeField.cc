@@ -1,3 +1,6 @@
+// Part of the OpenMM InteraxFF plugin. Copyright (c) 2026 the Authors. MIT license, see LICENSE.
+// Derived from the HIPPO kernels of OpenMM, portions copyright (c) 2008-2021 Stanford University and the Authors.
+
 DEVICE void computeDirectFieldDampingFactors(real alpha, real r, real* fdamp3, real* fdamp5, real* fdamp7) {
     real ar = alpha*r;
     real ar2 = ar*ar;

@@ -1,3 +1,4 @@
+# Part of the OpenMM InteraxFF plugin. Copyright (c) 2026 the Authors. MIT license, see LICENSE.
 """
 The comparisons with InteraxFF need an InteraxFF checkout (INTERAX_REPO) and a model (INTERAX_MODEL): without them
 they are not collected, and the report header says so (plugin_path.py).

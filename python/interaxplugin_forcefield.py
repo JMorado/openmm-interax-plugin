@@ -1,3 +1,4 @@
+# Part of the OpenMM InteraxFF plugin. Copyright (c) 2026 the Authors. MIT license, see LICENSE.
 """
 OpenMM ForceField (ffxml) support for the InteraxFF plugin forces: build Systems from scratch with
 openmm.app.ForceField.createSystem(), as for any other OpenMM force field, instead of converting an exported System.

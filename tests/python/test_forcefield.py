@@ -1,3 +1,4 @@
+# Part of the OpenMM InteraxFF plugin. Copyright (c) 2026 the Authors. MIT license, see LICENSE.
 """
 The ffxml generators of interaxplugin_forcefield: a water force field written as ffxml, used through
 openmm.app.ForceField.createSystem(), gives the same forces and energies as the plugin forces built directly with the

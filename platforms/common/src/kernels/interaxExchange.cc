@@ -1,3 +1,5 @@
+// Part of the OpenMM InteraxFF plugin. Copyright (c) 2026 the Authors. MIT license, see LICENSE.
+
     // Exchange repulsion A_i A_j S(r; s_i, s_j). PARAMS = (amplitude, width, isAlchemical, 0).
     {
         SLATER_OVERLAP

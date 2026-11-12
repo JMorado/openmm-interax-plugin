@@ -1,3 +1,5 @@
+# Part of the OpenMM InteraxFF plugin. Copyright (c) 2026 the Authors. MIT license, see LICENSE.
+
 FILE(GLOB KERNEL_FILES ${KERNEL_SOURCE_DIR}/kernels/*.cc)
 SET(KERNEL_FILE_DECLARATIONS)
 CONFIGURE_FILE(${KERNEL_SOURCE_DIR}/${KERNEL_SOURCE_CLASS}.cpp.in ${KERNELS_CPP})

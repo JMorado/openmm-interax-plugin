@@ -1,3 +1,6 @@
+// Part of the OpenMM InteraxFF plugin. Copyright (c) 2026 the Authors. MIT license, see LICENSE.
+// Derived from the HIPPO kernels of OpenMM, portions copyright (c) 2008-2021 Stanford University and the Authors.
+
 // Functions called by the InteraxMultipoleForce interaction kernels (from OpenMM's HIPPO kernels, hippoInteractionHeader.cc).
 
 // Whether a particle has no charge, multipole or induced dipole (an alchemical particle at lambda = 0).

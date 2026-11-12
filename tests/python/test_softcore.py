@@ -1,3 +1,4 @@
+# Part of the OpenMM InteraxFF plugin. Copyright (c) 2026 the Authors. MIT license, see LICENSE.
 """
 Test the soft-core distance of the alchemical pairs of the plugin pair forces (InteraxPairForce.setSoftcoreRadius):
 a pair with exactly one alchemical particle at distance r is evaluated at r_eff = (r^6 + (1 - lambda) R^6)^(1/6) and

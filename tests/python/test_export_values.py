@@ -1,3 +1,4 @@
+# Part of the OpenMM InteraxFF plugin. Copyright (c) 2026 the Authors. MIT license, see LICENSE.
 """
 Test the plugin forces through the Python API against values of the InteraxFF export (tests/data, written by
 generate_export_values.py), on every available platform. This is the Python counterpart of

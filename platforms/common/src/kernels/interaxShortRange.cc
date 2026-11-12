@@ -1,3 +1,5 @@
+// Part of the OpenMM InteraxFF plugin. Copyright (c) 2026 the Authors. MIT license, see LICENSE.
+
     // Short-range correction (K_i + K_j)/2 St + (L_i + L_j)/2 St^2 with St = 8 pi (s_i + s_j)^3 S(r; s_i, s_j).
     // PARAMS = (k, l, width, isAlchemical).
     {

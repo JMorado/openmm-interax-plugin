@@ -1,3 +1,5 @@
+// Part of the OpenMM InteraxFF plugin. Copyright (c) 2026 the Authors. MIT license, see LICENSE.
+
     }
 #if USE_SOFTCORE
     // d r_eff / d r = (r / r_eff)^5

@@ -1,3 +1,5 @@
+// Part of the OpenMM InteraxFF plugin. Copyright (c) 2026 the Authors. MIT license, see LICENSE.
+
 // Start of the code for one InteraxFF pair force in the nonbonded kernel: pairs that are not excluded, are within
 // the cutoff, and whose gate parameters (polarizability or width) are both nonzero.
 #ifdef USE_CUTOFF

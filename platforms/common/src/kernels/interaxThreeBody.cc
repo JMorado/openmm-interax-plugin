@@ -1,3 +1,5 @@
+// Part of the OpenMM InteraxFF plugin. Copyright (c) 2026 the Authors. MIT license, see LICENSE.
+
 // OpenMM's common kernels define ATOMIC_ADD but not ATOMIC_MAX.
 #define ATOMIC_MAX(dest, value) atomicMax(dest, value)
 

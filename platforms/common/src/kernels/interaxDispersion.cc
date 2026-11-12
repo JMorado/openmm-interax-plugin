@@ -1,3 +1,5 @@
+// Part of the OpenMM InteraxFF plugin. Copyright (c) 2026 the Authors. MIT license, see LICENSE.
+
     // Dispersion: C6, C8 and C10 combined from the XDM moments and polarizabilities, with Tang-Toennies damping.
     // PARAMS = (m1, m2, m3, alpha), EXTRA = (width, isAlchemical).
     {

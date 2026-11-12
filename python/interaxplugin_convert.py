@@ -1,3 +1,4 @@
+# Part of the OpenMM InteraxFF plugin. Copyright (c) 2026 the Authors. MIT license, see LICENSE.
 """
 Convert OpenMM Systems built by InteraxFF to the forces of the InteraxFF plugin.
 
