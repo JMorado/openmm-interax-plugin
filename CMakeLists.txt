@@ -104,8 +104,9 @@ INSTALL(FILES ${API_ONLY_INCLUDE_FILES_INTERNAL} DESTINATION include/internal)
 
 ENABLE_TESTING()
 ADD_SUBDIRECTORY(serialization/tests)
-# The platform tests share the test headers in tests.
+# The platform tests share tests/TestInteraxExportValues.h and the export values in tests/data.
 INCLUDE_DIRECTORIES(${CMAKE_CURRENT_SOURCE_DIR}/tests)
+ADD_DEFINITIONS(-DINTERAX_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/data")
 
 # Build the implementations for different platforms
 
