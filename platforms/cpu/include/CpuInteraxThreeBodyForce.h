@@ -1,5 +1,5 @@
-#ifndef OPENMM_CPU_INTERAX_THREE_BODY_FORCE_H_
-#define OPENMM_CPU_INTERAX_THREE_BODY_FORCE_H_
+#ifndef OPENMM_CPUINTERAXTHREEBODYFORCE_H_
+#define OPENMM_CPUINTERAXTHREEBODYFORCE_H_
 
 /* -------------------------------------------------------------------------- *
  *                            OpenMM InteraxFF Plugin                         *
@@ -104,4 +104,4 @@ private:
 
 } // namespace InteraxPlugin
 
-#endif /*OPENMM_CPU_INTERAX_THREE_BODY_FORCE_H_*/
+#endif /*OPENMM_CPUINTERAXTHREEBODYFORCE_H_*/

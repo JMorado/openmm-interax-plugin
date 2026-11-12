@@ -91,14 +91,12 @@ def _overlap_method(force, plugin_class):
     expression = force.getEnergyFunction()
     if "l = min(s1, s2)" in expression:
         return plugin_class.Exact
-    if "issame = step(" in expression:
-        switch = expression.split("issame = step(")[1].split(" - abs(sdifflin)")[0]
-        try:
-            float(switch)
-            return plugin_class.InteraxOrder2
-        except ValueError:
-            pass
-    raise ValueError("The force has no Slater overlap scheme that this converter knows.")
+    threshold = expression.partition("issame = step(")[2].partition(" - abs(sdifflin)")[0]
+    try:
+        float(threshold)
+    except ValueError:
+        raise ValueError("The force has no Slater overlap scheme that this converter knows.") from None
+    return plugin_class.InteraxOrder2
 
 
 def convert_dispersion(force):
@@ -258,6 +256,11 @@ def unwrap_multipoles(system):
     int
         The number of forces unwrapped.
     """
+    return _unwrap_multipole_forces(system)
+
+
+def _unwrap_multipole_forces(system):
+    """Implement :func:`unwrap_multipoles`, which the argument of :func:`convert_system` of the same name hides."""
     found = []
     for index in range(system.getNumForces()):
         force = system.getForce(index)
@@ -275,9 +278,6 @@ def unwrap_multipoles(system):
     for _, copy in found:
         system.addForce(copy)
     return len(found)
-
-
-_unwrap_multipoles = unwrap_multipoles
 
 
 def convert_system(system, copy=True, overlap="exact", unwrap_multipoles=True):
@@ -328,5 +328,5 @@ def convert_system(system, copy=True, overlap="exact", unwrap_multipoles=True):
     for index in sorted(replacements):
         system.addForce(replacements[index])
     if unwrap_multipoles:
-        _unwrap_multipoles(system)
+        _unwrap_multipole_forces(system)
     return system

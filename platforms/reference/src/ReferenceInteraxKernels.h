@@ -1,5 +1,5 @@
-#ifndef REFERENCE_INTERAX_KERNELS_H_
-#define REFERENCE_INTERAX_KERNELS_H_
+#ifndef OPENMM_REFERENCEINTERAXKERNELS_H_
+#define OPENMM_REFERENCEINTERAXKERNELS_H_
 
 /* -------------------------------------------------------------------------- *
  *                            OpenMM InteraxFF Plugin                         *
@@ -281,7 +281,7 @@ private:
      * @param context    the context in which to execute this kernel
      */
     void setup(OpenMM::ContextImpl& context);
-    std::unique_ptr<OpenMM::ReferenceInteraxMultipole> ixn;
+    std::unique_ptr<ReferenceInteraxMultipole> ixn;
     int numParticles;
     std::string alchemicalParameter;
     bool hasAlchemicalParticles;
@@ -289,4 +289,4 @@ private:
 
 } // namespace InteraxPlugin
 
-#endif /*REFERENCE_INTERAX_KERNELS_H_*/
+#endif /*OPENMM_REFERENCEINTERAXKERNELS_H_*/

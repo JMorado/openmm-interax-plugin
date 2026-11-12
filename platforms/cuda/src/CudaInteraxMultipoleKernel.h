@@ -1,5 +1,5 @@
-#ifndef CUDA_INTERAX_MULTIPOLE_KERNEL_H_
-#define CUDA_INTERAX_MULTIPOLE_KERNEL_H_
+#ifndef OPENMM_CUDAINTERAXMULTIPOLEKERNEL_H_
+#define OPENMM_CUDAINTERAXMULTIPOLEKERNEL_H_
 
 /* -------------------------------------------------------------------------- *
  *                            OpenMM InteraxFF Plugin                         *
@@ -72,4 +72,4 @@ private:
 
 } // namespace InteraxPlugin
 
-#endif /*CUDA_INTERAX_MULTIPOLE_KERNEL_H_*/
+#endif /*OPENMM_CUDAINTERAXMULTIPOLEKERNEL_H_*/

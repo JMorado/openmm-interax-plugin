@@ -1,5 +1,5 @@
-#ifndef OPENMM_CPU_INTERAX_PAIR_FORCE_H_
-#define OPENMM_CPU_INTERAX_PAIR_FORCE_H_
+#ifndef OPENMM_CPUINTERAXPAIRFORCE_H_
+#define OPENMM_CPUINTERAXPAIRFORCE_H_
 
 /* -------------------------------------------------------------------------- *
  *                            OpenMM InteraxFF Plugin                         *
@@ -131,4 +131,4 @@ CpuInteraxPairForce* createCpuInteraxPairForce(const InteraxPairForce& force, Op
 
 } // namespace InteraxPlugin
 
-#endif /*OPENMM_CPU_INTERAX_PAIR_FORCE_H_*/
+#endif /*OPENMM_CPUINTERAXPAIRFORCE_H_*/

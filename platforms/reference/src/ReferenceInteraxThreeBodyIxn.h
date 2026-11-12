@@ -1,5 +1,5 @@
-#ifndef REFERENCE_INTERAX_THREEBODY_IXN_H_
-#define REFERENCE_INTERAX_THREEBODY_IXN_H_
+#ifndef OPENMM_REFERENCEINTERAXTHREEBODYIXN_H_
+#define OPENMM_REFERENCEINTERAXTHREEBODYIXN_H_
 
 /* -------------------------------------------------------------------------- *
  *                            OpenMM InteraxFF Plugin                         *
@@ -79,4 +79,4 @@ private:
 
 } // namespace InteraxPlugin
 
-#endif /*REFERENCE_INTERAX_THREEBODY_IXN_H_*/
+#endif /*OPENMM_REFERENCEINTERAXTHREEBODYIXN_H_*/

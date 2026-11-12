@@ -1,5 +1,5 @@
-#ifndef REFERENCE_INTERAX_PAIR_IXN_H_
-#define REFERENCE_INTERAX_PAIR_IXN_H_
+#ifndef OPENMM_REFERENCEINTERAXPAIRIXN_H_
+#define OPENMM_REFERENCEINTERAXPAIRIXN_H_
 
 /* -------------------------------------------------------------------------- *
  *                            OpenMM InteraxFF Plugin                         *
@@ -129,4 +129,4 @@ double ReferenceInteraxPairIxn::calculatePairIxn(const std::vector<OpenMM::Vec3>
 
 } // namespace InteraxPlugin
 
-#endif /*REFERENCE_INTERAX_PAIR_IXN_H_*/
+#endif /*OPENMM_REFERENCEINTERAXPAIRIXN_H_*/

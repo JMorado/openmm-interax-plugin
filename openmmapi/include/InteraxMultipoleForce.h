@@ -274,7 +274,7 @@ public:
      */
     void setParticleParameters(int index, double charge, const std::vector<double>& dipole, const std::vector<double>& quadrupole, double coreCharge,
                                double alpha, double polarizability, int axisType, int multipoleAtomZ, int multipoleAtomX, int multipoleAtomY,
-                               bool isAlchemical=false);
+                               bool isAlchemical);
     /**
      * Add an interaction to the list of exceptions that should be calculated differently from other interactions.
      * If all scale factors are set to 0, this will cause the interaction to be completely omitted from

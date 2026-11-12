@@ -1,5 +1,5 @@
-#ifndef COMMON_INTERAX_MULTIPOLE_KERNEL_H_
-#define COMMON_INTERAX_MULTIPOLE_KERNEL_H_
+#ifndef OPENMM_COMMONINTERAXMULTIPOLEKERNEL_H_
+#define OPENMM_COMMONINTERAXMULTIPOLEKERNEL_H_
 
 /* -------------------------------------------------------------------------- *
  *                            OpenMM InteraxFF Plugin                         *
@@ -190,4 +190,4 @@ protected:
 
 } // namespace InteraxPlugin
 
-#endif /*COMMON_INTERAX_MULTIPOLE_KERNEL_H_*/
+#endif /*OPENMM_COMMONINTERAXMULTIPOLEKERNEL_H_*/

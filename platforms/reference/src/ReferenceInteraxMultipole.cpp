@@ -40,8 +40,9 @@
 // make sure that erf() and erfc() are defined.
 #include "openmm/internal/MSVC_erfc.h"
 
-using namespace std;
+using namespace InteraxPlugin;
 using namespace OpenMM;
+using namespace std;
 
 ReferenceInteraxMultipole::ReferenceInteraxMultipole(const InteraxMultipoleForce& force) : _electric(ONE_4PI_EPS0), _lambda(1.0) {
     _numParticles = force.getNumParticles();

@@ -1,5 +1,5 @@
-#ifndef COMMON_INTERAX_KERNELS_H_
-#define COMMON_INTERAX_KERNELS_H_
+#ifndef OPENMM_COMMONINTERAXKERNELS_H_
+#define OPENMM_COMMONINTERAXKERNELS_H_
 
 /* -------------------------------------------------------------------------- *
  *                            OpenMM InteraxFF Plugin                         *
@@ -46,7 +46,7 @@ namespace InteraxPlugin {
  */
 class CommonInteraxPairForceKernel {
 public:
-    CommonInteraxPairForceKernel(OpenMM::ComputeContext& cc) : cc(cc), hasAlchemicalParticles(false), lastLambda(-1) {
+    CommonInteraxPairForceKernel(OpenMM::ComputeContext& cc) : cc(cc), hasAlchemicalParticles(false), lastLambda(-1), lastValue(-1) {
     }
 protected:
     /**
@@ -259,4 +259,4 @@ private:
 
 } // namespace InteraxPlugin
 
-#endif /*COMMON_INTERAX_KERNELS_H_*/
+#endif /*OPENMM_COMMONINTERAXKERNELS_H_*/

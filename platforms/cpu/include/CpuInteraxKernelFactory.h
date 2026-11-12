@@ -1,5 +1,5 @@
-#ifndef OPENMM_CPU_INTERAX_KERNEL_FACTORY_H_
-#define OPENMM_CPU_INTERAX_KERNEL_FACTORY_H_
+#ifndef OPENMM_CPUINTERAXKERNELFACTORY_H_
+#define OPENMM_CPUINTERAXKERNELFACTORY_H_
 
 /* -------------------------------------------------------------------------- *
  *                            OpenMM InteraxFF Plugin                         *
@@ -32,17 +32,16 @@
 
 #include "openmm/KernelFactory.h"
 
-namespace OpenMM {
+namespace InteraxPlugin {
 
 /**
  * This KernelFactory creates all kernels for the InteraxFF plugin on the CPU platform.
  */
-
-class CpuInteraxKernelFactory : public KernelFactory {
+class CpuInteraxKernelFactory : public OpenMM::KernelFactory {
 public:
-    KernelImpl* createKernelImpl(std::string name, const Platform& platform, ContextImpl& context) const;
+    OpenMM::KernelImpl* createKernelImpl(std::string name, const OpenMM::Platform& platform, OpenMM::ContextImpl& context) const;
 };
 
-} // namespace OpenMM
+} // namespace InteraxPlugin
 
-#endif /*OPENMM_CPU_INTERAX_KERNEL_FACTORY_H_*/
+#endif /*OPENMM_CPUINTERAXKERNELFACTORY_H_*/

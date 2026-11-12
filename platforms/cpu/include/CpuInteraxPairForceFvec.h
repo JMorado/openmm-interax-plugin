@@ -1,5 +1,5 @@
-#ifndef OPENMM_CPU_INTERAX_PAIR_FORCE_FVEC_H_
-#define OPENMM_CPU_INTERAX_PAIR_FORCE_FVEC_H_
+#ifndef OPENMM_CPUINTERAXPAIRFORCEFVEC_H_
+#define OPENMM_CPUINTERAXPAIRFORCEFVEC_H_
 
 /* -------------------------------------------------------------------------- *
  *                            OpenMM InteraxFF Plugin                         *
@@ -395,4 +395,4 @@ void CpuInteraxPairForceFvec<FVEC, BLOCK_SIZE, Term>::calculateBlockIxn(int bloc
 
 } // namespace InteraxPlugin
 
-#endif /*OPENMM_CPU_INTERAX_PAIR_FORCE_FVEC_H_*/
+#endif /*OPENMM_CPUINTERAXPAIRFORCEFVEC_H_*/

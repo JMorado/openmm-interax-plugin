@@ -1,3 +1,6 @@
+#ifndef OPENMM_REFERENCEINTERAXMULTIPOLE_H_
+#define OPENMM_REFERENCEINTERAXMULTIPOLE_H_
+
 /* Portions copyright (c) 2006-2022 Stanford University and Simbios.
  * Contributors: Pande Group
  * Portions copyright (c) 2026 the Authors.
@@ -23,9 +26,6 @@
  * WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-#ifndef __ReferenceInteraxMultipole_H__
-#define __ReferenceInteraxMultipole_H__
-
 #include "InteraxMultipoleForce.h"
 #include "openmm/System.h"
 #include "openmm/Vec3.h"
@@ -35,10 +35,7 @@
 #include <vector>
 #include <complex>
 
-namespace OpenMM {
-
-// This class implements InteraxMultipoleForce, which is defined in the plugin's namespace.
-using InteraxPlugin::InteraxMultipoleForce;
+namespace InteraxPlugin {
 
 /**
  * 4-dimensional double vector
@@ -73,8 +70,11 @@ private:
     double data[4];
 };
 
-using namespace OpenMM;
-
+/**
+ * This class computes InteraxMultipoleForce on the Reference platform without a cutoff: the multipoles in the lab
+ * frame, the induced dipoles, and the energy, forces and torques of the electrostatics and polarization.  The CPU
+ * platform uses it too.
+ */
 class ReferenceInteraxMultipole {
 
 public:
@@ -128,7 +128,7 @@ public:
      * @param[out] outputInducedDipoles    the induced dipole of each particle
      */
     void calculateInducedDipoles(const std::vector<OpenMM::Vec3>& particlePositions,
-                                 std::vector<Vec3>& outputInducedDipoles);
+                                 std::vector<OpenMM::Vec3>& outputInducedDipoles);
 
     /**
      * Calculate particle permanent dipoles rotated in the lab frame.
@@ -136,8 +136,8 @@ public:
      * @param particlePositions                     Cartesian coordinates of particles
      * @param[out] outputRotatedPermanentDipoles    the permanent dipole of each particle in the lab frame
      */
-    void calculateLabFramePermanentDipoles(const std::vector<Vec3>& particlePositions,
-                                           std::vector<Vec3>& outputRotatedPermanentDipoles);
+    void calculateLabFramePermanentDipoles(const std::vector<OpenMM::Vec3>& particlePositions,
+                                           std::vector<OpenMM::Vec3>& outputRotatedPermanentDipoles);
 
 protected:
 
@@ -149,14 +149,14 @@ protected:
     class MultipoleParticleData {
         public:
             int index, axisType, multipoleAtomX, multipoleAtomY, multipoleAtomZ;
-            Vec3 position;
-            Vec3 dipole, localDipole, qiDipole, qiInducedDipole;
+            OpenMM::Vec3 position;
+            OpenMM::Vec3 dipole, localDipole, qiDipole, qiInducedDipole;
             double quadrupole[6], localQuadrupole[6], qiQuadrupole[6];
             double coreCharge, valenceCharge, alpha, polarizability;
             // Whether the particle is alchemical, and its parameters before scaling by the alchemical
             // parameter (loadParticleData() sets the scaled ones)
             bool isAlchemical;
-            Vec3 baseLocalDipole;
+            OpenMM::Vec3 baseLocalDipole;
             double baseLocalQuadrupole[6], baseCoreCharge, baseValenceCharge, basePolarizability;
     };
 
@@ -166,7 +166,7 @@ protected:
     class TransformedMultipole {
     public:
         double charge;
-        Vec3 dipole;
+        OpenMM::Vec3 dipole;
         double quadrupole[6];
     };
 
@@ -190,11 +190,11 @@ protected:
     std::map<std::pair<int, int>, Exception> exceptions;
     std::vector<MultipoleParticleData> particleData;
     std::vector<TransformedMultipole> _transformed;
-    std::vector<Vec3> _fixedMultipoleField;
-    std::vector<Vec3> _polarizingField; // The permanent field at each particle, before multiplying by the polarizability
-    std::vector<Vec3> _inducedDipole;
-    std::vector<Vec3> _inducedDipoleField;
-    std::vector<std::vector<Vec3> > _ptDipoleD;
+    std::vector<OpenMM::Vec3> _fixedMultipoleField;
+    std::vector<OpenMM::Vec3> _polarizingField; // The permanent field at each particle, before multiplying by the polarizability
+    std::vector<OpenMM::Vec3> _inducedDipole;
+    std::vector<OpenMM::Vec3> _inducedDipoleField;
+    std::vector<std::vector<OpenMM::Vec3> > _ptDipoleD;
 
     int _maxPTOrder;
     std::vector<double> _extrapolationCoefficients;
@@ -324,7 +324,7 @@ protected:
      * @param r                     the distance between atoms I and J
      * @param rotationMatrix        the output rotation matrix for a 3-vector
      */
-    void formQIRotationMatrix(const Vec3 &deltaR, double r, double (&rotationMatrix)[3][3]) const;
+    void formQIRotationMatrix(const OpenMM::Vec3 &deltaR, double r, double (&rotationMatrix)[3][3]) const;
 
     /**
      * Rotate a vector from the lab frame to the quasi-internal coordinate system.
@@ -333,7 +333,7 @@ protected:
      * @param mat    the rotation matrix computed by formQIRotationMatrix()
      * @return the rotated vector
      */
-    Vec3 rotateVectorToQI(const Vec3 v, const double (&mat)[3][3]) const;
+    OpenMM::Vec3 rotateVectorToQI(const OpenMM::Vec3 v, const double (&mat)[3][3]) const;
 
     /**
      * Rotate a vector from the quasi-internal coordinate system back to the lab frame.
@@ -342,7 +342,7 @@ protected:
      * @param mat    the rotation matrix computed by formQIRotationMatrix()
      * @return the rotated vector
      */
-    Vec3 rotateVectorFromQI(const Vec3 v, const double (&mat)[3][3]) const;
+    OpenMM::Vec3 rotateVectorFromQI(const OpenMM::Vec3 v, const double (&mat)[3][3]) const;
 
     /**
      * Rotate a quadrupole from the lab frame to the quasi-internal coordinate system.
@@ -421,7 +421,7 @@ protected:
      * @param torqueK           the torque to apply (in the quasi-internal frame) to particle K should be added to this
      */
     virtual double calculateElectrostaticPairIxn(const MultipoleParticleData& particleI, const MultipoleParticleData& particleK,
-                                                 double r, Vec3& force, Vec3& torqueI, Vec3& torqueK) const;
+                                                 double r, OpenMM::Vec3& force, OpenMM::Vec3& torqueI, OpenMM::Vec3& torqueK) const;
 
     /**
      * Calculate electrostatic interactions involving induced dipoles on particles I and K.
@@ -436,7 +436,7 @@ protected:
      * @param labForce          the force to apply (in the lab frame) to particle I should be added to this
      */
     virtual void calculateInducedDipolePairIxn(const MultipoleParticleData& particleI, const MultipoleParticleData& particleK,
-                                               Vec3 deltaR, double r, Vec3& force, Vec3& torqueI, Vec3& torqueK, Vec3& labForce) const;
+                                               OpenMM::Vec3 deltaR, double r, OpenMM::Vec3& force, OpenMM::Vec3& torqueI, OpenMM::Vec3& torqueK, OpenMM::Vec3& labForce) const;
 
     /**
      * Compute the field at particle I due to the fixed multipoles of particle J, without the Ewald
@@ -447,7 +447,7 @@ protected:
      * @param deltaR       the position of particle J relative to particle I
      * @return the field, in the sign convention of _fixedMultipoleField (from which it is subtracted)
      */
-    Vec3 calculateDirectPairField(const MultipoleParticleData& particleI, const MultipoleParticleData& particleJ, const Vec3& deltaR) const;
+    OpenMM::Vec3 calculateDirectPairField(const MultipoleParticleData& particleI, const MultipoleParticleData& particleJ, const OpenMM::Vec3& deltaR) const;
 
     /**
      * Compute the core damping factor f(r) = 1 - (1 + ar + (ar)^2/2) exp(-ar) of the field at a particle,
@@ -478,7 +478,7 @@ protected:
      * @param torqueK           the torque to apply (in the quasi-internal frame) to particle K should be added to this
      */
     void calculateCoreDampingPairIxn(const MultipoleParticleData& particleI, const MultipoleParticleData& particleK,
-                                     double r, Vec3& force, Vec3& torqueI, Vec3& torqueK) const;
+                                     double r, OpenMM::Vec3& force, OpenMM::Vec3& torqueI, OpenMM::Vec3& torqueK) const;
 
     /**
      * Map particle torque to force.
@@ -495,7 +495,7 @@ protected:
                                      const MultipoleParticleData& particleU,
                                      const MultipoleParticleData& particleV,
                                            MultipoleParticleData* particleW,
-                                     int axisType, const Vec3& torque, std::vector<OpenMM::Vec3>& forces);
+                                     int axisType, const OpenMM::Vec3& torque, std::vector<OpenMM::Vec3>& forces);
 
     /**
      * Map torques to forces.
@@ -522,24 +522,27 @@ protected:
      * @param vectorToNormalize    vector to normalize
      * @return norm of vector on input
      */
-    double normalizeVec3(Vec3& vectorToNormalize) const;
+    double normalizeVec3(OpenMM::Vec3& vectorToNormalize) const;
 
     /**
      * Initialize vector of Vec3 (size=numParticles).
      *
      * @param vectorToInitialize    vector to initialize
      */
-    void initializeVec3Vector(std::vector<Vec3>& vectorToInitialize) const;
+    void initializeVec3Vector(std::vector<OpenMM::Vec3>& vectorToInitialize) const;
 
     /**
      * Apply periodic boundary conditions to difference in positions.
      *
      * @param deltaR    difference in particle positions; modified on output after applying PBC
      */
-    virtual void getPeriodicDelta(Vec3& deltaR) const {};
+    virtual void getPeriodicDelta(OpenMM::Vec3& deltaR) const {};
 };
 
-
+/**
+ * This class computes InteraxMultipoleForce on the Reference platform with PME: the real-space interactions within the
+ * cutoff, and the reciprocal-space and self terms of the multipoles and induced dipoles.
+ */
 class ReferenceInteraxMultipolePme : public ReferenceInteraxMultipole {
 
 public:
@@ -548,7 +551,7 @@ public:
      * Constructor
      *
      */
-    ReferenceInteraxMultipolePme(const InteraxMultipoleForce& force, const System& system);
+    ReferenceInteraxMultipolePme(const InteraxMultipoleForce& force, const OpenMM::System& system);
 
     /**
      * Destructor
@@ -593,8 +596,8 @@ private:
 
     double _alphaEwald;
 
-    Vec3 _recipBoxVectors[3];
-    Vec3 _periodicBoxVectors[3];
+    OpenMM::Vec3 _recipBoxVectors[3];
+    OpenMM::Vec3 _periodicBoxVectors[3];
 
     int _pmeGridDimensions[3];
 
@@ -624,7 +627,7 @@ private:
      * @param deltaR    input vector of difference in particle positions; on output adjusted for
      *                  periodic boundary conditions
      */
-    void getPeriodicDelta(Vec3& deltaR) const;
+    void getPeriodicDelta(OpenMM::Vec3& deltaR) const;
 
     /**
      * Initialize B-spline moduli.
@@ -705,7 +708,7 @@ private:
      * @return energy
      */
     double computeReciprocalSpaceFixedMultipoleForceAndEnergy(const std::vector<MultipoleParticleData>& particleData,
-                                                              std::vector<Vec3>& forces, std::vector<Vec3>& torques) const;
+                                                              std::vector<OpenMM::Vec3>& forces, std::vector<OpenMM::Vec3>& torques) const;
 
     /**
      * Set reciprocal space fixed multipole fields.
@@ -738,7 +741,7 @@ private:
      *
      * @param inputInducedDipole      induced dipole value
      */
-    void spreadInducedDipolesOnGrid(const std::vector<Vec3>& inputInducedDipole);
+    void spreadInducedDipolesOnGrid(const std::vector<OpenMM::Vec3>& inputInducedDipole);
 
     /**
      * Calculate induced dipole fields.
@@ -754,7 +757,7 @@ private:
      * @param field       reciprocal space output induced dipole field value at each site
      *
      */
-    void recordInducedDipoleField(std::vector<Vec3>& field);
+    void recordInducedDipoleField(std::vector<OpenMM::Vec3>& field);
 
     /**
      * The r = 0 limit erf_k(0) = 2^(k+1) alpha^(2k+1) / ((2k+1) sqrt(pi)) of the reciprocal-space radial
@@ -775,7 +778,7 @@ private:
      * @param particleData            vector of parameters (charge, labFrame dipoles, quadrupoles, ...) for particles
      * @param torques                 vector of torques
      */
-    void calculatePmeSelfTorque(const std::vector<MultipoleParticleData>& particleData, std::vector<Vec3>& torques) const;
+    void calculatePmeSelfTorque(const std::vector<MultipoleParticleData>& particleData, std::vector<OpenMM::Vec3>& torques) const;
 
     /**
      * Calculate direct space electrostatic interaction between particles I and K.
@@ -788,7 +791,7 @@ private:
      * @param torqueK           the torque to apply (in the quasi-internal frame) to particle K should be added to this
      */
     double calculateElectrostaticPairIxn(const MultipoleParticleData& particleI, const MultipoleParticleData& particleK,
-                                         double r, Vec3& force, Vec3& torqueI, Vec3& torqueK) const;
+                                         double r, OpenMM::Vec3& force, OpenMM::Vec3& torqueI, OpenMM::Vec3& torqueK) const;
 
     /**
      * Calculate electrostatic interactions involving induced dipoles on particles I and K.
@@ -803,7 +806,7 @@ private:
      * @param labForce          the force to apply (in the lab frame) to particle I should be added to this
      */
     void calculateInducedDipolePairIxn(const MultipoleParticleData& particleI, const MultipoleParticleData& particleK,
-                                       Vec3 deltaR, double r, Vec3& force, Vec3& torqueI, Vec3& torqueK, Vec3& labForce) const;
+                                       OpenMM::Vec3 deltaR, double r, OpenMM::Vec3& force, OpenMM::Vec3& torqueI, OpenMM::Vec3& torqueK, OpenMM::Vec3& labForce) const;
 
     /**
      * Calculate reciprocal space force/torque for dipole interaction.
@@ -813,7 +816,7 @@ private:
      * @param torques           vector of particle torques to be updated
      */
      void computeReciprocalSpaceInducedDipoleForce(const std::vector<MultipoleParticleData>& particleData,
-                                                   std::vector<Vec3>& forces, std::vector<Vec3>& torques) const;
+                                                   std::vector<OpenMM::Vec3>& forces, std::vector<OpenMM::Vec3>& torques) const;
 
     /**
      * Calculate the forces and energy.
@@ -827,6 +830,6 @@ private:
 
 };
 
-} // namespace OpenMM
+} // namespace InteraxPlugin
 
-#endif // _ReferenceInteraxMultipole___
+#endif /*OPENMM_REFERENCEINTERAXMULTIPOLE_H_*/

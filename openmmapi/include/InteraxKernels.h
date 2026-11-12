@@ -1,5 +1,5 @@
-#ifndef INTERAX_KERNELS_H_
-#define INTERAX_KERNELS_H_
+#ifndef OPENMM_INTERAXKERNELS_H_
+#define OPENMM_INTERAXKERNELS_H_
 
 /* -------------------------------------------------------------------------- *
  *                            OpenMM InteraxFF Plugin                         *
@@ -249,4 +249,4 @@ public:
 
 } // namespace InteraxPlugin
 
-#endif /*INTERAX_KERNELS_H_*/
+#endif /*OPENMM_INTERAXKERNELS_H_*/

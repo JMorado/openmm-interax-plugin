@@ -57,6 +57,10 @@ extern "C" OPENMM_EXPORT void registerKernelFactories() {
     }
 }
 
+/**
+ * Register the kernels with the CUDA platform, registering the platform first if it has not been loaded.  This is used
+ * when the plugin is linked directly, as by the tests, rather than loaded from the plugin directory.
+ */
 extern "C" OPENMM_EXPORT void registerInteraxCudaKernelFactories() {
     try {
         Platform::getPlatformByName("CUDA");

@@ -723,7 +723,7 @@ void testChangingParameters() {
     // Change some of the parameters and make sure the results change.
 
     force->setParticleParameters(0, -0.2, {0.0, 0.0, 0.005}, {0.001, 0.0, 0.0, 0.0, -0.001, 0.0, 0.0, 0.0, 0.0}, 6.0, 20.0, 0.0009,
-            InteraxMultipoleForce::Bisector, 1, 2, -1);
+            InteraxMultipoleForce::Bisector, 1, 2, -1, false);
     force->setExceptionParameters(1, 0, 2, 0.1, 0.1, 0.3);
     force->updateParametersInContext(context);
     State state2 = getEnergyAndForces(context);
