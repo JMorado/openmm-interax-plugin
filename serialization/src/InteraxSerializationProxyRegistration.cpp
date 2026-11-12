@@ -27,15 +27,6 @@
  * USE OR OTHER DEALINGS IN THE SOFTWARE.                                     *
  * -------------------------------------------------------------------------- */
 
-#ifdef WIN32
-#include <windows.h>
-#include <sstream>
-#else
-#include <dlfcn.h>
-#include <dirent.h>
-#include <cstdlib>
-#endif
-
 #include "OpenMMInterax.h"
 #include "InteraxDispersionForceProxy.h"
 #include "InteraxExchangeForceProxy.h"

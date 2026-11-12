@@ -144,13 +144,14 @@ protected:
      */
     void addCoincidentPairConstants(std::map<std::string, std::string>& defines) const;
     /**
-     * Get the kernel of the real-space interactions (useOwnKernel), creating it if necessary.
+     * Get the kernel of the real-space interactions (useOwnKernel), creating it if necessary.  It always computes the
+     * forces, and the energy if includeEnergy is true.
      */
-    OpenMM::ComputeKernel& getElectrostaticsKernel(bool includeForces, bool includeEnergy);
+    OpenMM::ComputeKernel& getElectrostaticsKernel(bool includeEnergy);
     /**
      * Compute the real-space interactions with the kernel of this force (useOwnKernel).
      */
-    void computeElectrostatics(bool includeForces, bool includeEnergy);
+    void computeElectrostatics(bool includeEnergy);
     int numParticles, maxExtrapolationOrder, maxTiles, fieldThreadBlockSize, forceThreadBlockSize;
     int gridSizeX, gridSizeY, gridSizeZ;
     double pmeAlpha, cutoff, coreDampingScale, mutualDampingScale, lastLambda;
@@ -158,7 +159,7 @@ protected:
     std::string alchemicalParameter, electrostaticsSource;
     std::vector<double> extrapolationCoefficients;
     std::vector<KernelParameter> electrostaticsParams, electrostaticsArgs;
-    std::map<int, OpenMM::ComputeKernel> electrostaticsKernels;
+    std::map<bool, OpenMM::ComputeKernel> electrostaticsKernels;
     OpenMM::ComputeContext& cc;
     const OpenMM::System& system;
     OpenMM::ComputeArray multipoleParticles, isAlchemical;

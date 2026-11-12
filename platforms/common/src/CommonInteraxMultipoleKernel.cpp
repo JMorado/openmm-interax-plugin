@@ -946,7 +946,7 @@ double CommonCalcInteraxMultipoleForceKernel::execute(ContextImpl& context, bool
     // nonbonded kernel computes them after this).
 
     if (useOwnKernel && (includeForces || includeEnergy))
-        computeElectrostatics(includeForces, includeEnergy);
+        computeElectrostatics(includeEnergy);
 
     // Record the current atom positions so we can tell later if they have changed.
     
@@ -1212,19 +1212,18 @@ void CommonCalcInteraxMultipoleForceKernel::updateFieldKernelMaxTiles() {
     }
 }
 
-ComputeKernel& CommonCalcInteraxMultipoleForceKernel::getElectrostaticsKernel(bool includeForces, bool includeEnergy) {
-    // The kernel of the real-space interactions for useOwnKernel: the same source, placeholders and defines that the
-    // CUDA nonbonded utilities use for the default kernel when HippoNonbondedForce replaces its source
+ComputeKernel& CommonCalcInteraxMultipoleForceKernel::getElectrostaticsKernel(bool includeEnergy) {
+    // The kernel of the real-space interactions for useOwnKernel: the same source, and the placeholders and defines it
+    // uses, as the CUDA nonbonded utilities give the default kernel when HippoNonbondedForce replaces its source
     // (CudaNonbondedUtilities::createInteractionKernel in OpenMM 8.1), for this force's parameters only. Its arguments
     // are those of the default kernel, so it walks the same neighbor list.
 
-    int key = (includeForces ? 2 : 0) + (includeEnergy ? 1 : 0);
-    auto existing = electrostaticsKernels.find(key);
+    auto existing = electrostaticsKernels.find(includeEnergy);
     if (existing != electrostaticsKernels.end())
         return existing->second;
     NonbondedUtilities& nb = cc.getNonbondedUtilities();
     const string suffixes[] = {"x", "y", "z", "w"};
-    stringstream localData, args, load1, broadcast, declareLocal, loadLocal2, load2j, load2g, clearLocal, shuffle;
+    stringstream localData, args, load1, broadcast, declareLocal, loadLocal2, load2j, shuffle;
     int localDataSize = 0;
     int elementSize = (cc.getUseDoublePrecision() ? sizeof(double) : sizeof(float));
     for (auto& p : electrostaticsParams) {
@@ -1247,8 +1246,6 @@ ComputeKernel& CommonCalcInteraxMultipoleForceKernel::getElectrostaticsKernel(bo
         declareLocal << type << " shfl" << p.name << ";\n";
         loadLocal2 << "shfl" << p.name << " = global_" << p.name << "[j];\n";
         load2j << type << " " << p.name << "2 = shfl" << p.name << ";\n";
-        load2g << type << " " << p.name << "2 = global_" << p.name << "[atom2];\n";
-        clearLocal << "shfl" << p.name << " = " << (p.numComponents == 1 ? "0" : "make_"+type+"(0)") << ";\n";
         if (p.numComponents == 1)
             shuffle << "shfl" << p.name << "=real_shfl(shfl" << p.name << ", tgx+1);\n";
         else
@@ -1273,23 +1270,13 @@ ComputeKernel& CommonCalcInteraxMultipoleForceKernel::getElectrostaticsKernel(bo
     replacements["DECLARE_LOCAL_PARAMETERS"] = declareLocal.str();
     replacements["LOAD_LOCAL_PARAMETERS_FROM_GLOBAL"] = loadLocal2.str();
     replacements["LOAD_ATOM2_PARAMETERS"] = load2j.str();
-    replacements["LOAD_ATOM2_PARAMETERS_FROM_GLOBAL"] = load2g.str();
-    replacements["CLEAR_LOCAL_PARAMETERS"] = clearLocal.str();
-    replacements["INIT_DERIVATIVES"] = "";
-    replacements["SAVE_DERIVATIVES"] = "";
     replacements["SHUFFLE_WARP_DATA"] = shuffleWarpData.str();
     map<string, string> defines;
-    if (nb.getUseCutoff()) {
+    if (nb.getUseCutoff())
         defines["USE_CUTOFF"] = "1";
-        defines["USE_NEIGHBOR_LIST"] = "1";
-    }
     if (usePME)
         defines["USE_PERIODIC"] = "1";
-    defines["USE_EXCLUSIONS"] = "1";
-    defines["USE_SYMMETRIC"] = "1";
     defines["ENABLE_SHUFFLE"] = "1";
-    if (includeForces)
-        defines["INCLUDE_FORCES"] = "1";
     if (includeEnergy)
         defines["INCLUDE_ENERGY"] = "1";
     defines["THREAD_BLOCK_SIZE"] = cc.intToString(forceThreadBlockSize);
@@ -1335,13 +1322,13 @@ ComputeKernel& CommonCalcInteraxMultipoleForceKernel::getElectrostaticsKernel(bo
         kernel->addArg(*p.array);
     for (auto& a : electrostaticsArgs)
         kernel->addArg(*a.array);
-    electrostaticsKernels[key] = kernel;
-    return electrostaticsKernels[key];
+    electrostaticsKernels[includeEnergy] = kernel;
+    return electrostaticsKernels[includeEnergy];
 }
 
-void CommonCalcInteraxMultipoleForceKernel::computeElectrostatics(bool includeForces, bool includeEnergy) {
+void CommonCalcInteraxMultipoleForceKernel::computeElectrostatics(bool includeEnergy) {
     NonbondedUtilities& nb = cc.getNonbondedUtilities();
-    ComputeKernel& kernel = getElectrostaticsKernel(includeForces, includeEnergy);
+    ComputeKernel& kernel = getElectrostaticsKernel(includeEnergy);
     if (nb.getUseCutoff()) {
         setPeriodicBoxArgs(cc, kernel, 9);
         kernel->setArg(14, (unsigned int) maxTiles); // Arrays are bound by reference; maxTiles follows the capacity

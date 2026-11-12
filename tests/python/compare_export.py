@@ -145,7 +145,7 @@ def evaluate(system, positions, box, platform, indices, precision="double"):
         force.setForceGroup(31)
     for group, i in enumerate(indices.values()):
         system.getForce(i).setForceGroup(group)
-    properties = {"Precision": precision} if platform in ("CUDA", "OpenCL") else {}
+    properties = {"Precision": precision} if platform == "CUDA" else {}
     context = openmm.Context(system, openmm.VerletIntegrator(0.001), openmm.Platform.getPlatformByName(platform), properties)
     if box is not None:
         context.setPeriodicBoxVectors(*box)
@@ -184,7 +184,7 @@ def compare(name, topology, positions, periodic, platform, precision, overlap, f
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--platform", default="Reference")
-    parser.add_argument("--precision", default="double", help="CUDA/OpenCL precision")
+    parser.add_argument("--precision", default="double", help="CUDA precision")
     parser.add_argument("--overlap", choices=["export", "exact"], help="default: the scheme of the model (CONVERT_OVERLAP)")
     parser.add_argument("--systems", nargs="+", default=["cluster", "box"])
     args = parser.parse_args()

@@ -56,7 +56,7 @@ def energies(system, positions, box, platform, precision, indices, lambdas):
         force.setForceGroup(31)
     for group, i in enumerate(indices.values()):
         system.getForce(i).setForceGroup(group)
-    properties = {"Precision": precision} if platform in ("CUDA", "OpenCL") else {}
+    properties = {"Precision": precision} if platform == "CUDA" else {}
     context = openmm.Context(system, openmm.VerletIntegrator(0.001), openmm.Platform.getPlatformByName(platform), properties)
     if box is not None:
         context.setPeriodicBoxVectors(*box)

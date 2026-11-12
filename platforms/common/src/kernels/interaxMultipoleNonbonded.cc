@@ -1,4 +1,4 @@
-// This is a modified version of the standard nonbonded kernel for computing HippoNonbondedForce.
+// This is a modified version of the standard nonbonded kernel for computing InteraxMultipoleForce.
 // This is needed because of two ways in which it differs from most nonbonded interactions:
 // the force between two atoms doesn't always point along the line between them, and we need
 // to accumulate torques as well as forces.

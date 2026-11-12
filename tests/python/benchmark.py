@@ -6,7 +6,7 @@ For each system and platform, two measurements:
   terms   time of one evaluation (energy and forces) of the replaced terms only: dispersion, exchange repulsion and
           short-range correction, export (Custom forces) vs plugin, and the three-body dispersion (a plugin force in both)
   md      speed of molecular dynamics with the complete system (electrostatics and polarization, valence terms, ...),
-          export vs plugin; only on the CUDA and OpenCL platforms, where it takes seconds
+          export vs plugin; only on the CUDA platform, where it takes seconds
 
 Systems (model INTERAX_MODEL, 0.9 nm cutoff):
 
@@ -67,7 +67,7 @@ def mark_terms(system, plugin):
 
 
 def make_context(system, positions, platform, precision, integrator=None):
-    properties = {"Precision": precision} if platform in ("CUDA", "OpenCL") else {}
+    properties = {"Precision": precision} if platform == "CUDA" else {}
     integrator = integrator or openmm.VerletIntegrator(0.001)
     context = openmm.Context(system, integrator, openmm.Platform.getPlatformByName(platform), properties)
     context.setPositions(positions)
@@ -100,7 +100,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--platforms", nargs="+", default=["Reference", "CPU", "CUDA"])
     parser.add_argument("--systems", nargs="+", default=["methanol", "hfe"])
-    parser.add_argument("--precision", default="mixed", help="CUDA/OpenCL precision")
+    parser.add_argument("--precision", default="mixed", help="CUDA precision")
     parser.add_argument("--md-steps", type=int, default=500)
     parser.add_argument("--skip-reference-export", action="store_true", help="the export on Reference takes minutes per evaluation")
     args = parser.parse_args()
@@ -127,7 +127,7 @@ def main():
                 context = make_context(system, positions, platform, args.precision, integrator)
                 setup = time.perf_counter() - start
                 terms = time_terms(context, max_evaluations=200 if platform != "Reference" else 3)
-                md = time_md(context, steps=args.md_steps) if platform in ("CUDA", "OpenCL") else float("nan")
+                md = time_md(context, steps=args.md_steps) if platform == "CUDA" else float("nan")
                 rows.append((name, platform, variant, setup, terms, md))
                 print(f"  {platform:<9} {variant:<6} context {setup:7.1f} s   terms {1e3 * terms:10.2f} ms   md {md:8.2f} ns/day", flush=True)
                 del context, integrator

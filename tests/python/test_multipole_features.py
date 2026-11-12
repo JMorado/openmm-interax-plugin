@@ -59,7 +59,7 @@ def single(system, force):
 
 
 def evaluate(system, positions, platform, precision, parameters=None):
-    properties = {"Precision": precision} if platform in ("CUDA", "OpenCL") else {}
+    properties = {"Precision": precision} if platform == "CUDA" else {}
     c = openmm.Context(system, openmm.VerletIntegrator(0.001), openmm.Platform.getPlatformByName(platform), properties)
     c.setPositions(positions)
     for name, value in (parameters or {}).items():

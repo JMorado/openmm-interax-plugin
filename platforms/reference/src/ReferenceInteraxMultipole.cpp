@@ -439,7 +439,7 @@ void ReferenceInteraxMultipole::computeOverlapDampingFactors(const MultipolePart
         fdampJ5 = 1 - (1 + arJ + arJ2*(1.0/2) + arJ3*(1.0/6))*expARJ;
         fdampJ7 = 1 - (1 + arJ + arJ2*(1.0/2) + arJ3*(1.0/6) + arJ4*(1.0/30))*expARJ;
         fdampJ9 = 1 - (1 + arJ + arJ2*(1.0/2) + arJ3*(1.0/6) + 4*arJ4*(1.0/105) + arJ5*(1.0/210))*expARJ;
-        // ComputePairDampingFactors() switches to a series when the exponents are nearly equal.
+        // computePairDampingFactors() switches to a series when the exponents are nearly equal.
         double fdamp[6];
         computePairDampingFactors(particleI.alpha, particleJ.alpha, r, fdamp);
         fdampIJ1 = fdamp[0];
@@ -1678,7 +1678,7 @@ void ReferenceInteraxMultipolePme::calculateFixedMultipoleField() {
 #define ARRAY(x,y) array[(x)-1+((y)-1)*AMOEBA_PME_ORDER]
 
 /**
- * This is called from computeBsplines().  It calculates the spline coefficients for a single atom along a single axis.
+ * This is called from computeAmoebaBsplines().  It calculates the spline coefficients for a single atom along a single axis.
  */
 void ReferenceInteraxMultipolePme::computeBSplinePoint(vector<InteraxDouble4>& thetai, double w) {
     double array[AMOEBA_PME_ORDER*AMOEBA_PME_ORDER];
