@@ -25,6 +25,7 @@ set(INTERAXPLUGIN_LIBRARY_DIR "${CMAKE_BINARY_DIR}")
 set(INTERAXPLUGIN_INSTALL_LIBRARY_DIR "${CMAKE_INSTALL_PREFIX}/lib")
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/setup.py ${CMAKE_CURRENT_BINARY_DIR}/setup.py)
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/interaxplugin_convert.py ${CMAKE_CURRENT_BINARY_DIR}/interaxplugin_convert.py COPYONLY)
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/interaxplugin_forcefield.py ${CMAKE_CURRENT_BINARY_DIR}/interaxplugin_forcefield.py COPYONLY)
 # Installed into OpenMM's directory (the default prefix; for conda, the environment), the module goes into the Python
 # environment, next to OpenMM's, and needs no path. Installed into its own prefix (side-by-side builds), it goes into
 # PREFIX/python, which then has to be put on sys.path (and PREFIX/lib/plugins loaded).
