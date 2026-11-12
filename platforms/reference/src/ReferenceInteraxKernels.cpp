@@ -223,3 +223,73 @@ double ReferenceCalcInteraxThreeBodyForceKernel::execute(ContextImpl& context, b
 void ReferenceCalcInteraxThreeBodyForceKernel::copyParametersToContext(ContextImpl& context, const InteraxThreeBodyForce& force) {
     ixn->setParameters(force);
 }
+
+/* -------------------------------------------------------------------------- *
+ *                          InteraxMultipoleForce                             *
+ * -------------------------------------------------------------------------- */
+
+static ReferenceInteraxMultipole* createMultipoleIxn(const InteraxMultipoleForce& force, const System& system) {
+    if (force.getNonbondedMethod() == InteraxMultipoleForce::PME)
+        return new ReferenceInteraxMultipolePme(force, system);
+    return new ReferenceInteraxMultipole(force);
+}
+
+void ReferenceCalcInteraxMultipoleForceKernel::initialize(const System& system, const InteraxMultipoleForce& force) {
+    numParticles = force.getNumParticles();
+    ixn.reset(createMultipoleIxn(force, system));
+    alchemicalParameter = force.getAlchemicalParameterName();
+    hasAlchemicalParticles = false;
+    for (int i = 0; i < numParticles; i++) {
+        int axisType, atomZ, atomX, atomY;
+        double charge, coreCharge, alpha, polarizability;
+        bool isAlchemical;
+        vector<double> dipole, quadrupole;
+        force.getParticleParameters(i, charge, dipole, quadrupole, coreCharge, alpha, polarizability, axisType, atomZ, atomX, atomY, isAlchemical);
+        hasAlchemicalParticles |= isAlchemical;
+    }
+}
+
+void ReferenceCalcInteraxMultipoleForceKernel::setup(ContextImpl& context) {
+    ixn->setLambda(getAlchemicalParameter(context, hasAlchemicalParticles, alchemicalParameter));
+    if (ixn->getNonbondedMethod() == InteraxMultipoleForce::PME) {
+        ReferenceInteraxMultipolePme* force = dynamic_cast<ReferenceInteraxMultipolePme*>(ixn.get());
+        Vec3* boxVectors = extractBoxVectors(context);
+        double minAllowedSize = 1.999999*force->getCutoffDistance();
+        if (boxVectors[0][0] < minAllowedSize || boxVectors[1][1] < minAllowedSize || boxVectors[2][2] < minAllowedSize)
+            throw OpenMMException("The periodic box size has decreased to less than twice the nonbonded cutoff.");
+        force->setPeriodicBoxSize(boxVectors);
+    }
+}
+
+double ReferenceCalcInteraxMultipoleForceKernel::execute(ContextImpl& context, bool includeForces, bool includeEnergy) {
+    setup(context);
+    return ixn->calculateForceAndEnergy(extractPositions(context), extractForces(context));
+}
+
+void ReferenceCalcInteraxMultipoleForceKernel::getInducedDipoles(ContextImpl& context, vector<Vec3>& dipoles) {
+    setup(context);
+    ixn->calculateInducedDipoles(extractPositions(context), dipoles);
+}
+
+void ReferenceCalcInteraxMultipoleForceKernel::getLabFramePermanentDipoles(ContextImpl& context, vector<Vec3>& dipoles) {
+    setup(context);
+    ixn->calculateLabFramePermanentDipoles(extractPositions(context), dipoles);
+}
+
+void ReferenceCalcInteraxMultipoleForceKernel::copyParametersToContext(ContextImpl& context, const InteraxMultipoleForce& force) {
+    if (numParticles != force.getNumParticles())
+        throw OpenMMException("updateParametersInContext: The number of particles has changed");
+    ixn.reset(createMultipoleIxn(force, context.getSystem()));
+}
+
+void ReferenceCalcInteraxMultipoleForceKernel::getPMEParameters(double& alpha, int& nx, int& ny, int& nz) const {
+    if (ixn->getNonbondedMethod() != InteraxMultipoleForce::PME)
+        throw OpenMMException("getPMEParametersInContext: This Context is not using PME");
+    ReferenceInteraxMultipolePme* force = dynamic_cast<ReferenceInteraxMultipolePme*>(ixn.get());
+    alpha = force->getAlphaEwald();
+    vector<int> dim;
+    force->getPmeGridDimensions(dim);
+    nx = dim[0];
+    ny = dim[1];
+    nz = dim[2];
+}

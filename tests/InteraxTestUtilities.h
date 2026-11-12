@@ -84,7 +84,7 @@ const Real PI_L = 3.141592653589793238462643383279502884L;
 /**
  * Get the precision in which a platform computes a force: "double" for the Reference platform, the "Precision"
  * property for the GPU platforms, and for the CPU platform "single" or "double" depending on the force (its pair
- * forces are computed in single precision, the three-body force in double precision).
+ * forces are computed in single precision, the three-body and multipole forces in double precision).
  */
 static string getPlatformPrecision(Platform& platform, bool cpuUsesDoublePrecision) {
     if (platform.getName() == "Reference")

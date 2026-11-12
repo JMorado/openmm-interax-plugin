@@ -50,13 +50,18 @@ extern "C" OPENMM_EXPORT void registerKernelFactories() {
             platform.registerKernelFactory(CalcInteraxExchangeForceKernel::Name(), factory);
             platform.registerKernelFactory(CalcInteraxShortRangeForceKernel::Name(), factory);
             platform.registerKernelFactory(CalcInteraxThreeBodyForceKernel::Name(), factory);
+            platform.registerKernelFactory(CalcInteraxMultipoleForceKernel::Name(), factory);
         }
+        // The CPU platform has no implementation of its own of the multipole force: it uses the reference one, as
+        // OpenMM's AMOEBA plugin does for HippoNonbondedForce.
+        if (platform.getName() == "CPU")
+            platform.registerKernelFactory(CalcInteraxMultipoleForceKernel::Name(), new ReferenceInteraxKernelFactory());
     }
 }
 
 /**
- * Register the kernels with the Reference platform.  This is used when the plugin is linked directly, as by the tests,
- * rather than loaded from the plugin directory.
+ * Register the kernels with the Reference platform, and the multipole kernel with the CPU platform.  This is used when
+ * the plugin is linked directly, as by the tests, rather than loaded from the plugin directory.
  */
 extern "C" OPENMM_EXPORT void registerInteraxReferenceKernelFactories() {
     registerKernelFactories();
@@ -71,5 +76,7 @@ KernelImpl* ReferenceInteraxKernelFactory::createKernelImpl(std::string name, co
         return new ReferenceCalcInteraxShortRangeForceKernel(name, platform);
     if (name == CalcInteraxThreeBodyForceKernel::Name())
         return new ReferenceCalcInteraxThreeBodyForceKernel(name, platform);
+    if (name == CalcInteraxMultipoleForceKernel::Name())
+        return new ReferenceCalcInteraxMultipoleForceKernel(name, platform);
     throw OpenMMException((std::string("Tried to create kernel with illegal kernel name '")+name+"'").c_str());
 }

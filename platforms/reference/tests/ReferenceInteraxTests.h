@@ -29,7 +29,8 @@
 
 /**
  * The platform of the InteraxFF tests on the Reference platform: the global "platform" that the tests use and
- * setupKernels(), which registers the InteraxFF kernels.
+ * setupKernels(), which registers the InteraxFF kernels and loads OpenMM's AMOEBA plugin (HippoNonbondedForce, the
+ * reference for InteraxMultipoleForce).
  */
 
 #ifdef WIN32
@@ -48,6 +49,7 @@ void initializeTests(int argc, char* argv[]) {
 
 void setupKernels(int argc, char* argv[]) {
     registerInteraxReferenceKernelFactories();
+    OpenMM::Platform::loadPluginLibrary(OPENMM_AMOEBA_REFERENCE_PLUGIN);
     platform = dynamic_cast<OpenMM::ReferencePlatform&>(OpenMM::Platform::getPlatformByName("Reference"));
     initializeTests(argc, argv);
 }
