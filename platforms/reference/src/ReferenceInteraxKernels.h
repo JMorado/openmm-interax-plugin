@@ -33,6 +33,7 @@
 #include "InteraxKernels.h"
 #include "internal/InteraxPairTerms.h"
 #include "ReferenceInteraxPairIxn.h"
+#include "ReferenceInteraxThreeBodyIxn.h"
 #include "openmm/Platform.h"
 #include <memory>
 #include <string>
@@ -178,6 +179,43 @@ private:
     bool hasAlchemicalParticles;
     int overlapMethod;
     InteraxPairTerms::SlaterTaylorScheme taylorScheme;
+};
+
+/**
+ * This kernel is invoked by InteraxThreeBodyForce to calculate the forces acting on the system and the energy of the
+ * system.
+ */
+class ReferenceCalcInteraxThreeBodyForceKernel : public CalcInteraxThreeBodyForceKernel {
+public:
+    ReferenceCalcInteraxThreeBodyForceKernel(std::string name, const OpenMM::Platform& platform) : CalcInteraxThreeBodyForceKernel(name, platform) {
+    }
+    /**
+     * Initialize the kernel.
+     *
+     * @param system     the System this kernel will be applied to
+     * @param force      the InteraxThreeBodyForce this kernel will be used for
+     */
+    void initialize(const OpenMM::System& system, const InteraxThreeBodyForce& force);
+    /**
+     * Execute the kernel to calculate the forces and/or energy.
+     *
+     * @param context        the context in which to execute this kernel
+     * @param includeForces  true if forces should be calculated
+     * @param includeEnergy  true if the energy should be calculated
+     * @return the potential energy due to the force
+     */
+    double execute(OpenMM::ContextImpl& context, bool includeForces, bool includeEnergy);
+    /**
+     * Copy changed parameters over to a context.
+     *
+     * @param context    the context to copy parameters to
+     * @param force      the InteraxThreeBodyForce to copy the parameters from
+     */
+    void copyParametersToContext(OpenMM::ContextImpl& context, const InteraxThreeBodyForce& force);
+private:
+    std::unique_ptr<ReferenceInteraxThreeBodyIxn> ixn;
+    std::string alchemicalParameter;
+    bool hasAlchemicalSites;
 };
 
 } // namespace InteraxPlugin

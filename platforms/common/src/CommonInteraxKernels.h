@@ -199,6 +199,64 @@ private:
     int overlapMethod;
 };
 
+/**
+ * This kernel is invoked by InteraxThreeBodyForce to calculate the forces acting on the system and the energy of
+ * the system. It computes the sites, half neighbor lists of the sites with a skin (rebuilt when a site has moved by
+ * more than half the skin), at every evaluation the compact lists of the neighbors within the cutoff (with the
+ * bounding box of each tile of them), the triples (each once, from its lowest site, adding the forces on the other two
+ * atomically), and then distributes the site forces to the particles.
+ */
+class CommonCalcInteraxThreeBodyForceKernel : public CalcInteraxThreeBodyForceKernel {
+public:
+    CommonCalcInteraxThreeBodyForceKernel(std::string name, const OpenMM::Platform& platform, OpenMM::ComputeContext& cc) :
+            CalcInteraxThreeBodyForceKernel(name, platform), cc(cc), numSites(0), numEvaluations(0), hasComputed(false), useCentroidDamping(false), lastLambda(-1) {
+    }
+    /**
+     * Initialize the kernel.
+     *
+     * @param system     the System this kernel will be applied to
+     * @param force      the InteraxThreeBodyForce this kernel will be used for
+     */
+    void initialize(const OpenMM::System& system, const InteraxThreeBodyForce& force);
+    /**
+     * Execute the kernel to calculate the forces and/or energy.
+     *
+     * @param context        the context in which to execute this kernel
+     * @param includeForces  true if forces should be calculated
+     * @param includeEnergy  true if the energy should be calculated
+     * @return the potential energy due to the force
+     */
+    double execute(OpenMM::ContextImpl& context, bool includeForces, bool includeEnergy);
+    /**
+     * Copy changed parameters over to a context.
+     *
+     * @param context    the context to copy parameters to
+     * @param force      the InteraxThreeBodyForce to copy the parameters from
+     */
+    void copyParametersToContext(OpenMM::ContextImpl& context, const InteraxThreeBodyForce& force);
+private:
+    class ForceInfo;
+    class NeighborListPostComputation;
+    // The triples kernel runs one block of TripleBlockSize threads per site, over tiles of TileSize neighbors.
+    static const int TripleBlockSize = 256;
+    static const int TileSize = 128;
+    // The neighbor list kernels run blocks of NeighborBlockSize threads, a warp per site.
+    static const int NeighborBlockSize = 128;
+    // The skin (nm) of the neighbor lists: they hold the sites within the cutoff plus the skin, rebuilt when a site has
+    // moved by more than half of it.
+    static constexpr double NeighborSkin = 0.1;
+    void setParameters(const InteraxThreeBodyForce& force);
+    void checkNeighborListSize();
+    OpenMM::ComputeContext& cc;
+    int numSites, maxNeighbors, numEvaluations;
+    bool periodic, hasAlchemicalSites, hasComputed, useCentroidDamping;
+    double scaleFactor, dampingScale, centroidDampingRadius, lastLambda;
+    std::string alchemicalParameter;
+    OpenMM::ComputeArray siteOffsets, siteParticles, siteMolecules, siteParams, sites, neighbors, numNeighbors, maxNeighborCount,
+            siteForce, globals, sitesAtBuild, rebuildFlag, tileBoxes, activeNeighbors, numActive;
+    OpenMM::ComputeKernel sitesKernel, neighborsKernel, compactKernel, triplesKernel, applyForcesKernel;
+};
+
 } // namespace InteraxPlugin
 
 #endif /*OPENMM_COMMONINTERAXKERNELS_H_*/

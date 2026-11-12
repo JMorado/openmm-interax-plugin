@@ -35,5 +35,6 @@
 #include "InteraxPairForce.h"
 #include "InteraxPluginVersion.h"
 #include "InteraxShortRangeForce.h"
+#include "InteraxThreeBodyForce.h"
 
 #endif /*OPENMM_INTERAX_H_*/

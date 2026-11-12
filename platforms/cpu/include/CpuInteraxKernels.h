@@ -31,6 +31,7 @@
  * -------------------------------------------------------------------------- */
 
 #include "CpuInteraxPairForce.h"
+#include "CpuInteraxThreeBodyForce.h"
 #include "InteraxKernels.h"
 #include "openmm/cpu/CpuPlatform.h"
 #include <memory>
@@ -162,6 +163,45 @@ private:
     int overlapMethod;
     std::string alchemicalParameter;
     bool hasAlchemicalParticles;
+};
+
+/**
+ * This kernel is invoked by InteraxThreeBodyForce to calculate the forces acting on the system and the energy of the
+ * system.
+ */
+class CpuCalcInteraxThreeBodyForceKernel : public CalcInteraxThreeBodyForceKernel {
+public:
+    CpuCalcInteraxThreeBodyForceKernel(std::string name, const OpenMM::Platform& platform, OpenMM::CpuPlatform::PlatformData& data) :
+            CalcInteraxThreeBodyForceKernel(name, platform), data(data) {
+    }
+    /**
+     * Initialize the kernel.
+     *
+     * @param system     the System this kernel will be applied to
+     * @param force      the InteraxThreeBodyForce this kernel will be used for
+     */
+    void initialize(const OpenMM::System& system, const InteraxThreeBodyForce& force);
+    /**
+     * Execute the kernel to calculate the forces and/or energy.
+     *
+     * @param context        the context in which to execute this kernel
+     * @param includeForces  true if forces should be calculated
+     * @param includeEnergy  true if the energy should be calculated
+     * @return the potential energy due to the force
+     */
+    double execute(OpenMM::ContextImpl& context, bool includeForces, bool includeEnergy);
+    /**
+     * Copy changed parameters over to a context.
+     *
+     * @param context    the context to copy parameters to
+     * @param force      the InteraxThreeBodyForce to copy the parameters from
+     */
+    void copyParametersToContext(OpenMM::ContextImpl& context, const InteraxThreeBodyForce& force);
+private:
+    OpenMM::CpuPlatform::PlatformData& data;
+    std::unique_ptr<CpuInteraxThreeBodyForce> ixn;
+    std::string alchemicalParameter;
+    bool hasAlchemicalSites;
 };
 
 } // namespace InteraxPlugin

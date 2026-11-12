@@ -49,6 +49,7 @@ extern "C" OPENMM_EXPORT void registerKernelFactories() {
             platform.registerKernelFactory(CalcInteraxDispersionForceKernel::Name(), factory);
             platform.registerKernelFactory(CalcInteraxExchangeForceKernel::Name(), factory);
             platform.registerKernelFactory(CalcInteraxShortRangeForceKernel::Name(), factory);
+            platform.registerKernelFactory(CalcInteraxThreeBodyForceKernel::Name(), factory);
         }
     }
 }
@@ -68,5 +69,7 @@ KernelImpl* ReferenceInteraxKernelFactory::createKernelImpl(std::string name, co
         return new ReferenceCalcInteraxExchangeForceKernel(name, platform);
     if (name == CalcInteraxShortRangeForceKernel::Name())
         return new ReferenceCalcInteraxShortRangeForceKernel(name, platform);
+    if (name == CalcInteraxThreeBodyForceKernel::Name())
+        return new ReferenceCalcInteraxThreeBodyForceKernel(name, platform);
     throw OpenMMException((std::string("Tried to create kernel with illegal kernel name '")+name+"'").c_str());
 }

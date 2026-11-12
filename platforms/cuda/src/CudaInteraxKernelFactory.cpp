@@ -48,6 +48,7 @@ extern "C" OPENMM_EXPORT void registerKernelFactories() {
         platform.registerKernelFactory(CalcInteraxDispersionForceKernel::Name(), factory);
         platform.registerKernelFactory(CalcInteraxExchangeForceKernel::Name(), factory);
         platform.registerKernelFactory(CalcInteraxShortRangeForceKernel::Name(), factory);
+        platform.registerKernelFactory(CalcInteraxThreeBodyForceKernel::Name(), factory);
     }
     catch (std::exception& ex) {
         // The CUDA platform is not available.
@@ -76,5 +77,7 @@ KernelImpl* CudaInteraxKernelFactory::createKernelImpl(std::string name, const P
         return new CommonCalcInteraxExchangeForceKernel(name, platform, cu);
     if (name == CalcInteraxShortRangeForceKernel::Name())
         return new CommonCalcInteraxShortRangeForceKernel(name, platform, cu);
+    if (name == CalcInteraxThreeBodyForceKernel::Name())
+        return new CommonCalcInteraxThreeBodyForceKernel(name, platform, cu);
     throw OpenMMException((std::string("Tried to create kernel with illegal kernel name '")+name+"'").c_str());
 }

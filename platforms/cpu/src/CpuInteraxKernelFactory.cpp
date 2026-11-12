@@ -48,6 +48,7 @@ extern "C" OPENMM_EXPORT void registerKernelFactories() {
         platform.registerKernelFactory(CalcInteraxDispersionForceKernel::Name(), factory);
         platform.registerKernelFactory(CalcInteraxExchangeForceKernel::Name(), factory);
         platform.registerKernelFactory(CalcInteraxShortRangeForceKernel::Name(), factory);
+        platform.registerKernelFactory(CalcInteraxThreeBodyForceKernel::Name(), factory);
     }
     catch (std::exception& ex) {
         // The CPU platform is not available.
@@ -76,5 +77,7 @@ KernelImpl* CpuInteraxKernelFactory::createKernelImpl(std::string name, const Pl
         return new CpuCalcInteraxExchangeForceKernel(name, platform, data);
     if (name == CalcInteraxShortRangeForceKernel::Name())
         return new CpuCalcInteraxShortRangeForceKernel(name, platform, data);
+    if (name == CalcInteraxThreeBodyForceKernel::Name())
+        return new CpuCalcInteraxThreeBodyForceKernel(name, platform, data);
     throw OpenMMException((std::string("Tried to create kernel with illegal kernel name '") + name + "'").c_str());
 }

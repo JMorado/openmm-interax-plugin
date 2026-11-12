@@ -196,3 +196,30 @@ void ReferenceCalcInteraxShortRangeForceKernel::setParameters(const InteraxShort
         force.getParticleParameters(i, particles[i].k, particles[i].l, particles[i].width, isAlchemical);
     }
 }
+
+/* -------------------------------------------------------------------------- *
+ *                          InteraxThreeBodyForce                             *
+ * -------------------------------------------------------------------------- */
+
+void ReferenceCalcInteraxThreeBodyForceKernel::initialize(const System& system, const InteraxThreeBodyForce& force) {
+    ixn.reset(new ReferenceInteraxThreeBodyIxn(force));
+    alchemicalParameter = force.getAlchemicalParameterName();
+    hasAlchemicalSites = false;
+    for (int i = 0; i < force.getNumSites(); i++) {
+        vector<int> particles;
+        double alpha, frequency, width;
+        int molecule;
+        bool isAlchemical;
+        force.getSiteParameters(i, particles, alpha, frequency, width, molecule, isAlchemical);
+        hasAlchemicalSites |= isAlchemical;
+    }
+}
+
+double ReferenceCalcInteraxThreeBodyForceKernel::execute(ContextImpl& context, bool includeForces, bool includeEnergy) {
+    double lambda = getAlchemicalParameter(context, hasAlchemicalSites, alchemicalParameter);
+    return ixn->calculateIxn(extractPositions(context), extractBoxVectors(context), lambda, extractForces(context));
+}
+
+void ReferenceCalcInteraxThreeBodyForceKernel::copyParametersToContext(ContextImpl& context, const InteraxThreeBodyForce& force) {
+    ixn->setParameters(force);
+}

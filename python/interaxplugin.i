@@ -45,9 +45,21 @@ import openmm.unit as unit
  * The reference parameters of the get...Parameters() methods are output values.  Marking them as such
  * will cause swig to return a tuple.
  */
-%apply double& OUTPUT {double& m1, double& m2, double& m3, double& alpha, double& width, double& amplitude, double& k, double& l};
+%apply double& OUTPUT {double& m1, double& m2, double& m3, double& alpha, double& width, double& amplitude, double& k, double& l, double& frequency};
 %apply bool& OUTPUT {bool& isAlchemical};
-%apply int& OUTPUT {int& particle1, int& particle2};
+%apply int& OUTPUT {int& particle1, int& particle2, int& molecule};
+/*
+ * getSiteParameters() returns the particles of the site as a tuple.
+ */
+%typemap(in, numinputs=0) std::vector<int>& particles (std::vector<int> temp) {
+    $1 = &temp;
+}
+%typemap(argout) std::vector<int>& particles {
+    PyObject* list = PyTuple_New($1->size());
+    for (size_t i = 0; i < $1->size(); i++)
+        PyTuple_SET_ITEM(list, i, PyLong_FromLong((*$1)[i]));
+    %append_output(list);
+}
 
 /*
  * Docstrings: the signature of every method, and a description of every class (the C++ headers document each method).
@@ -65,6 +77,9 @@ sqrt(kJ/mol nm^3).";
 %feature("docstring") InteraxPlugin::InteraxShortRangeForce "Short-range correction
 E = sum_ij [(K_i + K_j)/2 St + (L_i + L_j)/2 St^2], with St = 8 pi (s_i + s_j)^3 S(r; s_i, s_j) the normalized Slater
 overlap, K and L in kJ/mol and widths s in nm.";
+%feature("docstring") InteraxPlugin::InteraxThreeBodyForce "Axilrod-Teller-Muto three-body dispersion between sites,
+the centroids of sets of particles, each with a polarizability (nm^3), a single-pole frequency (kJ/mol), a width (nm)
+and a molecule; triples within the cutoff (nm) of each other interact, optionally damped.";
 
 namespace InteraxPlugin {
 
@@ -150,6 +165,34 @@ public:
     void updateParametersInContext(OpenMM::Context& context);
 };
 
+class InteraxThreeBodyForce : public OpenMM::Force {
+public:
+    enum DampingMethod {
+        NoDamping = 0,
+        TangToennies = 1
+    };
+    InteraxThreeBodyForce();
+    int getNumSites() const;
+    int addSite(const std::vector<int>& particles, double alpha, double frequency, double width=0.0, int molecule=-1, bool isAlchemical=false);
+    void getSiteParameters(int index, std::vector<int>& particles, double& alpha, double& frequency, double& width, int& molecule, bool& isAlchemical) const;
+    void setSiteParameters(int index, const std::vector<int>& particles, double alpha, double frequency, double width, int molecule, bool isAlchemical);
+    double getCutoffDistance() const;
+    void setCutoffDistance(double distance);
+    double getScaleFactor() const;
+    void setScaleFactor(double scale);
+    DampingMethod getDampingMethod() const;
+    void setDampingMethod(DampingMethod method);
+    double getDampingScale() const;
+    void setDampingScale(double scale);
+    double getCentroidDampingRadius() const;
+    void setCentroidDampingRadius(double radius);
+    void setUsesPeriodicBoundaryConditions(bool periodic);
+    bool usesPeriodicBoundaryConditions() const;
+    const std::string& getAlchemicalParameterName() const;
+    void setAlchemicalParameterName(const std::string& name);
+    void updateParametersInContext(OpenMM::Context& context);
+};
+
 } // namespace InteraxPlugin
 
 /*
@@ -169,6 +212,7 @@ public:
 CAST_HELPERS(InteraxDispersionForce)
 CAST_HELPERS(InteraxExchangeForce)
 CAST_HELPERS(InteraxShortRangeForce)
+CAST_HELPERS(InteraxThreeBodyForce)
 
 /*
  * The version of the plugin, as in other OpenMM Python packages.
