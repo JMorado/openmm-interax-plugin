@@ -40,7 +40,8 @@ extern "C" OPENMM_EXPORT void registerPlatforms() {
 }
 
 extern "C" OPENMM_EXPORT void registerKernelFactories() {
-    // Register only with the Reference platform itself, not with the CPU platform (a subclass of ReferencePlatform).
+    // Register only with the Reference platform itself: the CPU platform is a subclass of ReferencePlatform, and has
+    // its own implementations of these kernels.
     for (int i = 0; i < Platform::getNumPlatforms(); i++) {
         Platform& platform = Platform::getPlatform(i);
         if (platform.getName() == "Reference") {

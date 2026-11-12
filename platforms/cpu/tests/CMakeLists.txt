@@ -1,0 +1,19 @@
+# Part of the OpenMM InteraxFF plugin. Copyright (c) 2026 the Authors. MIT license, see LICENSE.
+
+#
+# Testing
+#
+
+# The InteraxFF Reference plugin (the reference of some tests) is loaded at run time.
+
+# Automatically create tests using files named "Test*.cpp"
+FILE(GLOB TEST_PROGS "*Test*.cpp")
+FOREACH(TEST_PROG ${TEST_PROGS})
+    GET_FILENAME_COMPONENT(TEST_ROOT ${TEST_PROG} NAME_WE)
+    ADD_EXECUTABLE(${TEST_ROOT} ${TEST_PROG})
+    TARGET_LINK_LIBRARIES(${TEST_ROOT} ${SHARED_TARGET})
+    ADD_DEPENDENCIES(${TEST_ROOT} InteraxPluginReference)
+    TARGET_COMPILE_DEFINITIONS(${TEST_ROOT} PRIVATE INTERAX_REFERENCE_PLUGIN="$<TARGET_FILE:InteraxPluginReference>")
+    SET_TARGET_PROPERTIES(${TEST_ROOT} PROPERTIES LINK_FLAGS "${EXTRA_COMPILE_FLAGS}" COMPILE_FLAGS "${EXTRA_COMPILE_FLAGS}")
+    ADD_TEST(${TEST_ROOT} ${EXECUTABLE_OUTPUT_PATH}/${TEST_ROOT})
+ENDFOREACH(TEST_PROG ${TEST_PROGS})

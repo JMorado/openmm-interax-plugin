@@ -110,6 +110,7 @@ INCLUDE_DIRECTORIES(${CMAKE_CURRENT_SOURCE_DIR}/tests)
 # Build the implementations for different platforms
 
 ADD_SUBDIRECTORY(platforms/reference)
+ADD_SUBDIRECTORY(platforms/cpu)
 
 # Build the Python API
 
