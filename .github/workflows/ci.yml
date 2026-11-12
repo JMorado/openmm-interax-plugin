@@ -1,0 +1,70 @@
+# Build the plugin against the OpenMM that conda-forge resolves (not pinned: CI follows the current release), install it
+# into the environment (next to OpenMM), and run the tests that need no GPU: the C++ tests of the Reference and CPU
+# platforms and of serialization (ctest), and the Python tests on those platforms. The CUDA platform and the
+# comparisons with InteraxFF models run on a GPU node (devtools/run_all_tests.sh). SWIG is not pinned either; CMake
+# checks that its runtime version matches the one of OpenMM's Python module.
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Linux, conda-forge OpenMM, Python ${{ matrix.python }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.11", "3.12"]
+    defaults:
+      run:
+        shell: bash -el {0}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up the environment
+        uses: mamba-org/setup-micromamba@v2
+        with:
+          environment-name: ci
+          create-args: >-
+            python=${{ matrix.python }}
+            openmm
+            cxx-compiler
+            cmake
+            make
+            swig
+            numpy
+            pip
+            setuptools
+            pytest
+          cache-environment: false  # a cached environment would keep the OpenMM of its first solve
+
+      - name: Configure
+        run: |
+          cmake -S . -B build \
+            -DOPENMM_DIR="$CONDA_PREFIX" \
+            -DINTERAX_BUILD_CUDA_LIB=OFF \
+            -DPYTHON_EXECUTABLE="$(which python)" \
+            -DSWIG_EXECUTABLE="$(which swig)"
+
+      - name: Build and install
+        run: |
+          cmake --build build -j 4 --target install
+          cmake --build build --target PythonInstall
+
+      - name: Build stamp
+        run: python -c "import openmm, interaxplugin_convert as c; print('OpenMM', openmm.__version__, '| plugin', c.build_info())"
+
+      - name: C++ tests (Reference, CPU, serialization)
+        working-directory: build
+        run: ctest --output-on-failure -j 4
+
+      - name: Python tests
+        run: python -m pytest -q -p no:cacheprovider -rs tests/python

@@ -1,168 +1,298 @@
-OpenMM Example Plugin
-=====================
+OpenMM InteraxFF Plugin
+=======================
 
-This project is an example of how to write a plugin for [OpenMM](https://openmm.org).
-It includes nearly everything you would want in a real plugin, including implementations for the
-Reference, OpenCL, and CUDA platforms, serialization support, test cases, and a Python API.  It
-is useful as a starting point for anyone who wants to write a plugin.
+[![CI](https://github.com/JMorado/openmm-interax-plugin/actions/workflows/ci.yml/badge.svg)](https://github.com/JMorado/openmm-interax-plugin/actions/workflows/ci.yml)
+![Version](https://img.shields.io/badge/version-0.1.0-blue)
+![OpenMM](https://img.shields.io/badge/OpenMM-%E2%89%A5%208.1-blue)
+![Platforms](https://img.shields.io/badge/platforms-Reference%20%7C%20CPU%20%7C%20CUDA-informational)
+![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12-blue)
 
-This plugin defines a single Force subclass called ExampleForce, which implements an anharmonic
-bond force of the form E(r)=k*r<sup>4</sup>.  Of course, you don't actually need a plugin to
-implement a force of that form: you could do it trivially with CustomBondForce.  But since it is
-so simple, it makes a very good example.
+This plugin implements the intermolecular terms of the InteraxFF force field as five [OpenMM](https://openmm.org)
+forces, with Reference, CPU and CUDA implementations, serialization support, test cases and a Python API. It is
+structured like the [OpenMM example plugin](https://github.com/openmm/openmmexampleplugin), from which it started.
 
-I assume you are already familiar with the OpenMM API, and that you have already read the OpenMM
-Developer Guide.  If not, go read it now.  I will not repeat anything that is covered there, and
-only focus on what is unique to this plugin.
+| Force | Energy |
+|---|---|
+| `InteraxDispersionForce` | Tang-Toennies damped C6/C8/C10 pair dispersion from XDM moments, with an optional long range correction |
+| `InteraxExchangeForce` | exchange repulsion, proportional to the overlap of the Slater valence densities of each pair |
+| `InteraxShortRangeForce` | short-range correction, linear and quadratic in the normalized Slater overlap |
+| `InteraxThreeBodyForce` | Axilrod-Teller-Muto three-body dispersion between atomic or molecular sites |
+| `InteraxMultipoleForce` | electrostatics of core charges, Slater valence charges, dipoles and quadrupoles, and polarization |
+
+Lengths are in nm, energies in kJ/mol and charges in e, as everywhere in OpenMM. The energy expressions, parameters
+and conventions of every force are given in [docs/SPEC.md](docs/SPEC.md) and in the documentation of each class in
+`openmmapi/include`.
+
+`InteraxMultipoleForce` computes the electrostatics and polarization of OpenMM's `HippoNonbondedForce`, without its
+repulsion, dispersion and charge transfer, and adds core damping of the field that polarizes each atom, a damping
+scale of the couplings between induced dipoles, alchemical scaling, and zero polarizabilities. With HIPPO's options it
+reproduces `HippoNonbondedForce`.
+
+Every force can decouple alchemical particles through a context parameter (`lambda_sterics` by default,
+`lambda_electrostatics` for `InteraxMultipoleForce`).
 
 
 Building The Plugin
 ===================
 
-This project uses [CMake](http://www.cmake.org) for its build system.  To build it, follow these
-steps:
+The plugin is built with [CMake](https://cmake.org) against an installed OpenMM. It needs:
 
-1. Create a directory in which to build the plugin.
+* OpenMM 8.1 or later, with its headers and libraries (a conda environment with the `openmm` package will do);
+* CMake 3.17 or later and a C++11 compiler;
+* the CUDA toolkit, for the CUDA platform (optional);
+* Python and SWIG, for the Python wrapper (optional). SWIG must generate the runtime version of OpenMM's own Python
+  module: SWIG 4.0-4.2 (runtime 4) for the conda-forge builds of OpenMM 8.1, SWIG 4.3 or later (runtime 5) for OpenMM
+  builds made with it. With a mismatch the plugin's forces are not OpenMM forces to Python (`TypeError` in
+  `System.addForce()`), so CMake compares the two and stops on a mismatch.
 
-2. Run the CMake GUI or ccmake, specifying your new directory as the build directory and the top
-level directory of this project as the source directory.
+The steps are:
 
-3. Press "Configure".
+1. Create a build directory and run `cmake` (or `ccmake`) in it, pointing at the source directory.
+2. Set `OPENMM_DIR` to where OpenMM is installed (for a conda environment, the environment's root), and
+   `CMAKE_INSTALL_PREFIX` to where the plugin should be installed. If it is not set, the plugin is installed next to
+   OpenMM: its platform libraries go into OpenMM's plugin directory, which OpenMM loads when it is imported, and its
+   Python modules into the Python environment, so that nothing has to be set at runtime.
+3. The CUDA platform is built when CMake finds the CUDA toolkit (`INTERAX_BUILD_CUDA_LIB`; set `CUDAToolkit_ROOT` if
+   needed). The Python wrapper is built when CMake finds Python and SWIG (`INTERAX_BUILD_PYTHON_WRAPPERS`, with
+   `PYTHON_EXECUTABLE` and `SWIG_EXECUTABLE`).
+4. Run `make install` to build and install the libraries, then `make PythonInstall` to build and install the Python
+   wrapper.
 
-4. Set OPENMM_DIR to point to the directory where OpenMM is installed.  This is needed to locate
-the OpenMM header files and libraries.
+For example, into the active conda environment:
 
-5. Set CMAKE_INSTALL_PREFIX to the directory where the plugin should be installed.  Usually,
-this will be the same as OPENMM_DIR, so the plugin will be added to your OpenMM installation.
+    mkdir build && cd build
+    cmake .. -DOPENMM_DIR=$CONDA_PREFIX -DPYTHON_EXECUTABLE=$CONDA_PREFIX/bin/python
+    make -j8 install
+    make PythonInstall
+    python -c "import interaxplugin; print(interaxplugin.__version__)"
 
-6. If you plan to build the OpenCL platform, make sure that OPENCL_INCLUDE_DIR and
-OPENCL_LIBRARY are set correctly, and that EXAMPLE_BUILD_OPENCL_LIB is selected.
+To keep several builds side by side, give each its own prefix (`-DCMAKE_INSTALL_PREFIX=/path/to/openmm-interax`). The
+Python modules then go into `PREFIX/python`, and the plugin has to be loaded at runtime (see below).
 
-7. If you plan to build the CUDA platform, make sure that CUDA_TOOLKIT_ROOT_DIR is set correctly
-and that EXAMPLE_BUILD_CUDA_LIB is selected.
+OpenMM compiles its CUDA kernels at runtime with NVRTC. If the driver is older than the NVRTC of the environment (the
+error is `CUDA_ERROR_UNSUPPORTED_PTX_VERSION`), preload an NVRTC that matches the driver, for example from the
+`nvidia-cuda-nvrtc-cu12` wheel of the driver's CUDA version: `LD_PRELOAD=.../libnvrtc.so.12`.
 
-8. Press "Configure" again if necessary, then press "Generate".
+Versions
+--------
 
-9. Use the build system you selected to build and install the plugin.  For example, if you
-selected Unix Makefiles, type `make install`.
+The version of the plugin is set once, in the `PROJECT()` command of `CMakeLists.txt`, and copied from there to the
+library and the Python package. Releases are tagged `vX.Y.Z` in git. Every build also records the git commit it was
+built from (`git describe --always --dirty`, refreshed at every build), so that two builds of the same version can be
+told apart:
+
+| | Version | Git commit |
+|---|---|---|
+| C++ | `InteraxPlugin::getPluginVersion()` | `InteraxPlugin::getPluginGitCommit()` |
+| Python | `interaxplugin.__version__` | `interaxplugin.getPluginGitCommit()` |
+
+`interaxplugin_convert.build_info()` returns both, for example `0.1.0 (v0.1.0)`.
+
+
+Using The Plugin
+================
+
+Installed next to OpenMM (the default), the plugin is loaded with OpenMM and `import interaxplugin` is all it takes.
+A build in its own prefix is loaded first:
+
+```python
+import sys
+import openmm
+
+PREFIX = "/path/to/openmm-interax"  # CMAKE_INSTALL_PREFIX
+sys.path.insert(0, f"{PREFIX}/python")
+openmm.Platform.loadPluginsFromDirectory(f"{PREFIX}/lib/plugins")
+
+import interaxplugin             # the forces
+import interaxplugin_forcefield  # their ForceField (ffxml) generators
+import interaxplugin_convert     # conversion of Systems built by InteraxFF
+```
+
+The forces are used like any other OpenMM force. For example, the atomic three-body dispersion of three atoms:
+
+```python
+import openmm
+import interaxplugin
+
+system = openmm.System()
+force = interaxplugin.InteraxThreeBodyForce()
+force.setCutoffDistance(1.2)
+force.setDampingMethod(interaxplugin.InteraxThreeBodyForce.TangToennies)
+for i in range(3):
+    system.addParticle(39.9)
+    # particles, polarizability (nm^3), frequency (kJ/mol), width (nm), molecule
+    force.addSite([i], 1.64e-3, 1.7e3, 0.03, i)
+system.addForce(force)
+context = openmm.Context(system, openmm.VerletIntegrator(0.001), openmm.Platform.getPlatformByName("Reference"))
+context.setPositions([[0, 0, 0], [0.38, 0, 0], [0.19, 0.33, 0]])
+print(context.getState(getEnergy=True).getPotentialEnergy())
+```
+
+As for other separately built OpenMM plugins (openmm-torch, for example), `System.getForce()` returns a plain `Force`
+in Python for the plugin's forces: each force class has `isinstance(force)` and `cast(force)` to test for it and
+recover it. The forces can be serialized with `XmlSerializer` once `interaxplugin` has been imported.
+
+Creating Systems
+----------------
+
+**From force field files.** Importing `interaxplugin_forcefield` registers OpenMM `ForceField` generators for the
+ffxml tags `<InteraxMultipoleForce>`, `<InteraxDispersionForce>`, `<InteraxExchangeForce>`, `<InteraxShortRangeForce>`
+and `<InteraxThreeBodyForce>`, so that `ForceField.createSystem()` builds the plugin forces as for any OpenMM force
+field. Parameters are per atom type (the arguments of each force's `addParticle()`, in OpenMM units); multipole frames
+are given by the atom types of the z, x and y atoms, as in OpenMM's AMOEBA and HIPPO files; every intramolecular pair
+is excluded. The module docstring lists the tags and their settings. A water model, for example:
+
+```python
+import io
+from openmm import app
+
+WATER = """<ForceField>
+ <AtomTypes>
+  <Type name="w-O" class="w-O" element="O" mass="15.999"/>
+  <Type name="w-H" class="w-H" element="H" mass="1.008"/>
+ </AtomTypes>
+ <Residues>
+  <Residue name="HOH">
+   <Atom name="O" type="w-O"/><Atom name="H1" type="w-H"/><Atom name="H2" type="w-H"/>
+   <Bond atomName1="O" atomName2="H1"/><Bond atomName1="O" atomName2="H2"/>
+  </Residue>
+ </Residues>
+ <HarmonicBondForce>
+  <Bond type1="w-O" type2="w-H" length="0.09572" k="462750.4"/>
+ </HarmonicBondForce>
+ <HarmonicAngleForce>
+  <Angle type1="w-H" type2="w-O" type3="w-H" angle="1.82421813418" k="836.8"/>
+ </HarmonicAngleForce>
+ <InteraxMultipoleForce extrapolationCoefficients="1.0">
+  <Atom type="w-O" charge="-0.8" coreCharge="6.0" alpha="40.0" polarizability="0.0009" axisType="1"
+        d0="0" d1="0" d2="0.003" q11="1e-4" q12="0" q13="0" q21="0" q22="-6e-5" q23="0" q31="0" q32="0" q33="-4e-5"
+        zAtomType="w-H" xAtomType="w-H"/>
+  <Atom type="w-H" charge="0.4" coreCharge="1.0" alpha="45.0" polarizability="0.0003" axisType="0"
+        d0="0" d1="0" d2="-0.002" q11="0" q12="0" q13="0" q21="0" q22="0" q23="0" q31="0" q32="0" q33="0"
+        zAtomType="w-O" xAtomType="w-H"/>
+ </InteraxMultipoleForce>
+ <InteraxDispersionForce dampingScale="1.0">
+  <Atom type="w-O" m1="0.12" m2="0.02" m3="0.005" alpha="0.0012" width="0.03"/>
+  <Atom type="w-H" m1="0.03" m2="0.004" m3="0.001" alpha="0.0003" width="0.025"/>
+ </InteraxDispersionForce>
+ <InteraxExchangeForce>
+  <Atom type="w-O" amplitude="3.0" width="0.03"/>
+  <Atom type="w-H" amplitude="1.2" width="0.025"/>
+ </InteraxExchangeForce>
+</ForceField>"""
+
+forcefield = app.ForceField(io.StringIO(WATER))
+topology = app.Topology()
+chain = topology.addChain()
+positions = []
+for k in range(2):
+    residue = topology.addResidue("HOH", chain)
+    o = topology.addAtom("O", app.element.oxygen, residue)
+    h1 = topology.addAtom("H1", app.element.hydrogen, residue)
+    h2 = topology.addAtom("H2", app.element.hydrogen, residue)
+    topology.addBond(o, h1)
+    topology.addBond(o, h2)
+    positions += [[0.3 * k, 0, 0], [0.3 * k + 0.0957, 0, 0], [0.3 * k - 0.024, 0.0927, 0]]
+system = forcefield.createSystem(topology, nonbondedMethod=app.NoCutoff)  # app.PME with a periodic box
+```
+
+The parameters of this water are illustrative only.
+
+**From InteraxFF.** InteraxFF (`interax.openmm.create_system_from_topology`) builds Systems with
+`InteraxMultipoleForce` and `InteraxThreeBodyForce`, and with its pair terms as `CustomNonbondedForce`s.
+`interaxplugin_convert.convert_system(system)` replaces those custom forces by `InteraxDispersionForce`,
+`InteraxExchangeForce` and `InteraxShortRangeForce`, which are faster and evaluate the Slater overlaps exactly. By
+default it also unwraps the `InteraxMultipoleForce` from the `CustomCVForce` ("E_hippo") in which InteraxFF wraps it,
+and calls `setUseOwnKernel(True)` on it, so that it shares the context with the other forces at a lower cost and with
+the same energies (`unwrap_multipoles=False` keeps the wrapper). It keeps every other force:
+
+```python
+from interax.openmm import create_system_from_topology
+
+system = interaxplugin_convert.convert_system(create_system_from_topology(topology, force_field), copy=False)
+```
+
+With `overlap="exact"` (the default) the Slater overlaps are evaluated exactly; with `overlap="export"` they are
+evaluated as the export evaluates them, which the converted forces then reproduce to rounding (the order-6 export of
+InteraxFF evaluates them exactly, the order-2 export with the Taylor expansion of MEDFF). With
+`copy=False` the System is converted in place.
+
+For alchemical decoupling, flag the solute's particles (and its three-body sites) as alchemical: the plugin forces then
+scale their interactions with the rest of the System by the alchemical parameter.
 
 
 Test Cases
 ==========
 
-To run all the test cases build the "test" target, for example by typing `make test`.
+Build the `test` target (`make test`, or `ctest` in the build directory) to run the C++ tests. As in OpenMM, the tests
+of each force are written once in a shared header (`tests/TestInterax<Force>.h`) and run on every platform through thin
+wrappers (`platforms/<platform>/tests/Test<Platform>Interax<Force>.cpp`), the CUDA tests in single, mixed and double
+precision. They compare energies and forces with values computed from the energy expressions, check forces against
+finite differences, cutoffs, periodic and triclinic boxes, exclusions, alchemical scaling and parameter updates, and
+compare `InteraxMultipoleForce` with `HippoNonbondedForce` for HIPPO's options. `TestInteraxExportValues` checks every
+platform against energies and forces of the InteraxFF implementation stored in `tests/data`, and
+`serialization/tests/TestSerializeInterax<Force>.cpp` the serialization of every force.
 
-This project contains several different directories for test cases: one for each platform, and
-another for serialization related code.  Each of these directories contains a CMakeLists.txt file
-that automatically creates a test from every file whose name starts with "Test" and ends with
-".cpp".  To create new tests, just add a new file to any of these directories.  The file should
-contain a `main()` function that executes any tests in the file and returns 0 if all tests were
-successful or 1 if any of them failed.
+The Python tests in `tests/python` need the plugin to be installed and run with `pytest`. They find the plugin through
+`INTERAX_PLUGIN_PREFIX` (unset: installed next to OpenMM), and InteraxFF and a model through `INTERAX_REPO` (an InteraxFF
+checkout) and `INTERAX_MODEL` (a model directory, with `nagl_model.pt`, `per_atomic_number_model.pt` and
+`force_field_state.pt`), as `tests/python/plugin_path.py` describes. The comparisons with InteraxFF run only when both
+are set:
 
-Usually plugins are loaded dynamically at runtime, but that doesn't work well for test cases:
-you want to be able to run the tests before the plugin has yet been installed into the plugins
-directory.  Instead, the test cases directly link against the relevant plugin libraries.  But
-that creates another problem: when a plugin is dynamically loaded at runtime, its platforms and
-kernels are registered automatically, but that doesn't happen for code that statically links
-against it.  Therefore, the very first line of each `main()` function typically invokes a method
-to do the registration that _would_ have been done if the plugin were loaded automatically:
+    export INTERAX_PLUGIN_PREFIX=/path/to/openmm-interax INTERAX_REPO=/path/to/InteraxFF INTERAX_MODEL=/path/to/model
+    cd tests/python && python -m pytest
 
-    registerExampleOpenCLKernelFactories();
+The InteraxFF systems take the charges of their base force field (intramolecular terms only) from AM1-BCC when
+AmberTools or OpenEye can compute them, else from Gasteiger; `INTERAX_BASE_CHARGES=am1bcc` or `gasteiger` forces one.
 
-The OpenCL and CUDA test directories create three tests from each source file: the program is
-invoked three times while passing the strings "single", "mixed", and "double" as a command line
-argument.  The `main()` function should take this value and set it as the default precision for
-the platform:
+| Test | What it checks |
+|---|---|
+| `test_export_values.py` | the stored InteraxFF values (`tests/data`), through the Python API |
+| `test_three_body.py` | the three-body force against an independent evaluation and finite differences |
+| `test_softcore.py` | the soft core of the pair forces |
+| `test_forcefield.py` | the ffxml generators against forces built with the API |
+| `test_alchemical.py` | the alchemical scaling against decoupled systems (needs InteraxFF) |
+| `test_multipole_features.py` | the options of `InteraxMultipoleForce` on CUDA in double precision against Reference (needs InteraxFF; skipped without CUDA; as a script, `--platform` and `--precision` choose others) |
 
-    if (argc > 1)
-        Platform::getPlatformByName("OpenCL").setPropertyDefaultValue("OpenCLPrecision", string(argv[1]));
+The other scripts in `tests/python` compare the plugin with InteraxFF (`compare_export.py`), regenerate `tests/data`
+(`generate_export_values.py`), and benchmark the forces (`benchmark.py`).
 
-This causes the plugin to be tested in all three of the supported precision modes every time you
-run the test suite.
-
-
-OpenCL and CUDA Kernels
-=======================
-
-The OpenCL and CUDA versions of the force are implemented with the common compute framework.
-This allows us to write a single class (`CommonCalcExampleForceKernel`) that provides an
-implementation for both platforms at the same time.  Device code is written in a subset of
-the OpenCL and CUDA languages, with a few macro and function definitions to make them
-identical.
-
-The OpenCL and CUDA platforms compile all of their kernels from source at runtime.  This
-requires you to store all your kernel source in a way that makes it accessible at runtime.  That
-turns out to be harder than you might think: simply storing source files on disk is brittle,
-since it requires some way of locating the files, and ordinary library files cannot contain
-arbitrary data along with the compiled code.  Another option is to store the kernel source as
-strings in the code, but that is very inconvenient to edit and maintain, especially since C++
-doesn't have a clean syntax for multi-line strings.
-
-This project (like OpenMM itself) uses a hybrid mechanism that provides the best of both
-approaches.  The source code for the kernels is found in the `platforms/common/src/kernels`
-directory.  At build time, a CMake script loads every .cc file contained in the directory
-and generates a class with all the file contents as strings.  For the example plugin, the
-directory contains a single file called exampleForce.cc.  You can
-put anything you want into this file, and then C++ code can access the content of that file
-as `CommonExampleKernelSources::exampleForce`.  If you add more .cc files to this directory,
-correspondingly named variables will automatically be added to `CommonExampleKernelSources`.
+GitHub Actions (`.github/workflows/ci.yml`) builds the plugin against the current conda-forge OpenMM and runs the
+Reference, CPU and serialization tests and the Python tests, with Python 3.11 and 3.12, on every push to `master` and
+every pull request.
+`devtools/run_all_tests.sh BUILD_DIR PREFIX [GPU]` builds, installs and runs every suite on a GPU machine, CUDA
+included.
 
 
-Python API
-==========
+Implementation
+==============
 
-OpenMM uses [SWIG](http://www.swig.org) to generate its Python API.  SWIG takes an "interface
-file", which is essentially a C++ header file with some extra annotations added, as its input.
-It then generates a Python extension module exposing the C++ API in Python.
+Each force has a Reference, a CPU and a common compute implementation; the common compute kernels
+(`platforms/common`) are compiled for the CUDA platform. The plugin has no OpenCL platform library.
 
-When building OpenMM's Python API, the interface file is generated automatically from the C++
-API.  That guarantees the C++ and Python APIs are always synchronized with each other and avoids
-the potential bugs that would come from having duplicate definitions.  It takes a lot of complex
-processing to do that, though, and for a single plugin it's far simpler to just write the
-interface file by hand.  You will find it in the "python" directory.
+* The pair forces share their math (`openmmapi/include/internal/InteraxPairTerms.h`) between the Reference and the CPU
+  platforms, which vectorizes it with SSE or AVX (`CpuInteraxPairForceVec4.cpp`, `CpuInteraxPairForceAvx.cpp`, chosen
+  at run time, as in OpenMM's `CpuCustomNonbondedForce`). On the GPU they add their interactions to OpenMM's nonbonded
+  kernel (`platforms/common/src/kernels/interax*.cc`) and share its neighbor list.
+* The three-body force finds its triples from neighbor lists of the sites (docs/SPEC.md); each triple is computed
+  once.
+* `InteraxMultipoleForce` is derived from OpenMM's implementation of `HippoNonbondedForce` (`plugins/amoeba`): its
+  Reference platform, also used by the CPU platform, from the reference code, and its GPU kernels
+  (`platforms/common/src/kernels/interaxMultipole*.cc`) from the common kernels, with cuFFT for PME.
 
-To build and install the Python API, build the "PythonInstall" target, for example by typing
-"make PythonInstall".  (If you are installing into the system Python, you may need to use sudo.)
-This runs SWIG to generate the C++ and Python files for the extension module
-(ExamplePluginWrapper.cpp and exampleplugin.py), then runs a setup.py script to build and
-install the module.  Once you do that, you can use the plugin from your Python scripts:
-
-    from simtk.openmm import System
-    from exampleplugin import ExampleForce
-    system = System()
-    force = ExampleForce()
-    system.addForce(force)
+The common kernels are encoded into the class `CommonInteraxKernelSources` at build time, as in the example plugin.
+`third_party/pocketfft` is the header-only FFT (BSD license) that OpenMM's reference PME uses; it is compiled into the
+Reference platform only.
 
 
 License
 =======
 
-This is part of the OpenMM molecular simulation toolkit originating from
-Simbios, the NIH National Center for Physics-Based Simulation of
-Biological Structures at Stanford, funded under the NIH Roadmap for
-Medical Research, grant U54 GM072970. See https://simtk.org.
-
-Portions copyright (c) 2014-2021 Stanford University and the Authors.
-
-Authors: Peter Eastman
-
-Contributors:
-
-Permission is hereby granted, free of charge, to any person obtaining a
-copy of this software and associated documentation files (the "Software"),
-to deal in the Software without restriction, including without limitation
-the rights to use, copy, modify, merge, publish, distribute, sublicense,
-and/or sell copies of the Software, and to permit persons to whom the
-Software is furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in
-all copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
-THE AUTHORS, CONTRIBUTORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
-DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
-OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
-USE OR OTHER DEALINGS IN THE SOFTWARE.
-
+The plugin is distributed under two licenses, as OpenMM itself is (`LICENSE`). The GPU implementation of
+`InteraxMultipoleForce` (`CommonInteraxMultipoleKernel`, `CudaInteraxMultipoleKernel` and the `interaxMultipole*.cc`
+kernels) is derived from the HIPPO kernels of OpenMM's common platform and, like them, is licensed under the GNU LGPL,
+version 3 or later (`licenses/`). Everything else is distributed under the MIT license. The C++ sources state their
+license in a full header (`devtools/license_header.txt` is the MIT template for new files), the kernel sources, Python
+modules, SWIG interface, CMake files and scripts in a one-line statement; the files derived from OpenMM keep OpenMM's
+copyright notices.
+`third_party/pocketfft` is distributed under the BSD license.
