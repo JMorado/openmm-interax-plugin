@@ -30,9 +30,9 @@
 /**
  * The platform of the InteraxFF tests on the CUDA platform: the global "platform" that the tests use and
  * setupKernels(), which registers the InteraxFF CUDA kernels and loads the InteraxFF Reference plugin (with which
- * some tests compare). The plugin is loaded rather than linked because every plugin library defines
- * registerKernelFactories(). The precision ("single", "mixed" or "double") and the device index may be given as
- * arguments, as for OpenMM's CUDA tests.
+ * some tests compare) and OpenMM's AMOEBA plugins (HippoNonbondedForce). The plugins are loaded rather than linked
+ * because every plugin library defines registerKernelFactories(). The precision ("single", "mixed" or "double") and
+ * the device index may be given as arguments, as for OpenMM's CUDA tests.
  */
 
 #ifdef WIN32
@@ -56,6 +56,8 @@ void initializeTests(int argc, char* argv[]) {
 void setupKernels(int argc, char* argv[]) {
     registerInteraxCudaKernelFactories();
     OpenMM::Platform::loadPluginLibrary(INTERAX_REFERENCE_PLUGIN);
+    OpenMM::Platform::loadPluginLibrary(OPENMM_AMOEBA_REFERENCE_PLUGIN);
+    OpenMM::Platform::loadPluginLibrary(OPENMM_AMOEBA_CUDA_PLUGIN);
     platform = dynamic_cast<OpenMM::CudaPlatform&>(OpenMM::Platform::getPlatformByName("CUDA"));
     initializeTests(argc, argv);
 }

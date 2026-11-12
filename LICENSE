@@ -1,4 +1,16 @@
-The OpenMM InteraxFF plugin, except third_party/ (see its own license), is distributed under the MIT license below.
+The OpenMM InteraxFF plugin is distributed under two licenses, as OpenMM itself is.
+
+The GPU implementation of InteraxMultipoleForce is derived from the HIPPO kernels of OpenMM's common platform, which
+are licensed under the GNU Lesser General Public License, version 3 or later. These files keep that license
+(licenses/LGPL-3.txt, which supplements licenses/GPL-3.txt):
+
+    platforms/common/src/CommonInteraxMultipoleKernel.cpp
+    platforms/common/src/CommonInteraxMultipoleKernel.h
+    platforms/common/src/kernels/interaxMultipole*.cc
+    platforms/cuda/src/CudaInteraxMultipoleKernel.cpp
+    platforms/cuda/src/CudaInteraxMultipoleKernel.h
+
+Everything else, except third_party/ (see its own license), is distributed under the MIT license below.
 
 MIT License
 
