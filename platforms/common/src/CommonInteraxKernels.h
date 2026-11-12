@@ -1,0 +1,204 @@
+#ifndef OPENMM_COMMONINTERAXKERNELS_H_
+#define OPENMM_COMMONINTERAXKERNELS_H_
+
+/* -------------------------------------------------------------------------- *
+ *                            OpenMM InteraxFF Plugin                         *
+ * -------------------------------------------------------------------------- *
+ * This is part of the OpenMM InteraxFF plugin, built on the OpenMM molecular *
+ * simulation toolkit (https://openmm.org) and its example plugin.            *
+ *                                                                            *
+ * Portions copyright (c) 2026 the Authors.                                   *
+ * Authors: Joao Morado                                                       *
+ * Contributors:                                                              *
+ *                                                                            *
+ * Permission is hereby granted, free of charge, to any person obtaining a    *
+ * copy of this software and associated documentation files (the "Software"), *
+ * to deal in the Software without restriction, including without limitation  *
+ * the rights to use, copy, modify, merge, publish, distribute, sublicense,   *
+ * and/or sell copies of the Software, and to permit persons to whom the      *
+ * Software is furnished to do so, subject to the following conditions:       *
+ *                                                                            *
+ * The above copyright notice and this permission notice shall be included in *
+ * all copies or substantial portions of the Software.                        *
+ *                                                                            *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR *
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,   *
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL    *
+ * THE AUTHORS, CONTRIBUTORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,    *
+ * DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR      *
+ * OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE  *
+ * USE OR OTHER DEALINGS IN THE SOFTWARE.                                     *
+ * -------------------------------------------------------------------------- */
+
+#include "InteraxKernels.h"
+#include "internal/InteraxPairTerms.h"
+#include "openmm/common/ComputeArray.h"
+#include "openmm/common/ComputeContext.h"
+#include <string>
+#include <vector>
+
+namespace InteraxPlugin {
+
+/**
+ * This is the common compute implementation of the InteraxFF pair forces. Each force adds its interaction
+ * to the nonbonded kernel of the context (NonbondedUtilities), which evaluates them together, in one pass over
+ * the neighbor list: they must have identical exclusions, and forces in one force group the same cutoff.
+ */
+class CommonInteraxPairForceKernel {
+public:
+    CommonInteraxPairForceKernel(OpenMM::ComputeContext& cc) : cc(cc), hasAlchemicalParticles(false), lastLambda(-1), lastValue(-1) {
+    }
+protected:
+    /**
+     * Add the interaction of a pair force to the nonbonded kernel.
+     *
+     * @param system        the System the force belongs to
+     * @param force         the pair force
+     * @param interaction   the code that computes pairEnergy and pairDerivative for a pair (a kernel source with the
+     *                      placeholders PARAMS1, PARAMS2, EXTRA1, EXTRA2, LAMBDA, DAMPING_SCALE, SLATER_OVERLAP)
+     * @param gate          the condition for a pair to interact, in terms of the same placeholders
+     * @param isAlchemical  the placeholder expressions of the alchemical flags of particles 1 and 2 (e.g. "EXTRA1.y")
+     * @param overlapWidths the placeholder expressions of the two widths of the Slater overlap, or empty if the
+     *                      interaction does not use it
+     * @param overlapName   the name of the variable that receives the overlap integral
+     * @param taylorScheme  the Taylor scheme of the overlap integral (unused without it)
+     * @param params        the per-particle parameters (float4)
+     * @param extra         additional per-particle parameters (float2), or an uninitialized array
+     */
+    void addInteraction(const OpenMM::System& system, const InteraxPairForce& force, const std::string& interaction, const std::string& gate,
+            const std::vector<std::string>& isAlchemical, const std::vector<std::string>& overlapWidths, const std::string& overlapName,
+            const InteraxPairTerms::SlaterTaylorScheme& taylorScheme, OpenMM::ComputeArray& params, OpenMM::ComputeArray& extra);
+    /**
+     * Upload the global parameters (the alchemical parameter and one force-specific value) if they have changed.
+     *
+     * @param context   the context in which the kernel is executed
+     * @param value     the force-specific value
+     */
+    void updateGlobals(OpenMM::ContextImpl& context, double value);
+    OpenMM::ComputeContext& cc;
+    OpenMM::ComputeArray globals;
+    std::string alchemicalParameter;
+    bool hasAlchemicalParticles;
+    double lastLambda, lastValue;
+};
+
+/**
+ * This kernel is invoked by InteraxDispersionForce to calculate the forces acting on the system and the energy of
+ * the system.
+ */
+class CommonCalcInteraxDispersionForceKernel : public CalcInteraxDispersionForceKernel, public CommonInteraxPairForceKernel {
+public:
+    CommonCalcInteraxDispersionForceKernel(std::string name, const OpenMM::Platform& platform, OpenMM::ComputeContext& cc) :
+            CalcInteraxDispersionForceKernel(name, platform), CommonInteraxPairForceKernel(cc) {
+    }
+    /**
+     * Initialize the kernel.
+     *
+     * @param system     the System this kernel will be applied to
+     * @param force      the InteraxDispersionForce this kernel will be used for
+     */
+    void initialize(const OpenMM::System& system, const InteraxDispersionForce& force);
+    /**
+     * Execute the kernel to calculate the forces and/or energy.
+     *
+     * @param context        the context in which to execute this kernel
+     * @param includeForces  true if forces should be calculated
+     * @param includeEnergy  true if the energy should be calculated
+     * @return the potential energy due to the force
+     */
+    double execute(OpenMM::ContextImpl& context, bool includeForces, bool includeEnergy);
+    /**
+     * Copy changed parameters over to a context.
+     *
+     * @param context    the context to copy parameters to
+     * @param force      the InteraxDispersionForce to copy the parameters from
+     */
+    void copyParametersToContext(OpenMM::ContextImpl& context, const InteraxDispersionForce& force);
+private:
+    class ForceInfo;
+    void setParameters(const InteraxDispersionForce& force);
+    OpenMM::ComputeArray params, extra;
+    double dampingScale, longRangeCoefficient, alchemicalLongRangeCoefficient;
+};
+
+/**
+ * This kernel is invoked by InteraxExchangeForce to calculate the forces acting on the system and the energy of
+ * the system.
+ */
+class CommonCalcInteraxExchangeForceKernel : public CalcInteraxExchangeForceKernel, public CommonInteraxPairForceKernel {
+public:
+    CommonCalcInteraxExchangeForceKernel(std::string name, const OpenMM::Platform& platform, OpenMM::ComputeContext& cc) :
+            CalcInteraxExchangeForceKernel(name, platform), CommonInteraxPairForceKernel(cc) {
+    }
+    /**
+     * Initialize the kernel.
+     *
+     * @param system     the System this kernel will be applied to
+     * @param force      the InteraxExchangeForce this kernel will be used for
+     */
+    void initialize(const OpenMM::System& system, const InteraxExchangeForce& force);
+    /**
+     * Execute the kernel to calculate the forces and/or energy.
+     *
+     * @param context        the context in which to execute this kernel
+     * @param includeForces  true if forces should be calculated
+     * @param includeEnergy  true if the energy should be calculated
+     * @return the potential energy due to the force
+     */
+    double execute(OpenMM::ContextImpl& context, bool includeForces, bool includeEnergy);
+    /**
+     * Copy changed parameters over to a context.
+     *
+     * @param context    the context to copy parameters to
+     * @param force      the InteraxExchangeForce to copy the parameters from
+     */
+    void copyParametersToContext(OpenMM::ContextImpl& context, const InteraxExchangeForce& force);
+private:
+    class ForceInfo;
+    void setParameters(const InteraxExchangeForce& force);
+    OpenMM::ComputeArray params, extra;
+    int overlapMethod;
+};
+
+/**
+ * This kernel is invoked by InteraxShortRangeForce to calculate the forces acting on the system and the energy of
+ * the system.
+ */
+class CommonCalcInteraxShortRangeForceKernel : public CalcInteraxShortRangeForceKernel, public CommonInteraxPairForceKernel {
+public:
+    CommonCalcInteraxShortRangeForceKernel(std::string name, const OpenMM::Platform& platform, OpenMM::ComputeContext& cc) :
+            CalcInteraxShortRangeForceKernel(name, platform), CommonInteraxPairForceKernel(cc) {
+    }
+    /**
+     * Initialize the kernel.
+     *
+     * @param system     the System this kernel will be applied to
+     * @param force      the InteraxShortRangeForce this kernel will be used for
+     */
+    void initialize(const OpenMM::System& system, const InteraxShortRangeForce& force);
+    /**
+     * Execute the kernel to calculate the forces and/or energy.
+     *
+     * @param context        the context in which to execute this kernel
+     * @param includeForces  true if forces should be calculated
+     * @param includeEnergy  true if the energy should be calculated
+     * @return the potential energy due to the force
+     */
+    double execute(OpenMM::ContextImpl& context, bool includeForces, bool includeEnergy);
+    /**
+     * Copy changed parameters over to a context.
+     *
+     * @param context    the context to copy parameters to
+     * @param force      the InteraxShortRangeForce to copy the parameters from
+     */
+    void copyParametersToContext(OpenMM::ContextImpl& context, const InteraxShortRangeForce& force);
+private:
+    class ForceInfo;
+    void setParameters(const InteraxShortRangeForce& force);
+    OpenMM::ComputeArray params, extra;
+    int overlapMethod;
+};
+
+} // namespace InteraxPlugin
+
+#endif /*OPENMM_COMMONINTERAXKERNELS_H_*/
