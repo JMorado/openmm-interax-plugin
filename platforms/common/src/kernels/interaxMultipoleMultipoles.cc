@@ -1,4 +1,4 @@
-// Part of the OpenMM InteraxFF plugin. Copyright (c) 2026 the Authors. MIT license, see LICENSE.
+// Part of the OpenMM InteraxFF plugin. Copyright (c) 2026 the Authors. GNU LGPL version 3 or later, see LICENSE.
 // Derived from the HIPPO kernels of OpenMM, portions copyright (c) 2008-2021 Stanford University and the Authors.
 
 KERNEL void computeLabFrameMoments(GLOBAL real4* RESTRICT posq, GLOBAL int4* RESTRICT multipoleParticles, GLOBAL real* RESTRICT localDipoles,

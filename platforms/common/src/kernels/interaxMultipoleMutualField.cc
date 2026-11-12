@@ -1,4 +1,4 @@
-// Part of the OpenMM InteraxFF plugin. Copyright (c) 2026 the Authors. MIT license, see LICENSE.
+// Part of the OpenMM InteraxFF plugin. Copyright (c) 2026 the Authors. GNU LGPL version 3 or later, see LICENSE.
 // Derived from the HIPPO kernels of OpenMM, portions copyright (c) 2008-2021 Stanford University and the Authors.
 
 real fdamp3, fdamp5;

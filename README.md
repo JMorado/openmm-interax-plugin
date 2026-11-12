@@ -288,7 +288,11 @@ Reference platform only.
 License
 =======
 
-The plugin is distributed under the MIT license (`LICENSE`). The C++ sources state it in a full header
-(`devtools/license_header.txt` is the template for new files), the kernel sources, Python modules, SWIG interface,
-CMake files and scripts in a one-line statement; the files derived from OpenMM keep OpenMM's copyright notices.
+The plugin is distributed under two licenses, as OpenMM itself is (`LICENSE`). The GPU implementation of
+`InteraxMultipoleForce` (`CommonInteraxMultipoleKernel`, `CudaInteraxMultipoleKernel` and the `interaxMultipole*.cc`
+kernels) is derived from the HIPPO kernels of OpenMM's common platform and, like them, is licensed under the GNU LGPL,
+version 3 or later (`licenses/`). Everything else is distributed under the MIT license. The C++ sources state their
+license in a full header (`devtools/license_header.txt` is the MIT template for new files), the kernel sources, Python
+modules, SWIG interface, CMake files and scripts in a one-line statement; the files derived from OpenMM keep OpenMM's
+copyright notices.
 `third_party/pocketfft` is distributed under the BSD license.
