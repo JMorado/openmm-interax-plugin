@@ -16,7 +16,7 @@ plugin reproduces it to rounding in double precision.
 The tests (tests/TestInteraxExportValues.h on every platform, tests/python/test_export_values.py) load these files
 and need neither InteraxFF nor its model. Regenerate them when the model or the export changes:
 
-  python generate_export_values.py     (with the interax environment; see compare_export.py)
+  python generate_export_values.py     (in the environment of compare_export.py)
 """
 import datetime
 import os

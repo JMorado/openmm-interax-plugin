@@ -68,6 +68,13 @@ namespace InteraxPlugin {
  * Induced dipoles are computed with HIPPO's extrapolated perturbation series (see setExtrapolationCoefficients()).  A
  * single coefficient of 1 gives direct polarization.
  *
+ * The local coordinate frames are those of HippoNonbondedForce.  By default the chirality of ZThenX frames with a y
+ * atom is checked as in AMOEBA, on every platform (see setChiralityMode()).
+ *
+ * On the GPU platforms the force by default replaces the source of the context's default nonbonded kernel, as
+ * HippoNonbondedForce does.  Call setUseOwnKernel() to evaluate it with a kernel of its own instead, so that it can
+ * share a Context with other forces that use the default nonbonded kernel.
+ *
  * To use it, create an InteraxMultipoleForce object, then call addParticle() once for each particle.  After
  * an entry has been added, you can modify its force field parameters by calling setParticleParameters().
  * This will have no effect on Contexts that already exist unless you call updateParametersInContext().
@@ -214,7 +221,8 @@ public:
      * @param dipole            the particle's molecular dipole (vector of size 3), measured in e*nm
      * @param quadrupole        the particle's molecular quadrupole (vector of size 9), measured in e*nm^2.  It must be
      *                          traceless and symmetric, in the same convention as HippoNonbondedForce.
-     * @param coreCharge        the charge of the atomic core.  The valence charge is charge - coreCharge.
+     * @param coreCharge        the charge of the atomic core, measured in units of the proton charge.  The valence
+     *                          charge is charge - coreCharge.
      * @param alpha             controls the width of the particle's electron density: the exponent of the Slater
      *                          valence density, measured in 1/nm.  It must be positive.
      * @param polarizability    atomic polarizability, measured in nm^3.  It must not be negative.
@@ -236,7 +244,7 @@ public:
      * @param[out] charge           the particle's total charge, measured in units of the proton charge
      * @param[out] dipole           the particle's molecular dipole (vector of size 3), measured in e*nm
      * @param[out] quadrupole       the particle's molecular quadrupole (vector of size 9), measured in e*nm^2
-     * @param[out] coreCharge       the charge of the atomic core
+     * @param[out] coreCharge       the charge of the atomic core, measured in units of the proton charge
      * @param[out] alpha            the exponent of the Slater valence density, measured in 1/nm
      * @param[out] polarizability   atomic polarizability, measured in nm^3
      * @param[out] axisType         the particle's axis type
@@ -255,7 +263,7 @@ public:
      * @param charge            the particle's total charge, measured in units of the proton charge
      * @param dipole            the particle's molecular dipole (vector of size 3), measured in e*nm
      * @param quadrupole        the particle's molecular quadrupole (vector of size 9), measured in e*nm^2
-     * @param coreCharge        the charge of the atomic core
+     * @param coreCharge        the charge of the atomic core, measured in units of the proton charge
      * @param alpha             the exponent of the Slater valence density, measured in 1/nm
      * @param polarizability    atomic polarizability, measured in nm^3
      * @param axisType          the particle's axis type
@@ -424,14 +432,14 @@ public:
      * Get the fixed dipole moments of all particles in the global reference frame.
      *
      * @param context         the Context for which to get the fixed dipoles
-     * @param[out] dipoles    the fixed dipole moment of particle i is stored into the i'th element
+     * @param[out] dipoles    the fixed dipole moment of particle i is stored into the i'th element, measured in e*nm
      */
     void getLabFramePermanentDipoles(OpenMM::Context& context, std::vector<OpenMM::Vec3>& dipoles);
     /**
      * Get the induced dipole moments of all particles.
      *
      * @param context         the Context for which to get the induced dipoles
-     * @param[out] dipoles    the induced dipole moment of particle i is stored into the i'th element
+     * @param[out] dipoles    the induced dipole moment of particle i is stored into the i'th element, measured in e*nm
      */
     void getInducedDipoles(OpenMM::Context& context, std::vector<OpenMM::Vec3>& dipoles);
     /**

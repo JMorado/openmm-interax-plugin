@@ -128,9 +128,9 @@ context.setPositions([[0, 0, 0], [0.38, 0, 0], [0.19, 0.33, 0]])
 print(context.getState(getEnergy=True).getPotentialEnergy())
 ```
 
-As for OpenMM's own plugins, `System.getForce()` returns a plain `Force` in Python: each force class has
-`isinstance(force)` and `cast(force)` to test for it and recover it. The forces can be serialized with `XmlSerializer`
-once `interaxplugin` has been imported.
+As for other separately built OpenMM plugins (openmm-torch, for example), `System.getForce()` returns a plain `Force`
+in Python for the plugin's forces: each force class has `isinstance(force)` and `cast(force)` to test for it and
+recover it. The forces can be serialized with `XmlSerializer` once `interaxplugin` has been imported.
 
 Creating Systems
 ----------------
@@ -201,8 +201,10 @@ The parameters of this water are illustrative only.
 **From InteraxFF.** InteraxFF (`interax.openmm.create_system_from_topology`) builds Systems with
 `InteraxMultipoleForce` and `InteraxThreeBodyForce`, and with its pair terms as `CustomNonbondedForce`s.
 `interaxplugin_convert.convert_system(system)` replaces those custom forces by `InteraxDispersionForce`,
-`InteraxExchangeForce` and `InteraxShortRangeForce`, which are faster and evaluate the Slater overlaps exactly, and
-keeps every other force:
+`InteraxExchangeForce` and `InteraxShortRangeForce`, which are faster and evaluate the Slater overlaps exactly. By
+default it also unwraps the `InteraxMultipoleForce` from the `CustomCVForce` ("E_hippo") in which InteraxFF wraps it,
+and calls `setUseOwnKernel(True)` on it, so that it shares the context with the other forces at a lower cost and with
+the same energies (`unwrap_multipoles=False` keeps the wrapper). It keeps every other force:
 
 ```python
 from interax.openmm import create_system_from_topology
@@ -240,6 +242,9 @@ are set:
     export INTERAX_PLUGIN_PREFIX=/path/to/openmm-interax INTERAX_REPO=/path/to/InteraxFF INTERAX_MODEL=/path/to/model
     cd tests/python && python -m pytest
 
+The InteraxFF systems take the charges of their base force field (intramolecular terms only) from AM1-BCC when
+AmberTools or OpenEye can compute them, else from Gasteiger; `INTERAX_BASE_CHARGES=am1bcc` or `gasteiger` forces one.
+
 | Test | What it checks |
 |---|---|
 | `test_export_values.py` | the stored InteraxFF values (`tests/data`), through the Python API |
@@ -247,13 +252,14 @@ are set:
 | `test_softcore.py` | the soft core of the pair forces |
 | `test_forcefield.py` | the ffxml generators against forces built with the API |
 | `test_alchemical.py` | the alchemical scaling against decoupled systems (needs InteraxFF) |
-| `test_multipole_features.py` | the options of `InteraxMultipoleForce` on every platform (needs InteraxFF) |
+| `test_multipole_features.py` | the options of `InteraxMultipoleForce` on CUDA in double precision against Reference (needs InteraxFF; skipped without CUDA; as a script, `--platform` and `--precision` choose others) |
 
 The other scripts in `tests/python` compare the plugin with InteraxFF (`compare_export.py`), regenerate `tests/data`
 (`generate_export_values.py`), and benchmark the forces (`benchmark.py`).
 
 GitHub Actions (`.github/workflows/ci.yml`) builds the plugin against the current conda-forge OpenMM and runs the
-Reference, CPU and serialization tests and the Python tests on every push and pull request.
+Reference, CPU and serialization tests and the Python tests, with Python 3.11 and 3.12, on every push to `master` and
+every pull request.
 `devtools/run_all_tests.sh BUILD_DIR PREFIX [GPU]` builds, installs and runs every suite on a GPU machine, CUDA
 included.
 

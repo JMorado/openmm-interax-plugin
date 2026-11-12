@@ -41,8 +41,8 @@ namespace InteraxPlugin {
 
 /**
  * This is the common compute implementation of the InteraxFF pair forces. Each force adds its interaction
- * to the nonbonded kernel of the context (NonbondedUtilities), so all pair forces with the same cutoff and
- * exclusions are evaluated together, in one pass over the neighbor list.
+ * to the nonbonded kernel of the context (NonbondedUtilities), which evaluates them together, in one pass over
+ * the neighbor list: they must have identical exclusions, and forces in one force group the same cutoff.
  */
 class CommonInteraxPairForceKernel {
 public:

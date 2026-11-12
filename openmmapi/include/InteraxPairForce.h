@@ -47,9 +47,10 @@ namespace InteraxPlugin {
  * Every particle of the System must be added to the force, in the same order as in the System.  The number of
  * particles must be exactly equal to the number of particles in the System, or else an exception will be thrown
  * when you try to create a Context.  Every pair of particles interacts unless it has been excluded with
- * addExclusion(); the InteraxFF force field excludes every pair of particles within the same molecule.  When all
- * pair forces of a System have the same exclusions and cutoff, the CUDA platform evaluates them together
- * with the default nonbonded kernel and its neighbor list.
+ * addExclusion(); the InteraxFF force field excludes every pair of particles within the same molecule.  The CUDA
+ * platform evaluates the pair forces with the default nonbonded kernel and its neighbor list, so on that platform
+ * every pair force, and any other force using the default nonbonded kernel, must have identical exclusions, and
+ * forces in one force group must use the same cutoff.
  *
  * When using a cutoff, by default the interaction is sharply truncated at the cutoff distance.  Optionally you can
  * instead use a switching function to make the interaction smoothly go to zero over a finite distance range.  To

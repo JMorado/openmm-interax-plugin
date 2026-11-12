@@ -286,7 +286,8 @@ def convert_system(system, copy=True, overlap="exact", unwrap_multipoles=True):
 
     The dispersion, exchange repulsion and short-range correction become InteraxDispersionForce, InteraxExchangeForce
     and InteraxShortRangeForce, named after their classes, in the force groups of the forces they replace and at the
-    end of the force list. Every other force is kept.
+    end of the force list. By default the InteraxMultipoleForce that InteraxFF wraps in a CustomCVForce is unwrapped
+    (see unwrap_multipoles below). Every other force is kept.
 
     Parameters
     ----------

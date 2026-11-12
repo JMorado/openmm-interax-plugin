@@ -14,7 +14,8 @@ Systems (model INTERAX_MODEL, 0.9 nm cutoff):
   hfe        one ethanol in 500 waters, the hydration free energy box
 
 Usage: python benchmark.py [--platforms Reference CPU CUDA] [--systems methanol hfe] [--precision mixed]
-Run with the interax environment; the plugin, InteraxFF and the model are found as plugin_path.py describes.
+Run in a Python environment with OpenMM, the plugin and InteraxFF's dependencies; the plugin, InteraxFF and the model
+are found as plugin_path.py describes.
 """
 import argparse
 import tempfile

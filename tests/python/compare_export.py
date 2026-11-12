@@ -12,12 +12,13 @@ Usage: python compare_export.py [--platform Reference] [--precision double] [--o
 By default the Slater overlap follows the Taylor scheme of the model (interax.openmm.CONVERT_OVERLAP[ff.slater_taylor]:
 "export" for order2, "exact" for order6). With --overlap export the plugin uses the method that reproduces the Taylor
 scheme of the export, and must reproduce it to rounding; with --overlap exact it uses its accurate scheme, which differs
-from the order-2 export by the export's truncation error and equals the order-6 export to rounding. The export builds the three-body dispersion as an InteraxThreeBodyForce
-already, which the conversion keeps: its row compares the platform with the Reference platform.
-Run with the interax environment; the plugin, InteraxFF and the model (INTERAX_MODEL) are found as plugin_path.py
-describes. The base force field's charges (intramolecular terms only) are AM1-BCC when AmberTools or OpenEye can
-compute them, else Gasteiger (INTERAX_BASE_CHARGES=am1bcc|gasteiger forces one); packmol is looked for on PATH, then
-next to the Python interpreter.
+from the order-2 export by the export's truncation error and equals the order-6 export to rounding. The export builds
+the three-body dispersion as an InteraxThreeBodyForce already, which the conversion keeps: its row compares the platform
+with the Reference platform.
+Run in a Python environment with OpenMM, the plugin and InteraxFF's dependencies; the plugin, InteraxFF and the model
+(INTERAX_MODEL) are found as plugin_path.py describes. The base force field's charges (intramolecular terms only) are
+AM1-BCC when AmberTools or OpenEye can compute them, else Gasteiger (INTERAX_BASE_CHARGES=am1bcc|gasteiger forces one);
+packmol is looked for on PATH, then next to the Python interpreter.
 """
 import argparse
 import os
